@@ -63,6 +63,9 @@ Multi-tool target app (three CLI adapters built into the product); single AI ass
 | New or materially changed skills, pipelines, agents, routing, validation gates, or output contracts | artifact-acceptance-tester agent |
 | Multi-tool architecture decisions (adapter design, storage format, session model) | brainstorming capability |
 | CLI adapter implementation (non-trivial, multi-step) | implement-cli-adapter pipeline |
+| Bug report or unexpected behavior (root cause unknown) | triage-bug pipeline |
+| Confirmed bug with known root cause, ready to fix | fix-bug pipeline |
+| Applicable non-trivial product or engineering work before implementation | work-with-bead skill; skip documentation-only work, AI staff work, bug triage, and bug fixes |
 | Non-trivial routed work | explicit validation + task-complete capability |
 | Feature implementation or refactoring that changes structure, commands, contracts, or domain facts | documentation maintenance capability |
 | Routing must choose between multiple adapters or capabilities | manager capability |

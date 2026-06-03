@@ -1,13 +1,13 @@
 ---
 name: manager
-description: Routes non-trivial work to the correct pipeline or capability; enforces output artifact gates, documentation maintenance, and task-complete.
+description: Routes non-trivial work to the correct pipeline or capability; enforces the Beads planning gate, output artifact gates, documentation maintenance, and task-complete.
 ---
 
 # Manager: manager
 
 ## Purpose
 
-Classify non-trivial tasks and route them to the correct execution path. Enforce output artifact gates at each routed handoff, append documentation maintenance when its trigger applies, and close with task-complete.
+Classify non-trivial tasks and route them to the correct execution path. Enforce the Beads planning gate when it applies, enforce output artifact gates at each routed handoff, append documentation maintenance when its trigger applies, and close with task-complete.
 
 The manager routes. It does not execute steps.
 
@@ -25,12 +25,26 @@ Before selecting any pipeline or capability, classify out loud:
 |---|---|
 | Complexity | trivial / non-trivial |
 | Risk | low / medium / high / system-level |
-| Domain | Tauri/React/Rust feature / CLI adapter / instruction system / other |
+| Domain | Tauri/React/Rust feature / CLI adapter / documentation / AI staff work / instruction system / bug triage / bug fix / other |
 
 When unsure of complexity: treat as non-trivial.
 When unsure of risk: treat as medium.
 
 Classification must be stated before any file is created, edited, or deleted.
+
+## Beads Planning Gate
+
+For each non-trivial task, decide whether the Beads planning gate applies before selecting the execution route.
+
+The gate is skipped for:
+- documentation-only work
+- AI staff work, including instruction artifacts, skills, pipelines, agents, manager routing, root contracts, and AI-tool governance
+- bug triage
+- bug fixes
+
+For all other non-trivial work, route `.claude/skills/work-with-bead/SKILL.md` before implementation. The skill must check for a relevant existing Beads item. If none exists, it must stop and ask the user whether to create the relevant epic, feature, or task before implementation continues.
+
+The manager only decides whether the gate applies. The manager does not inspect or mutate Beads.
 
 ## Routing
 
@@ -38,6 +52,8 @@ Classification must be stated before any file is created, edited, or deleted.
 |---|---|
 | Implement a Tauri/React/Rust feature (floating window, hotkey, chat UI, storage, etc.) | `.claude/pipelines/implement-feature.md` |
 | Implement a CLI adapter (ClaudeAdapter, CodexAdapter, GeminiAdapter) | `.claude/pipelines/implement-cli-adapter.md` |
+| Bug report or unexpected behavior (root cause unknown) | `.claude/pipelines/triage-bug.md` |
+| Fix a confirmed bug (root cause known, reproduction steps available) | `.claude/pipelines/fix-bug.md` |
 | Review, improve, or implement React/TypeScript/Tauri code against best practices | `.claude/skills/react-tauri-expert/SKILL.md` |
 | Write, review, or improve test code (Vitest front-end or Rust core) | `.claude/skills/testing-pro/SKILL.md` |
 | Open design decision with meaningful trade-offs | `.claude/skills/brainstorm/SKILL.md` |
@@ -74,6 +90,7 @@ At routing time, emit:
 
 Include:
 - task classification (complexity, risk, domain)
+- Beads planning gate requirement (required / skipped, and why)
 - selected pipeline or capability
 - validation requirement
 - documentation maintenance step (yes / no, and why)

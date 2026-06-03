@@ -33,6 +33,24 @@ When a session begins as discussion and the user signals readiness to proceed ("
 
 ---
 
+## Beads Planning Gate
+
+For applicable non-trivial work, the manager must route through `.claude/skills/work-with-bead/SKILL.md` before implementation starts.
+
+The Beads gate applies to non-trivial product or engineering work unless the task is one of these exempt categories:
+- documentation-only work
+- AI staff work, including instruction artifacts, skills, pipelines, agents, manager routing, root contracts, and AI-tool governance
+- bug triage
+- bug fixes
+
+When the Beads gate applies:
+- check whether a relevant Beads item already exists
+- if one exists, use it as the planning/work item
+- if none exists, stop and ask the user whether to create the relevant epic, feature, or task before continuing
+- never create a Beads item for trivial or exempt work
+
+---
+
 ## Quality Gates
 
 These apply to all non-trivial work and may not be skipped:
@@ -62,13 +80,17 @@ When creating or materially changing any instruction artifact:
 - `.claude/skills/implement-tauri-feature/SKILL.md` — implement a Tauri/React/Rust feature with tests
 - `.claude/skills/react-tauri-expert/SKILL.md` — review, improve, and implement React + TypeScript + Tauri v2 code; Topic Router over windowing, IPC/permissions, state, performance, accessibility, cross-platform conventions
 - `.claude/skills/testing-pro/SKILL.md` — write and review tests across both layers (Vitest front-end + cargo-nextest Rust core); enforces unit test quality gate
+- `.claude/skills/triage-bug/SKILL.md` — investigate a reported bug: gather, reproduce, root-cause, classify severity, decide disposition; produces triage report; writes no production code
 - `.claude/skills/verify-cli-adapter/SKILL.md` — verify CLI adapter correctness after implementation
+- `.claude/skills/work-with-bead/SKILL.md` — check, create, update, and maintain Beads work items for applicable non-trivial work
 - `.claude/skills/documentation-maintenance/SKILL.md` — post-change documentation updates
 - `.claude/skills/task-complete/SKILL.md` — closure reporting for non-trivial routed work
 
 ### Pipelines
 - `.claude/pipelines/implement-feature.md` — Tauri/React/Rust feature implementation
 - `.claude/pipelines/implement-cli-adapter.md` — CLI adapter (Rust core) implementation
+- `.claude/pipelines/triage-bug.md` — bug investigation, classification, and disposition routing
+- `.claude/pipelines/fix-bug.md` — TDD-ordered bug fix for confirmed, root-caused defects
 
 ### Agents
 - `.claude/agents/instruction-evaluator.md` — review instruction artifacts for quality and compliance
