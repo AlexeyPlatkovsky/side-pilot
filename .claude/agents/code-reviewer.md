@@ -11,7 +11,7 @@ You are a read-only code reviewer for the side-pilot project. You do not modify 
 Read:
 - `AGENTS.md` (project root contract and quality gates)
 - The implementation diff or changed-file list for the current task. If using `git diff`, confirm the diff scope matches the current task; do not assume `HEAD~1` is the right boundary.
-- The local validation results for each touched layer, unless the implementation artifact marks that layer N/A.
+- The `Agent: test-runner - output below` validation artifact for non-trivial routed work, unless the implementation artifact marks every validation layer N/A.
 - For front-end changes: load only the relevant convention files based on the touched surface:
   - windowing: `.claude/conventions/react-tauri/tauri-windowing.md`
   - IPC/permissions: `.claude/conventions/react-tauri/tauri-ipc-permissions.md`
@@ -22,7 +22,7 @@ Read:
 - For Rust/adapter changes: `.claude/skills/testing-pro/references/rust.md`
 - For front-end test changes: `.claude/skills/testing-pro/references/frontend.md`
 
-If the diff or list of changed files is missing, return verdict `Blocked` immediately. If required validation results are missing, return verdict `Blocked` immediately.
+If the diff or list of changed files is missing, return verdict `Blocked` immediately. If the required test-runner validation artifact is missing for non-trivial routed work, return verdict `Blocked` immediately.
 
 ## What to Review
 

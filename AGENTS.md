@@ -59,6 +59,17 @@ These apply to all non-trivial work and may not be skipped:
 - UI changes tested manually; state this explicitly.
 - Documentation maintenance required after any change that affects behavior, interfaces, commands, architecture, or domain facts.
 - Local validation required before a feature closes: the touched layers build and all tests pass (`npm run test` for the front-end, `cargo nextest run` for the Rust core).
+- For non-trivial routed work, testing/validation evidence must come from the dedicated `test-runner` agent. Directly running a single command is allowed only for trivial requests such as "run npm test".
+- Non-trivial UI or icon work must be reviewed by the dedicated `design-reviewer` agent in addition to code review.
+
+## Platform Asset Boundary
+
+side-pilot is a desktop app targeting **macOS and Windows only**.
+
+- Do not create, keep, or commit iOS or Android generated assets unless the user explicitly changes the target platform scope.
+- `src-tauri/icons/ios/` and `src-tauri/icons/android/` are not valid desktop deliverables.
+- App icon generation must keep the source asset plus desktop-relevant outputs for macOS and Windows packaging.
+- If a generator creates mobile assets by default, remove them before validation and make the cleanup visible in the task report.
 
 ---
 
@@ -67,6 +78,19 @@ These apply to all non-trivial work and may not be skipped:
 When creating or materially changing any instruction artifact:
 - Use `instruction-evaluator` before accepting the artifact.
 - Use `artifact-acceptance-tester` before accepting any skill, pipeline, agent, manager routing, validation gate, or output contract.
+
+---
+
+## Final Response Gate
+
+For non-trivial routed work, the final response must include the required closure artifacts, not merely summarize them or rely on earlier commentary messages.
+
+At minimum include compact versions of:
+- `Skill: task-complete - output below`
+- `Agent: test-runner - output below` when validation was required
+- `Agent: instruction-evaluator - output below` and `Agent: artifact-acceptance-tester - output below` when instruction artifacts, routing, validation gates, or output contracts changed
+
+Compact artifacts must preserve the label, status/verdict, and required table shape. If any required final artifact is missing from the final response draft, revise the final response before sending.
 
 ---
 
@@ -79,7 +103,7 @@ When creating or materially changing any instruction artifact:
 - `.claude/skills/brainstorm/SKILL.md` — open design decisions with meaningful trade-offs
 - `.claude/skills/implement-tauri-feature/SKILL.md` — implement a Tauri/React/Rust feature with tests
 - `.claude/skills/react-tauri-expert/SKILL.md` — review, improve, and implement React + TypeScript + Tauri v2 code; Topic Router over windowing, IPC/permissions, state, performance, accessibility, cross-platform conventions
-- `.claude/skills/testing-pro/SKILL.md` — write and review tests across both layers (Vitest front-end + cargo-nextest Rust core); enforces unit test quality gate
+- `.claude/skills/testing-pro/SKILL.md` — write and improve tests across both layers (Vitest front-end + cargo-nextest Rust core)
 - `.claude/skills/triage-bug/SKILL.md` — investigate a reported bug: gather, reproduce, root-cause, classify severity, decide disposition; produces triage report; writes no production code
 - `.claude/skills/verify-cli-adapter/SKILL.md` — verify CLI adapter correctness after implementation
 - `.claude/skills/work-with-bead/SKILL.md` — check, create, update, and maintain Beads work items for applicable non-trivial work
@@ -89,6 +113,7 @@ When creating or materially changing any instruction artifact:
 
 ### Pipelines
 - `.claude/pipelines/implement-feature.md` — Tauri/React/Rust feature implementation
+- `.claude/pipelines/implement-design-variant.md` — UI design variants, visual redesigns, desktop icon work, and visual validation
 - `.claude/pipelines/implement-cli-adapter.md` — CLI adapter (Rust core) implementation
 - `.claude/pipelines/triage-bug.md` — bug investigation, classification, and disposition routing
 - `.claude/pipelines/fix-bug.md` — TDD-ordered bug fix for confirmed, root-caused defects
@@ -97,9 +122,12 @@ When creating or materially changing any instruction artifact:
 - `.claude/agents/instruction-evaluator.md` — review instruction artifacts for quality and compliance
 - `.claude/agents/artifact-acceptance-tester.md` — acceptance-test new or changed instruction artifacts
 - `.claude/agents/code-reviewer.md` — review implementation diffs for correctness, TDD adherence, and project conventions
+- `.claude/agents/test-runner.md` — execute and report validation commands/checks for non-trivial routed work
+- `.claude/agents/design-reviewer.md` — review non-trivial UI design variants, visual changes, and desktop icon work
 
 ### Conventions
 - `.claude/conventions/react-tauri/` — project-wide React + TypeScript + Tauri v2 conventions for windowing, IPC/permissions, state, performance, accessibility, and cross-platform behavior
+- `.claude/conventions/react-tauri/desktop-platform-scope.md` — macOS/Windows-only platform scope, desktop icon outputs, and design-variant port hygiene
 
 ---
 

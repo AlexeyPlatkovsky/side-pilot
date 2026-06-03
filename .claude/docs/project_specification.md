@@ -49,6 +49,8 @@ Multi-tool target app (three CLI adapters built into the product); single AI ass
 
 - Unit tests required for all non-trivial logic (CLI adapters, routing layer, session model, local storage) before a feature is considered done
 - UI tested manually
+- Non-trivial validation and review are performed by dedicated agents (`test-runner`, `code-reviewer`, and `design-reviewer` for UI/icon work)
+- Generated assets must stay within the desktop target scope: macOS and Windows only, no iOS or Android icon output unless the platform scope changes explicitly
 - Documentation updated when project structure, commands, contracts, or domain facts change
 - CI-style validation run locally before features close
 - External best-practice research approved — summarize findings and ask before adopting
@@ -61,6 +63,9 @@ Multi-tool target app (three CLI adapters built into the product); single AI ass
 |---|---|
 | Any AI landscape | instruction-evaluator agent |
 | New or materially changed skills, pipelines, agents, routing, validation gates, or output contracts | artifact-acceptance-tester agent |
+| Non-trivial UI design variant, visual redesign, theme, or matching desktop icon | implement-design-variant pipeline |
+| Non-trivial validation after implementation | test-runner agent |
+| Non-trivial UI/icon review | design-reviewer agent |
 | Multi-tool architecture decisions (adapter design, storage format, session model) | brainstorming capability |
 | CLI adapter implementation (non-trivial, multi-step) | implement-cli-adapter pipeline |
 | Bug report or unexpected behavior (root cause unknown) | triage-bug pipeline |

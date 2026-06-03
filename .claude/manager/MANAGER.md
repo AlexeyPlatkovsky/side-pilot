@@ -25,7 +25,7 @@ Before selecting any pipeline or capability, classify out loud:
 |---|---|
 | Complexity | trivial / non-trivial |
 | Risk | low / medium / high / system-level |
-| Domain | Tauri/React/Rust feature / CLI adapter / documentation / AI staff work / instruction system / bug triage / bug fix / other |
+| Domain | Tauri/React/Rust feature / UI design variant / CLI adapter / documentation / AI staff work / instruction system / bug triage / bug fix / other |
 
 When unsure of complexity: treat as non-trivial.
 When unsure of risk: treat as medium.
@@ -57,11 +57,15 @@ The manager only routes the git branch gate. The skill decides whether to create
 | Task | Route |
 |---|---|
 | Implement a Tauri/React/Rust feature (floating window, hotkey, chat UI, storage, etc.) | `.claude/pipelines/implement-feature.md` |
+| Implement a non-trivial UI design variant, visual redesign, theme, or matching desktop app icon | `.claude/pipelines/implement-design-variant.md` |
 | Implement a CLI adapter (ClaudeAdapter, CodexAdapter, GeminiAdapter) | `.claude/pipelines/implement-cli-adapter.md` |
 | Bug report or unexpected behavior (root cause unknown) | `.claude/pipelines/triage-bug.md` |
 | Fix a confirmed bug (root cause known, reproduction steps available) | `.claude/pipelines/fix-bug.md` |
 | Review, improve, or implement React/TypeScript/Tauri code against best practices | `.claude/skills/react-tauri-expert/SKILL.md` |
-| Write, review, or improve test code (Vitest front-end or Rust core) | `.claude/skills/testing-pro/SKILL.md` |
+| Write or improve test code (Vitest front-end or Rust core) | `.claude/skills/testing-pro/SKILL.md` |
+| Review test code or test changes | `.claude/agents/code-reviewer.md` |
+| Validate non-trivial completed work with local build/test/manual checks | `.claude/agents/test-runner.md` |
+| Review non-trivial UI design or icon work | `.claude/agents/design-reviewer.md` |
 | Open design decision with meaningful trade-offs | `.claude/skills/brainstorm/SKILL.md` |
 | Review an instruction artifact for quality and compliance | `.claude/agents/instruction-evaluator.md` |
 | Acceptance-test a new or changed instruction artifact | `.claude/agents/artifact-acceptance-tester.md` |
@@ -79,6 +83,14 @@ After the substantive implementation step and before task-complete:
 2. If yes: load `.claude/skills/documentation-maintenance/SKILL.md` and require `Skill: documentation-maintenance - output below` before proceeding.
 3. Load `.claude/skills/task-complete/SKILL.md` as the final step.
 4. Before declaring task-complete, verify every required planned output artifact is present in the conversation. If any is missing, return to the missing step or report it as a blocker.
+
+Before sending the final response:
+
+1. Verify that every required routed final artifact appears in the final response draft, not only in earlier commentary.
+2. Always include `Skill: task-complete - output below` for non-trivial routed work.
+3. Include `Agent: test-runner - output below` when validation was required.
+4. Include `Agent: instruction-evaluator - output below` and `Agent: artifact-acceptance-tester - output below` when instruction artifacts, routing, validation gates, or output contracts changed.
+5. If a required artifact is missing from the final response draft, revise the final response before sending.
 
 ## Risk Escalation
 

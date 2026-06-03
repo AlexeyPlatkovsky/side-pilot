@@ -27,6 +27,7 @@ Do not use when:
 2. Load `docs/idea.md` for the relevant feature's design intent (stack, MVP scope, contract).
 3. Confirm open design decisions are resolved. If any remain, stop and report the unresolved decision as a blocker.
 4. Load the relevant convention files from `.claude/conventions/react-tauri/` for the touched surface: windowing, IPC/permissions, state, accessibility, performance, or cross-platform.
+   - Also load `desktop-platform-scope.md` when changing app icons, bundle assets, dev ports, window dimensions, or UI design variants.
 
 ## Implementation Steps (TDD: Red → Green → Refactor)
 
