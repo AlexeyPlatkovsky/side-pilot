@@ -37,7 +37,7 @@ Every executed step is a row. If a planned step was skipped, include it and expl
 
 ### 4. Reference Output Artifacts
 
-For planned routed handoffs, `Comment` must reference the step's visible output artifact label (e.g. `Skill: implement-swift-feature - output below`).
+For planned routed handoffs, `Comment` must reference the step's visible output artifact label (e.g. `Skill: implement-tauri-feature - output below`).
 
 ### 5. Refuse Incomplete Closure
 

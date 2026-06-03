@@ -62,9 +62,11 @@ Report one of:
 
 ## Output Contract
 
-End with:
+Begin with:
 
 `Skill: documentation-maintenance - output below`
 
 | Status | Docs Checked | Result |
 |--------|--------------|--------|
+
+`Status` must be one of: `documentation updated`, `documentation checked, no update needed`, or `documentation update needed but blocked`.

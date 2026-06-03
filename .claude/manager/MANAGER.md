@@ -25,7 +25,7 @@ Before selecting any pipeline or capability, classify out loud:
 |---|---|
 | Complexity | trivial / non-trivial |
 | Risk | low / medium / high / system-level |
-| Domain | SwiftUI/AppKit feature / CLI adapter / instruction system / other |
+| Domain | Tauri/React/Rust feature / CLI adapter / instruction system / other |
 
 When unsure of complexity: treat as non-trivial.
 When unsure of risk: treat as medium.
@@ -36,11 +36,10 @@ Classification must be stated before any file is created, edited, or deleted.
 
 | Task | Route |
 |---|---|
-| Implement a SwiftUI/AppKit feature (floating window, hotkey, chat UI, storage, etc.) | `.claude/pipelines/implement-feature/PIPELINE.md` |
-| Implement a CLI adapter (ClaudeAdapter, CodexAdapter, GeminiAdapter) | `.claude/pipelines/implement-cli-adapter/PIPELINE.md` |
-| Review, improve, or implement SwiftUI/AppKit code against best practices | `.claude/skills/swiftui-expert/SKILL.md` |
-| Write, review, or improve Swift Testing test code | `.claude/skills/swift-testing-pro/SKILL.md` |
-| Refresh swiftui-expert deprecated API references (requires Sosumi MCP) | `.claude/skills/update-swiftui-apis/SKILL.md` |
+| Implement a Tauri/React/Rust feature (floating window, hotkey, chat UI, storage, etc.) | `.claude/pipelines/implement-feature.md` |
+| Implement a CLI adapter (ClaudeAdapter, CodexAdapter, GeminiAdapter) | `.claude/pipelines/implement-cli-adapter.md` |
+| Review, improve, or implement React/TypeScript/Tauri code against best practices | `.claude/skills/react-tauri-expert/SKILL.md` |
+| Write, review, or improve test code (Vitest front-end or Rust core) | `.claude/skills/testing-pro/SKILL.md` |
 | Open design decision with meaningful trade-offs | `.claude/skills/brainstorm/SKILL.md` |
 | Review an instruction artifact for quality and compliance | `.claude/agents/instruction-evaluator.md` |
 | Acceptance-test a new or changed instruction artifact | `.claude/agents/artifact-acceptance-tester.md` |
@@ -63,7 +62,7 @@ After the substantive implementation step and before task-complete:
 
 | Risk | Requirement |
 |---|---|
-| Low / medium | Pipeline + local validation (xcodebuild test) |
+| Low / medium | Pipeline + local validation (`cargo nextest run` and/or `npm run test`) |
 | High | Pipeline + instruction-evaluator review or manual code review before closing |
 | System-level | Stop and require explicit user approval before any file changes |
 

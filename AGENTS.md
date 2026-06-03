@@ -8,7 +8,7 @@ This file overrides any tool-specific adapter on conflict.
 
 ## Project
 
-Native macOS floating AI assistant. Routes user prompts to local CLI tools (Claude Code CLI, OpenAI Codex CLI, Gemini CLI) via Swift `Process`. Built with SwiftUI + AppKit.
+Cross-platform desktop (macOS + Windows) floating AI assistant. Routes user prompts to local CLI tools (Claude Code CLI, OpenAI Codex CLI, Gemini CLI) via the Rust core (`std::process::Command` / `tauri-plugin-shell`). Built with **Tauri (Rust) + React + TypeScript**.
 
 Primary design specification: `docs/idea.md`
 Project profile: `.claude/docs/project_specification.md`
@@ -37,10 +37,10 @@ When a session begins as discussion and the user signals readiness to proceed ("
 
 These apply to all non-trivial work and may not be skipped:
 
-- Unit tests required for all non-trivial logic (CLI adapters, routing layer, session model, local storage) before a feature is considered done.
+- **TDD is required** for all non-trivial logic (CLI adapters, routing layer, session model, local storage). Write tests before writing implementation code: Red → Green → Refactor. Front-end: Vitest + React Testing Library; Rust core: cargo-nextest (`#[tokio::test]`, `mockall`). A feature is not done until tests pass.
 - UI changes tested manually; state this explicitly.
 - Documentation maintenance required after any change that affects behavior, interfaces, commands, architecture, or domain facts.
-- Local validation (build + all tests pass) required before a feature closes.
+- Local validation required before a feature closes: the touched layers build and all tests pass (`npm run test` for the front-end, `cargo nextest run` for the Rust core).
 
 ---
 
@@ -59,21 +59,24 @@ When creating or materially changing any instruction artifact:
 
 ### Skills
 - `.claude/skills/brainstorm/SKILL.md` — open design decisions with meaningful trade-offs
-- `.claude/skills/implement-swift-feature/SKILL.md` — implement a SwiftUI/AppKit feature with tests
-- `.claude/skills/swiftui-expert/SKILL.md` — review, improve, and implement SwiftUI code with macOS best practices; Topic Router over 24 reference files + Instruments trace toolchain
-- `.claude/skills/swift-testing-pro/SKILL.md` — write and review Swift Testing code; enforces unit test quality gate
-- `.claude/skills/update-swiftui-apis/SKILL.md` — refresh swiftui-expert deprecated API references via Sosumi MCP (requires Sosumi)
+- `.claude/skills/implement-tauri-feature/SKILL.md` — implement a Tauri/React/Rust feature with tests
+- `.claude/skills/react-tauri-expert/SKILL.md` — review, improve, and implement React + TypeScript + Tauri v2 code; Topic Router over windowing, IPC/permissions, state, performance, accessibility, cross-platform conventions
+- `.claude/skills/testing-pro/SKILL.md` — write and review tests across both layers (Vitest front-end + cargo-nextest Rust core); enforces unit test quality gate
 - `.claude/skills/verify-cli-adapter/SKILL.md` — verify CLI adapter correctness after implementation
 - `.claude/skills/documentation-maintenance/SKILL.md` — post-change documentation updates
 - `.claude/skills/task-complete/SKILL.md` — closure reporting for non-trivial routed work
 
 ### Pipelines
-- `.claude/pipelines/implement-feature/PIPELINE.md` — SwiftUI/AppKit feature implementation
-- `.claude/pipelines/implement-cli-adapter/PIPELINE.md` — CLI adapter implementation
+- `.claude/pipelines/implement-feature.md` — Tauri/React/Rust feature implementation
+- `.claude/pipelines/implement-cli-adapter.md` — CLI adapter (Rust core) implementation
 
 ### Agents
 - `.claude/agents/instruction-evaluator.md` — review instruction artifacts for quality and compliance
 - `.claude/agents/artifact-acceptance-tester.md` — acceptance-test new or changed instruction artifacts
+- `.claude/agents/code-reviewer.md` — review implementation diffs for correctness, TDD adherence, and project conventions
+
+### Conventions
+- `.claude/conventions/react-tauri/` — project-wide React + TypeScript + Tauri v2 conventions for windowing, IPC/permissions, state, performance, accessibility, and cross-platform behavior
 
 ---
 
@@ -83,5 +86,5 @@ When creating or materially changing any instruction artifact:
 |---|---|
 | `docs/idea.md` | Primary design specification — single source of truth for features, MVP scope, architecture intent |
 | `.claude/docs/project_specification.md` | Project profile — role, duties, quality expectations, domain vocabulary |
-| `side-pilot/side_pilotApp.swift` | App entry point |
-| `side-pilot/ContentView.swift` | UI root |
+| `src-tauri/src/main.rs` | Tauri/Rust core entry point (planned — scaffold not yet created) |
+| `src/App.tsx` | React UI root (planned — scaffold not yet created) |
