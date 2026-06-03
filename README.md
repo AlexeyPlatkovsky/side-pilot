@@ -31,6 +31,9 @@ Run only the React UI in a browser:
 npm run dev
 ```
 
+This design-variant worktree uses Vite port `5175`; Tauri points at
+`http://localhost:5175` during development.
+
 ## Test
 
 Front-end tests:
@@ -71,3 +74,5 @@ npm run tauri build
 - `src/App.tsx` - React UI root
 - `src-tauri/src/lib.rs` - Tauri command and plugin setup
 - `src-tauri/tauri.conf.json` - Tauri app/window configuration
+- `src-tauri/icons/warm-friendly-source.svg` - source icon for this warm
+  friendly assistant variant

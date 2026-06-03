@@ -39,17 +39,13 @@ Do not advance to Step 3 until this artifact is present and Build Status (tsc + 
 
 ---
 
-### Step 3 — Validate
+### Step 3 — Dedicated Validation
 
-Run locally (whichever layers the feature touched):
+Agent: `.claude/agents/test-runner.md`
 
-```
-npm run test        # Vitest (front-end)
-cargo nextest run   # Rust core (or: cargo test)
-```
+Required output: `Agent: test-runner - output below`
 
-All tests must pass. If tests fail, return to Step 2.
-Record the result (pass or fail + count, per layer) inline before advancing.
+The agent runs locally whichever build/test/manual checks apply to the touched layers. If validation fails, return to Step 2.
 
 ---
 

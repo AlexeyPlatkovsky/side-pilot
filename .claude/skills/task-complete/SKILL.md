@@ -43,6 +43,14 @@ For planned routed handoffs, `Comment` must reference the step's visible output 
 
 If a required planned output artifact is missing from the conversation, do not declare completion. Report closure as blocked and name the missing artifact so the manager can return to the missing step.
 
+### 6. Final Response Requirement
+
+For non-trivial routed work, the final response must include the `Skill: task-complete - output below` table. The task is not closed if the table appears only in an intermediate commentary message and is omitted from the final answer.
+
+When instruction artifacts, routing rules, validation gates, or output contracts changed, the final response must also include compact `Agent: instruction-evaluator - output below` and `Agent: artifact-acceptance-tester - output below` artifacts.
+
+When validation was required, the final response must include a compact `Agent: test-runner - output below` artifact.
+
 ## Output Contract
 
 Begin with:

@@ -68,7 +68,7 @@ export function Bubble({
           onMouseDown={onMouseDown}
           onClick={onClick}
         >
-          ◎
+          sp
         </button>
       </div>
     );
@@ -78,7 +78,15 @@ export function Bubble({
     <div className="bubble bubble--expanded">
       <section className="panel" data-testid="panel">
         <header className="panel__header" data-tauri-drag-region>
-          <span className="panel__title">side-pilot</span>
+          <div className="panel__identity">
+            <span className="panel__mark" aria-hidden="true">
+              sp
+            </span>
+            <div>
+              <h1 className="panel__title">side-pilot companion</h1>
+              <p className="panel__status">Ready when you are</p>
+            </div>
+          </div>
           <div className="panel__controls">
             <button
               type="button"
@@ -87,7 +95,7 @@ export function Bubble({
               title="Minimize to bubble"
               onClick={() => dispatch("collapse")}
             >
-              –
+              -
             </button>
             <button
               type="button"
@@ -96,13 +104,32 @@ export function Bubble({
               title="Collapse"
               onClick={() => dispatch("collapse")}
             >
-              ×
+              x
             </button>
           </div>
         </header>
         <div className="panel__body">
-          {/* Chat panel components land in SP-006. */}
-          <p className="panel__placeholder">Chat panel coming soon.</p>
+          <div className="conversation" aria-live="polite">
+            <article className="message message--assistant">
+              <span className="message__label">Codex</span>
+              <p>The desk is quiet and ready.</p>
+            </article>
+            <article className="message message--user">
+              <span className="message__label">You</span>
+              <p>Keep the desktop flow calm and close at hand.</p>
+            </article>
+          </div>
+          <div className="composer" role="group" aria-label="Prompt composer">
+            <span className="composer__text">Ask side-pilot</span>
+            <button
+              type="button"
+              className="composer__send"
+              aria-label="Send"
+              disabled
+            >
+              Send
+            </button>
+          </div>
         </div>
       </section>
     </div>

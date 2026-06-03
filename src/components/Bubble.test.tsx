@@ -54,6 +54,15 @@ describe("Bubble", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders the warm companion panel identity", () => {
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+
+    expect(
+      screen.getByRole("heading", { name: /side-pilot companion/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ready when you are/i)).toBeInTheDocument();
+  });
+
   it("minimizes the shell back to the bubble when minimize is clicked", async () => {
     const user = userEvent.setup();
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);

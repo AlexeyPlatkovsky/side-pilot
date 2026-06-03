@@ -1,16 +1,18 @@
 ---
 name: testing-pro
-description: Writes, reviews, and improves tests for side-pilot across both layers — React/TypeScript front-end (Vitest + React Testing Library) and the Rust/Tauri core (cargo-nextest + tokio + mockall). Use when reading, writing, or reviewing tests in this project.
+description: Writes and improves tests for side-pilot across both layers — React/TypeScript front-end (Vitest + React Testing Library) and the Rust/Tauri core (cargo-nextest + tokio + mockall). Use for test authoring, not for non-trivial validation execution or independent test review.
 ---
 
 # Skill: testing-pro
 
 ## When This Skill Applies
 
-Use when reading, writing, or reviewing test code in side-pilot (front-end or Rust core).
+Use when writing or improving test code in side-pilot (front-end or Rust core).
 
 Do not use when:
 - the request is to implement or modify production (non-test) code
+- the request is to independently review tests or an implementation diff — use `.claude/agents/code-reviewer.md`
+- the request is to execute and report validation commands for non-trivial routed work — use `.claude/agents/test-runner.md`
 - the request is to adjudicate CLI-adapter correctness against the CLI Invocation Contract (binary resolution, flags, error-taxonomy completeness). This skill asserts adapter behaviors *in tests*; it does not sign off adapter correctness.
 - the request is an open design/architecture decision
 
@@ -26,12 +28,14 @@ Emit status `blocked` (not `completed`) when the code cannot be unit-tested with
 - Tests assert **behavior**, not implementation details. Front-end: what the user sees/does. Rust: observable outputs and errors, not private internals.
 - The project quality gate requires unit tests for all non-trivial logic (CLI adapters, routing layer, session model, local storage) before a feature is done. Business logic must be testable without rendering a component or spawning a real subprocess.
 
-## Review Process
+## Test Quality Checklist
+
+When authoring or improving tests:
 
 1. Identify the layer and load the matching reference file.
-2. **Front-end:** check queries are accessible (`getByRole`/`getByLabelText` over `getByTestId`), user interactions go through `userEvent`, async via `findBy`/`waitFor`, and mocks are minimal (mock the IPC boundary, not internals). See `.claude/skills/testing-pro/references/frontend.md`.
-3. **Rust:** check async tests use `#[tokio::test]`, external effects (subprocess, fs, time) are behind traits mocked with `mockall`, errors are asserted by variant not string, and tests are isolated (no shared mutable global, nextest-friendly). See `.claude/skills/testing-pro/references/rust.md`.
-4. Confirm each non-trivial behavior has a happy-path test **and** at least one failure-path test.
+2. **Front-end:** use accessible queries (`getByRole`/`getByLabelText` over `getByTestId`), user interactions through `userEvent`, async via `findBy`/`waitFor`, and minimal mocks at the IPC boundary. See `.claude/skills/testing-pro/references/frontend.md`.
+3. **Rust:** use `#[tokio::test]` for async tests, put external effects behind traits mocked with `mockall`, assert errors by variant not string, and keep tests isolated and nextest-friendly. See `.claude/skills/testing-pro/references/rust.md`.
+4. Cover each non-trivial behavior with a happy-path test **and** at least one failure-path test.
 
 If doing partial work, load only the relevant reference file.
 
@@ -50,18 +54,9 @@ Follow the same rules as review but make the changes directly. Generation heuris
 
 Tests must pass before the feature closes.
 
-## Output Format
-
-For review tasks, organize findings by file:
-1. File name and line number(s)
-2. Rule being violated (cite the reference file)
-3. Before/after code fix
-
-Skip files with no issues. End with a prioritized summary.
-
 ## Output Contract
 
-After reviewing or writing tests, emit:
+After writing or improving tests, emit:
 
 `Skill: testing-pro - output below`
 

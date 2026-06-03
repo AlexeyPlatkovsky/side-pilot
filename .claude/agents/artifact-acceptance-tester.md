@@ -32,6 +32,10 @@ For each target artifact, run exactly 9 scenario tests:
 
 For spec-only targets (output contracts, validation gates), run scenarios against the consuming artifact that enforces the spec. If no consuming artifact exists yet, return `Blocked` and name the missing enforcer.
 
+For pipelines or gates that end in task-complete, include a misuse scenario that tests this failure mode:
+- input/situation: routed artifacts were emitted during work but omitted from the final response
+- expected behavior: Fail unless the final-response gate requires the closure artifact and other required final artifacts in the final response itself
+
 If a target has no distinct third scenario for a category, record `N/A — no distinct scenario` with a one-line reason. An N/A slot is resolved, not failed.
 
 Each test must state:
