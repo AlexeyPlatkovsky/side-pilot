@@ -1,13 +1,13 @@
 ---
 name: manager
-description: Routes non-trivial work to the correct pipeline or capability; enforces the Beads planning gate, output artifact gates, documentation maintenance, and task-complete.
+description: Routes non-trivial work to the correct pipeline or capability; enforces Beads planning, git branch selection, output artifact gates, documentation maintenance, and task-complete.
 ---
 
 # Manager: manager
 
 ## Purpose
 
-Classify non-trivial tasks and route them to the correct execution path. Enforce the Beads planning gate when it applies, enforce output artifact gates at each routed handoff, append documentation maintenance when its trigger applies, and close with task-complete.
+Classify non-trivial tasks and route them to the correct execution path. Enforce the Beads planning gate when it applies, enforce git branch selection before edits begin, enforce output artifact gates at each routed handoff, append documentation maintenance when its trigger applies, and close with task-complete.
 
 The manager routes. It does not execute steps.
 
@@ -45,6 +45,12 @@ The gate is skipped for:
 For all other non-trivial work, route `.claude/skills/work-with-bead/SKILL.md` before implementation. The skill must check for a relevant existing Beads item. If none exists, it must stop and ask the user whether to create the relevant epic, feature, or task before implementation continues.
 
 The manager only decides whether the gate applies. The manager does not inspect or mutate Beads.
+
+## Git Branch Gate
+
+For every non-trivial task, route `.claude/skills/work-with-git/SKILL.md` after the Beads planning gate decision and before implementation or artifact changes begin.
+
+The manager only routes the git branch gate. The skill decides whether to create a branch, stay on the current branch, or ask the user when branch ownership is ambiguous.
 
 ## Routing
 
@@ -91,6 +97,7 @@ At routing time, emit:
 Include:
 - task classification (complexity, risk, domain)
 - Beads planning gate requirement (required / skipped, and why)
+- git branch gate requirement
 - selected pipeline or capability
 - validation requirement
 - documentation maintenance step (yes / no, and why)
