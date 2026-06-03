@@ -63,29 +63,96 @@ describe("Bubble", () => {
     expect(screen.getByText(/ready when you are/i)).toBeInTheDocument();
   });
 
-  it("minimizes the shell back to the bubble when minimize is clicked", async () => {
+  it("opens the settings view when the gear control is clicked", async () => {
     const user = userEvent.setup();
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
 
-    await user.click(screen.getByRole("button", { name: /minimize/i }));
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
 
+    // The panel shell stays; its body switches to the settings view.
+    expect(screen.getByTestId("settings")).toBeInTheDocument();
     expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
+  });
+
+  it("has no minimize control (gear replaces it)", () => {
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+    expect(
+      screen.queryByRole("button", { name: /minimize/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("places the settings (gear) control to the left of the close control", () => {
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+
+    const settings = screen.getByRole("button", { name: /open settings/i });
+    const close = screen.getByRole("button", { name: /collapse/i });
+
+    // The gear precedes close in document order (it sits to its left).
+    expect(
+      settings.compareDocumentPosition(close) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("returns to the panel (not the bubble) when Back is clicked in settings", async () => {
+    const user = userEvent.setup();
+    render(<Bubble initialState="settings" resizeWindow={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /back/i }));
+
+    expect(screen.getByTestId("panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings")).not.toBeInTheDocument();
+  });
+
+  it("steps back to the panel when Escape is pressed in settings", async () => {
+    const user = userEvent.setup();
+    render(<Bubble initialState="settings" resizeWindow={vi.fn()} />);
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByTestId("panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("settings")).not.toBeInTheDocument();
+  });
+
+  it("collapses to the bubble when close is clicked in settings", async () => {
+    const user = userEvent.setup();
+    render(<Bubble initialState="settings" resizeWindow={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /collapse/i }));
+
+    expect(screen.queryByTestId("settings")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /open side-pilot/i }),
     ).toBeInTheDocument();
   });
 
-  it("places the minimize control to the left of the close control", () => {
+  it("moves focus to the Back control when settings opens", async () => {
+    const user = userEvent.setup();
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
 
-    const minimize = screen.getByRole("button", { name: /minimize/i });
-    const close = screen.getByRole("button", { name: /collapse/i });
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
 
-    // Minimize precedes close in document order (it sits to its left).
+    expect(screen.getByRole("button", { name: /back/i })).toHaveFocus();
+  });
+
+  it("restores focus to the gear control when leaving settings", async () => {
+    const user = userEvent.setup();
+    render(<Bubble initialState="settings" resizeWindow={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /back/i }));
+
     expect(
-      minimize.compareDocumentPosition(close) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+      screen.getByRole("button", { name: /open settings/i }),
+    ).toHaveFocus();
+  });
+
+  it("resizes the OS window to the settings size when settings opens", async () => {
+    const user = userEvent.setup();
+    const resizeWindow = vi.fn();
+    render(<Bubble initialState="expanded" resizeWindow={resizeWindow} />);
+
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
+    expect(resizeWindow).toHaveBeenLastCalledWith("settings");
   });
 
   it("collapses when Escape is pressed", async () => {
