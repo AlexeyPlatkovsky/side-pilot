@@ -1,22 +1,30 @@
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  color-scheme: light dark;
 }
 
-/* The Tauri window itself is transparent and undecorated; the bubble paints its
-   own rounded surface so it floats cleanly over other apps. */
+/* The Tauri window itself is transparent and undecorated; the bubble/panel
+   paint their own rounded surfaces so they float cleanly over other apps.
+   Note: `color-scheme` is intentionally not set — on a transparent window it
+   makes the WebView paint an opaque themed canvas behind the page, which would
+   show as an opaque square around the rounded shapes. */
 html,
 body,
 #root {
   margin: 0;
   height: 100%;
   background: transparent;
+  background-color: transparent;
+}
+
+body {
+  overflow: hidden;
 }
 
 .bubble {
   height: 100vh;
   width: 100vw;
   display: flex;
+  background: transparent;
 }
 
 .bubble__dot {
@@ -29,7 +37,7 @@ body,
   color: white;
   cursor: pointer;
   background: linear-gradient(135deg, #5b8cff, #8a5bff);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  box-shadow: none;
 }
 
 .bubble__dot:active {
@@ -43,9 +51,9 @@ body,
   height: 100%;
   border-radius: 14px;
   overflow: hidden;
-  background: rgba(28, 28, 32, 0.96);
+  background: rgba(28, 28, 32, 0.95);
   color: #f2f2f5;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: none;
 }
 
 .panel__header {
@@ -62,13 +70,33 @@ body,
   font-size: 13px;
 }
 
-.panel__close {
+.panel__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.panel__control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
   border: none;
+  border-radius: 6px;
   background: transparent;
   color: inherit;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
+}
+
+.panel__control:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.panel__close {
+  font-size: 18px;
 }
 
 .panel__body {
