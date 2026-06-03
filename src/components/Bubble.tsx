@@ -14,10 +14,13 @@ export interface BubbleProps {
 }
 
 /**
- * The floating bubble (SP-004): a compact always-on-top dot that expands into
- * the chat panel on click and collapses on Escape or the close control. The
- * actual chat UI is delivered later (SP-006); this owns only the shell shape
- * and the window-size transitions.
+ * The floating bubble (SP-004, SP-030): a compact always-on-top dot that
+ * expands into the chat panel on click. The panel has a gear control that opens
+ * an in-panel settings sub-view (SP-030); the section rail itself arrives in
+ * SP-031. Escape steps back one level (settings → panel, panel → bubble) and
+ * the close control collapses straight to the bubble. The actual chat UI is
+ * delivered later (SP-006); this owns only the shell shape, the settings
+ * sub-view, and the window-size transitions.
  */
 export function Bubble({
   initialState = "collapsed",
@@ -36,12 +39,30 @@ export function Bubble({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        dispatch("collapse");
+        // Steps back one level: settings -> panel, panel -> bubble. The reducer
+        // owns the mapping so this handler stays stateless.
+        dispatch("escape");
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  // The header's lead control swaps between the gear (panel) and Back (settings)
+  // on view change. Move keyboard focus to the newly-active control so it never
+  // drops to <body>, keeping the keyboard/screen-reader path continuous.
+  const leadControlRef = useRef<HTMLButtonElement | null>(null);
+  const prevStateRef = useRef(state);
+  useEffect(() => {
+    const prev = prevStateRef.current;
+    prevStateRef.current = state;
+    const swappedSettingsView =
+      (prev === "expanded" && state === "settings") ||
+      (prev === "settings" && state === "expanded");
+    if (swappedSettingsView) {
+      leadControlRef.current?.focus();
+    }
+  }, [state]);
 
   if (state === "collapsed") {
     const onMouseDown = (event: React.MouseEvent) => {
@@ -74,29 +95,52 @@ export function Bubble({
     );
   }
 
+  const inSettings = state === "settings";
+
   return (
-    <div className="bubble bubble--expanded">
-      <section className="panel" data-testid="panel">
+    <div className={`bubble ${inSettings ? "bubble--settings" : "bubble--expanded"}`}>
+      <section
+        className="panel"
+        data-testid={inSettings ? "settings" : "panel"}
+      >
         <header className="panel__header" data-tauri-drag-region>
           <div className="panel__identity">
             <span className="panel__mark" aria-hidden="true">
               sp
             </span>
             <div>
-              <h1 className="panel__title">side-pilot companion</h1>
-              <p className="panel__status">Ready when you are</p>
+              <h1 className="panel__title">
+                {inSettings ? "Settings" : "side-pilot companion"}
+              </h1>
+              <p className="panel__status">
+                {inSettings ? "Tune your companion" : "Ready when you are"}
+              </p>
             </div>
           </div>
           <div className="panel__controls">
-            <button
-              type="button"
-              className="panel__control panel__minimize"
-              aria-label="Minimize to bubble"
-              title="Minimize to bubble"
-              onClick={() => dispatch("collapse")}
-            >
-              -
-            </button>
+            {inSettings ? (
+              <button
+                ref={leadControlRef}
+                type="button"
+                className="panel__control panel__back"
+                aria-label="Back to panel"
+                title="Back to panel"
+                onClick={() => dispatch("closeSettings")}
+              >
+                ‹
+              </button>
+            ) : (
+              <button
+                ref={leadControlRef}
+                type="button"
+                className="panel__control panel__settings"
+                aria-label="Open settings"
+                title="Open settings"
+                onClick={() => dispatch("openSettings")}
+              >
+                ⚙
+              </button>
+            )}
             <button
               type="button"
               className="panel__control panel__close"
@@ -108,29 +152,38 @@ export function Bubble({
             </button>
           </div>
         </header>
-        <div className="panel__body">
-          <div className="conversation" aria-live="polite">
-            <article className="message message--assistant">
-              <span className="message__label">Codex</span>
-              <p>The desk is quiet and ready.</p>
-            </article>
-            <article className="message message--user">
-              <span className="message__label">You</span>
-              <p>Keep the desktop flow calm and close at hand.</p>
-            </article>
+        {inSettings ? (
+          <div className="panel__body settings">
+            {/* Section rail and panes arrive in SP-031; this is the shell. */}
+            <p className="settings__placeholder">
+              Settings sections arrive next.
+            </p>
           </div>
-          <div className="composer" role="group" aria-label="Prompt composer">
-            <span className="composer__text">Ask side-pilot</span>
-            <button
-              type="button"
-              className="composer__send"
-              aria-label="Send"
-              disabled
-            >
-              Send
-            </button>
+        ) : (
+          <div className="panel__body">
+            <div className="conversation" aria-live="polite">
+              <article className="message message--assistant">
+                <span className="message__label">Codex</span>
+                <p>The desk is quiet and ready.</p>
+              </article>
+              <article className="message message--user">
+                <span className="message__label">You</span>
+                <p>Keep the desktop flow calm and close at hand.</p>
+              </article>
+            </div>
+            <div className="composer" role="group" aria-label="Prompt composer">
+              <span className="composer__text">Ask side-pilot</span>
+              <button
+                type="button"
+                className="composer__send"
+                aria-label="Send"
+                disabled
+              >
+                Send
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </section>
     </div>
   );
