@@ -1,22 +1,38 @@
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  color-scheme: light dark;
+  --ink: #312522;
+  --muted: #7a625b;
+  --warm-panel: rgba(255, 248, 238, 0.95);
+  --honey: #f7b955;
+  --coral: #dc6b4f;
+  --sage: #6b8f83;
+  --clay: #8a4f3f;
+  --cream: #fffaf2;
 }
 
-/* The Tauri window itself is transparent and undecorated; the bubble paints its
-   own rounded surface so it floats cleanly over other apps. */
+/* The Tauri window itself is transparent and undecorated; the bubble/panel
+   paint their own rounded surfaces so they float cleanly over other apps.
+   Note: `color-scheme` is intentionally not set — on a transparent window it
+   makes the WebView paint an opaque themed canvas behind the page, which would
+   show as an opaque square around the rounded shapes. */
 html,
 body,
 #root {
   margin: 0;
   height: 100%;
   background: transparent;
+  background-color: transparent;
+}
+
+body {
+  overflow: hidden;
 }
 
 .bubble {
   height: 100vh;
   width: 100vw;
   display: flex;
+  background: transparent;
 }
 
 .bubble__dot {
@@ -25,15 +41,27 @@ body,
   width: 56px;
   border: none;
   border-radius: 50%;
-  font-size: 24px;
-  color: white;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: var(--cream);
   cursor: pointer;
-  background: linear-gradient(135deg, #5b8cff, #8a5bff);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255, 250, 242, 0.95) 0 9%, transparent 10%),
+    linear-gradient(145deg, var(--honey) 0%, var(--coral) 56%, var(--sage) 100%);
+  box-shadow: none;
+  text-transform: lowercase;
 }
 
 .bubble__dot:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
+}
+
+.bubble__dot:focus-visible,
+.panel__control:focus-visible,
+.composer__send:focus-visible {
+  outline: 2px solid #2f6f63;
+  outline-offset: 2px;
 }
 
 .panel {
@@ -41,43 +69,184 @@ body,
   flex-direction: column;
   width: 100%;
   height: 100%;
-  border-radius: 14px;
+  border-radius: 18px;
   overflow: hidden;
-  background: rgba(28, 28, 32, 0.96);
-  color: #f2f2f5;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  background: rgba(255, 248, 238, 0.95);
+  color: var(--ink);
+  box-shadow: none;
+  border: 1px solid rgba(138, 79, 63, 0.16);
 }
 
 .panel__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.04);
+  gap: 12px;
+  padding: 13px 14px 11px;
+  border-bottom: 1px solid rgba(138, 79, 63, 0.14);
+  background:
+    radial-gradient(circle at 8% -12%, rgba(247, 185, 85, 0.34), transparent 42%),
+    linear-gradient(180deg, rgba(255, 242, 223, 0.96), rgba(255, 248, 238, 0.82));
   cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.panel__identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel__mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(145deg, var(--honey), var(--coral));
+  color: var(--cream);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: lowercase;
 }
 
 .panel__title {
-  font-weight: 600;
-  font-size: 13px;
+  margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1.15;
+  letter-spacing: 0;
 }
 
-.panel__close {
+.panel__status {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.panel__controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.panel__control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
   border: none;
+  border-radius: 6px;
   background: transparent;
-  color: inherit;
-  font-size: 18px;
+  color: var(--clay);
+  font-size: 15px;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
 }
 
-.panel__body {
-  flex: 1;
-  padding: 16px;
-  overflow: auto;
+.panel__control:hover {
+  background: rgba(220, 107, 79, 0.12);
 }
 
-.panel__placeholder {
-  opacity: 0.6;
-  font-size: 13px;
+.panel__close {
+  font-size: 14px;
+}
+
+.panel__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow: auto;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 242, 0.75), rgba(255, 242, 223, 0.55)),
+    var(--cream);
+}
+
+.conversation {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.message {
+  max-width: 86%;
+  padding: 11px 12px;
+  border-radius: 8px;
+  line-height: 1.35;
+}
+
+.message p {
+  margin: 4px 0 0;
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.message__label {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.message--assistant {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(107, 143, 131, 0.2);
+}
+
+.message--user {
+  align-self: flex-end;
+  background: #2f6f63;
+  color: var(--cream);
+}
+
+.message--user .message__label {
+  color: rgba(255, 250, 242, 0.78);
+}
+
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 6px 6px 13px;
+  border: 1px solid rgba(138, 79, 63, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.composer__text {
+  flex: 1;
+  color: var(--muted);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.composer__send {
+  min-width: 58px;
+  height: 32px;
+  border: none;
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--cream);
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0;
+}
+
+.composer__send:disabled {
+  cursor: default;
+  opacity: 0.76;
 }

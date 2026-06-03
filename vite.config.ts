@@ -11,10 +11,10 @@ export default defineConfig({
   clearScreen: false,
   server: {
     host: host || false,
-    port: 1420,
+    port: 5175,
     strictPort: true,
     hmr: host
-      ? { protocol: "ws", host, port: 1421 }
+      ? { protocol: "ws", host, port: 5176 }
       : undefined,
     watch: {
       // Tauri's Rust sources are watched by the Tauri CLI, not Vite.

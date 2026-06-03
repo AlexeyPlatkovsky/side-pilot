@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Bubble } from "./Bubble";
 
@@ -21,6 +21,27 @@ describe("Bubble", () => {
     expect(screen.getByTestId("panel")).toBeInTheDocument();
   });
 
+  it("does NOT expand when the bubble is dragged (pointer moves before release)", () => {
+    render(<Bubble resizeWindow={vi.fn()} />);
+    const dot = screen.getByRole("button", { name: /open side-pilot/i });
+
+    // Drag: press at one screen position, release/click at a far one.
+    fireEvent.mouseDown(dot, { screenX: 0, screenY: 0 });
+    fireEvent.click(dot, { screenX: 80, screenY: 40 });
+
+    expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
+  });
+
+  it("expands on a click that does not move (press and release in place)", () => {
+    render(<Bubble resizeWindow={vi.fn()} />);
+    const dot = screen.getByRole("button", { name: /open side-pilot/i });
+
+    fireEvent.mouseDown(dot, { screenX: 12, screenY: 12 });
+    fireEvent.click(dot, { screenX: 12, screenY: 12 });
+
+    expect(screen.getByTestId("panel")).toBeInTheDocument();
+  });
+
   it("collapses back when the close control is clicked", async () => {
     const user = userEvent.setup();
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
@@ -31,6 +52,40 @@ describe("Bubble", () => {
     expect(
       screen.getByRole("button", { name: /open side-pilot/i }),
     ).toBeInTheDocument();
+  });
+
+  it("renders the warm companion panel identity", () => {
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+
+    expect(
+      screen.getByRole("heading", { name: /side-pilot companion/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ready when you are/i)).toBeInTheDocument();
+  });
+
+  it("minimizes the shell back to the bubble when minimize is clicked", async () => {
+    const user = userEvent.setup();
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /minimize/i }));
+
+    expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /open side-pilot/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("places the minimize control to the left of the close control", () => {
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+
+    const minimize = screen.getByRole("button", { name: /minimize/i });
+    const close = screen.getByRole("button", { name: /collapse/i });
+
+    // Minimize precedes close in document order (it sits to its left).
+    expect(
+      minimize.compareDocumentPosition(close) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("collapses when Escape is pressed", async () => {
