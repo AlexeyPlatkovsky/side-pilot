@@ -6,14 +6,36 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		02F09CCA2FCF5BE2002403DC /* CLAUDE.md in Resources */ = {isa = PBXBuildFile; fileRef = 02F09CC92FCF5BE2002403DC /* CLAUDE.md */; };
+		02F09CCB2FCF5BE2002403DC /* AGENTS.md in Resources */ = {isa = PBXBuildFile; fileRef = 02F09CC82FCF5BE2002403DC /* AGENTS.md */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		022937DC2FCF444C00175FDC /* side-pilot.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "side-pilot.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		02F09CC82FCF5BE2002403DC /* AGENTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = "<group>"; };
+		02F09CC92FCF5BE2002403DC /* CLAUDE.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CLAUDE.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		022937DE2FCF444C00175FDC /* side-pilot */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "side-pilot";
+			sourceTree = "<group>";
+		};
+		02F09C132FCF51B4002403DC /* docs */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = docs;
+			sourceTree = "<group>";
+		};
+		02F09C222FCF5542002403DC /* .claude */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = .claude;
+			sourceTree = "<group>";
+		};
+		02F09C832FCF5590002403DC /* .manifesto */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = .manifesto;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -32,8 +54,13 @@
 		022937D32FCF444C00175FDC = {
 			isa = PBXGroup;
 			children = (
+				02F09C132FCF51B4002403DC /* docs */,
 				022937DE2FCF444C00175FDC /* side-pilot */,
 				022937DD2FCF444C00175FDC /* Products */,
+				02F09C222FCF5542002403DC /* .claude */,
+				02F09C832FCF5590002403DC /* .manifesto */,
+				02F09CC82FCF5BE2002403DC /* AGENTS.md */,
+				02F09CC92FCF5BE2002403DC /* CLAUDE.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -62,6 +89,9 @@
 			);
 			fileSystemSynchronizedGroups = (
 				022937DE2FCF444C00175FDC /* side-pilot */,
+				02F09C132FCF51B4002403DC /* docs */,
+				02F09C222FCF5542002403DC /* .claude */,
+				02F09C832FCF5590002403DC /* .manifesto */,
 			);
 			name = "side-pilot";
 			packageProductDependencies = (
@@ -109,6 +139,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				02F09CCA2FCF5BE2002403DC /* CLAUDE.md in Resources */,
+				02F09CCB2FCF5BE2002403DC /* AGENTS.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
