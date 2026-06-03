@@ -109,5 +109,7 @@ When creating or materially changing any instruction artifact:
 |---|---|
 | `docs/idea.md` | Primary design specification — single source of truth for features, MVP scope, architecture intent |
 | `.claude/docs/project_specification.md` | Project profile — role, duties, quality expectations, domain vocabulary |
-| `src-tauri/src/main.rs` | Tauri/Rust core entry point (planned — scaffold not yet created) |
-| `src/App.tsx` | React UI root (planned — scaffold not yet created) |
+| `README.md` | Developer guide — prerequisites, build/dev/test commands, source layout, cross-platform notes |
+| `src-tauri/src/main.rs` | Tauri/Rust core entry point — calls `side_pilot_lib::run()` |
+| `src-tauri/src/lib.rs` | Tauri core library — builder, command registration, module map (`commands`, `adapters`, `storage`) |
+| `src/App.tsx` | React UI root — renders the floating `Bubble` |

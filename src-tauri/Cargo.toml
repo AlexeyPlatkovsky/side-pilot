@@ -1,0 +1,25 @@
+[package]
+name = "side-pilot"
+version = "0.1.0"
+description = "Cross-platform floating multi-AI desktop assistant"
+authors = ["Alexey Platkovsky"]
+edition = "2021"
+rust-version = "1.77"
+
+# The Tauri app logic lives in a library crate so it can be unit-tested with
+# cargo-nextest and reused by the mobile entry point if it is ever added.
+[lib]
+name = "side_pilot_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# `macos-private-api` is required because the bubble window is transparent
+# (see `macOSPrivateApi` in tauri.conf.json). Note: this uses private macOS
+# APIs and can block Mac App Store distribution — acceptable for a sideloaded
+# floating widget; revisit if App Store distribution is ever required.
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -1,0 +1,83 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color-scheme: light dark;
+}
+
+/* The Tauri window itself is transparent and undecorated; the bubble paints its
+   own rounded surface so it floats cleanly over other apps. */
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+}
+
+.bubble {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+}
+
+.bubble__dot {
+  margin: auto;
+  height: 56px;
+  width: 56px;
+  border: none;
+  border-radius: 50%;
+  font-size: 24px;
+  color: white;
+  cursor: pointer;
+  background: linear-gradient(135deg, #5b8cff, #8a5bff);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.bubble__dot:active {
+  transform: scale(0.96);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(28, 28, 32, 0.96);
+  color: #f2f2f5;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: grab;
+}
+
+.panel__title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.panel__close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.panel__body {
+  flex: 1;
+  padding: 16px;
+  overflow: auto;
+}
+
+.panel__placeholder {
+  opacity: 0.6;
+  font-size: 13px;
+}
