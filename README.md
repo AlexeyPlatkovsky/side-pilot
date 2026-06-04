@@ -77,6 +77,10 @@ npm run tauri build
 - `src/styles.css` - design tokens + component styles
 - `src/App.tsx` - React UI root
 - `src-tauri/src/lib.rs` - Tauri command and plugin setup
+- `src-tauri/src/adapters/` - CLI routing seam: the `CliAdapter` trait, typed
+  request/result/error contract, binary and environment resolution, the
+  `AdapterRegistry`, and the read-only Codex adapter behind the `run_adapter`
+  and `cancel_adapter_run` commands
 - `src-tauri/tauri.conf.json` - Tauri app/window configuration
 - `src-tauri/icons/warm-friendly-source.svg` - source icon for this warm
   friendly assistant variant

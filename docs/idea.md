@@ -155,8 +155,8 @@ Every adapter MUST use the tool's non-interactive mode with machine-readable out
 
 A GUI app does **not** inherit the user's shell `PATH`/environment (on macOS when launched from Finder; on Windows the GUI process env differs from an interactive shell). Adapters MUST NOT rely on `PATH` lookup of `claude`/`codex`/`gemini`. Required behavior:
 
-- Resolve each tool to an **absolute binary path**, discovered once and cached — via a login shell on macOS (`/bin/zsh -lc 'command -v codex'`), via `where`/registry/known install locations on Windows, or a user-configured override.
-- Spawn each subprocess (Rust `std::process::Command` / `tauri-plugin-shell`) with an environment that lets the tools find their own config and credentials (login-shell-derived env on macOS), not the bare GUI environment.
+- Resolve each tool to an **absolute binary path**, discovered once and cached for the app process — via a login shell on macOS (`/bin/zsh -lc 'command -v codex'`), via `where`/registry/known install locations on Windows, or a user-configured override.
+- Spawn each subprocess (Rust `std::process::Command` / `tauri-plugin-shell`) with an environment that lets the tools find their own config and credentials (login-shell-derived env on macOS, cached for the app process), not the bare GUI environment.
 - Surface a clear "CLI not found / not authenticated" state in the UI instead of failing silently.
 
 ### 3. Working directory **[CONFIRMED]**
@@ -189,12 +189,14 @@ Each CLI call is a fresh process. Two layers are always separate:
 
 **MVP (Codex only):** use **Codex native session resume** (`codex exec resume` + stored `codex_session_id`) for model context continuity. No transcript composition needed.
 
+> **Verified CLI constraint (codex-cli 0.128.0):** `codex exec resume <id>` does **not** accept `-s/--sandbox` or `-C/--cd` (unlike plain `codex exec`). A resumed run therefore inherits the read-only posture of its originating session and takes its working directory from the spawned process `cwd`. The captured session id is the `thread_id` field of the `thread.started` JSONL event.
+
 **Known revisit (multi-tool):** native sessions are per-tool — they cannot represent one unified conversation, nor feed `/all` or `/summarize` (you cannot hand Codex's session to Claude). When tool #2 lands, continuity moves to **app-owned transcript replay** (compose `[prior turns + new message]` from the local store), likely a hybrid that keeps native session ids as an optimization. Persist `codex_session_id` / `claude_session_id` / `gemini_session_id` alongside the local session to support this.
 
 ### 7. Timeouts, cancellation, concurrency
 
 - Per-adapter **timeout** (proposed default 120s, configurable). On timeout: terminate the process group, return `timedOut`.
-- User-initiated **cancellation** terminates the process group.
+- User-initiated **cancellation** terminates the process group. The front-end supplies a `run_id` on `run_adapter` and calls `cancel_adapter_run(run_id)` to cancel that in-flight subprocess.
 - `/all` runs adapters **concurrently**; each result resolves independently, partial failures are shown per-tool (one tool failing does not block the others).
 
 ### 8. Error taxonomy
@@ -222,12 +224,12 @@ trait CliAdapter {
     async fn run(&self, req: AdapterRequest) -> Result<AdapterResult, AdapterError>;
 }
 
-// AdapterRequest: prompt, working_directory?, model?, permission_mode, timeout, resume_session_id?
+// AdapterRequest: prompt, working_directory?, model?, permission_mode, timeout, resume_session_id?, run_id?
 // AdapterResult: assistant_text (Markdown), raw_json, native_session_id?, usage?
 // AdapterError: §8 taxonomy
 ```
 
-The front-end calls `invoke("run_adapter", { request })`; the typed result is rendered in React. This makes blocking-vs-streaming, model selection, and permission posture properties of the request — so the MVP can ship blocking + read-only and evolve without reshaping the contract.
+The front-end calls `invoke("run_adapter", { request })`; the typed result is rendered in React. If the user cancels a pending run, the front-end calls `invoke("cancel_adapter_run", { runId })` using the same `run_id`. This makes blocking-vs-streaming, model selection, cancellation, and permission posture properties of the request — so the MVP can ship blocking + read-only and evolve without reshaping the contract.
 
 ## Session Model
 

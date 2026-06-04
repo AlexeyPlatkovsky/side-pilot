@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-run-adapter"
+description = "Enables the run_adapter command without any pre-configured scope."
+commands.allow = ["run_adapter"]
+
+[[permission]]
+identifier = "deny-run-adapter"
+description = "Denies the run_adapter command without any pre-configured scope."
+commands.deny = ["run_adapter"]

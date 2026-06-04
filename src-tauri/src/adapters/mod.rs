@@ -2,14 +2,49 @@
 //!
 //! Each assistant (OpenAI Codex, Claude Code, Gemini) is driven through its
 //! non-interactive structured-output mode per `docs/idea.md` §"CLI Invocation
-//! Contract". The concrete adapters and the `CliAdapter` trait arrive in SP-008
-//! / SP-009. The scaffold defines only the shared assistant identity so the
-//! routing layer and storage have a stable type to reference.
+//! Contract". The MVP (SP-008) delivers the [`CliAdapter`] trait, the typed
+//! request/result/error contract, binary resolution, the subprocess seam, the
+//! routing [`AdapterRegistry`], and one registered [`CodexAdapter`].
 
 use std::str::FromStr;
 
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use tokio_util::sync::CancellationToken;
+
+pub mod binary;
+pub mod codex;
+pub mod contract;
+pub mod environment;
+pub mod error;
+pub mod process;
+pub mod registry;
+
+pub use codex::CodexAdapter;
+pub use contract::{AdapterRequest, AdapterResult, PermissionMode, Usage};
+pub use error::AdapterError;
+pub use registry::AdapterRegistry;
+
+/// A CLI adapter drives one assistant's command-line tool: it constructs the
+/// invocation, runs it (through an injected runner), and maps the structured
+/// output or failure onto the typed contract (`docs/idea.md` §9).
+#[async_trait]
+pub trait CliAdapter: Send + Sync {
+    /// Which assistant this adapter drives.
+    fn id(&self) -> AssistantId;
+
+    /// Run one request to completion (blocking output, MVP). `cancel` is the
+    /// per-run cancellation hook (§7).
+    async fn run(
+        &self,
+        req: AdapterRequest,
+        cancel: CancellationToken,
+    ) -> Result<AdapterResult, AdapterError>;
+}
+
 /// Identifies which local CLI an adapter drives.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum AssistantId {
     Codex,
     Claude,

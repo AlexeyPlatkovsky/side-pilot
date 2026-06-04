@@ -23,3 +23,14 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["macos-private-api"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Async runtime for the CLI routing seam (SP-008): subprocess execution,
+# per-adapter timeouts, and cancellation hooks.
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "process", "time", "io-util", "macros", "sync"] }
+async-trait = "0.1"
+# CancellationToken backs the per-adapter cancellation hook (CLI Invocation Contract §7).
+tokio-util = "0.7"
+libc = "0.2"
+
+[dev-dependencies]
+# Trait-based mocking so adapter unit tests never spawn a real CLI (testing-pro: references/rust.md).
+mockall = "0.13"
