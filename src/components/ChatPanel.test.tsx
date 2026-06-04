@@ -217,6 +217,49 @@ describe("ChatPanel", () => {
     }
   });
 
+  it("remeasures composer height when the app width changes", async () => {
+    const user = userEvent.setup();
+    let measuredScrollHeight = 32;
+    const scrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "scrollHeight",
+    );
+    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return measuredScrollHeight;
+      },
+    });
+
+    try {
+      const api = makeApi();
+      render(<ChatPanel api={api} />);
+      await waitForReady(api);
+
+      const input = screen.getByLabelText("Ask side-pilot");
+      await user.type(input, "long text that fits one row while wide");
+      expect(input).toHaveStyle({ height: "32px" });
+
+      measuredScrollHeight = 56;
+      window.dispatchEvent(new Event("resize"));
+      expect(input).toHaveStyle({ height: "56px" });
+
+      measuredScrollHeight = 32;
+      window.dispatchEvent(new Event("resize"));
+      expect(input).toHaveStyle({ height: "32px" });
+    } finally {
+      if (scrollHeight) {
+        Object.defineProperty(
+          HTMLTextAreaElement.prototype,
+          "scrollHeight",
+          scrollHeight,
+        );
+      } else {
+        Reflect.deleteProperty(HTMLTextAreaElement.prototype, "scrollHeight");
+      }
+    }
+  });
+
   it("badges assistant replies with the model and effort", async () => {
     const api = makeApi({
       history: [persisted({ sender: "assistant", content: "hi from gpt" })],

@@ -120,6 +120,19 @@ export function Bubble({
 
   const inSettings = state === "settings";
 
+  const onPanelMarkMouseDown = (event: React.MouseEvent) => {
+    pressOrigin.current = { x: event.screenX, y: event.screenY };
+  };
+
+  const onPanelMarkClick = (event: React.MouseEvent) => {
+    const origin = pressOrigin.current;
+    pressOrigin.current = null;
+    if (origin && wasDragged(origin, { x: event.screenX, y: event.screenY })) {
+      return;
+    }
+    dispatch("collapse");
+  };
+
   return (
     <div className={`bubble ${inSettings ? "bubble--settings" : "bubble--expanded"}`}>
       <section
@@ -133,20 +146,23 @@ export function Bubble({
               className="panel__mark"
               aria-label="Minimize"
               title="Minimize"
-              onClick={() => dispatch("collapse")}
+              data-tauri-drag-region
+              onMouseDown={onPanelMarkMouseDown}
+              onClick={onPanelMarkClick}
             >
               <img
                 className="panel__mark-icon"
                 src={appIcon}
                 alt=""
                 draggable={false}
+                data-tauri-drag-region
               />
             </button>
             <div>
-              <h1 className="panel__title">
+              <h1 className="panel__title" data-tauri-drag-region>
                 {inSettings ? "Settings" : "side-pilot companion"}
               </h1>
-              <p className="panel__status">
+              <p className="panel__status" data-tauri-drag-region>
                 {inSettings ? "Tune your companion" : "Ready when you are"}
               </p>
             </div>

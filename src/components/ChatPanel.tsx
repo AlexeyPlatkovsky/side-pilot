@@ -147,10 +147,7 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
     endRef.current?.scrollIntoView?.({ block: "end" });
   }, [state.messages.length, state.status.kind]);
 
-  // Auto-grow the composer from a single row up to the CSS max-height (after
-  // which it scrolls). Resetting to "auto" first lets it shrink again as text
-  // is deleted or after a submit clears the draft.
-  useLayoutEffect(() => {
+  const resizeComposerInput = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
@@ -160,6 +157,18 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
         : COMPOSER_INPUT_MIN_HEIGHT
     }px`;
   }, [draft]);
+
+  // Auto-grow the composer from a single row up to the CSS max-height (after
+  // which it scrolls). Resetting to "auto" first lets it shrink again as text
+  // is deleted or after a submit clears the draft.
+  useLayoutEffect(() => {
+    resizeComposerInput();
+  }, [resizeComposerInput]);
+
+  useEffect(() => {
+    window.addEventListener("resize", resizeComposerInput);
+    return () => window.removeEventListener("resize", resizeComposerInput);
+  }, [resizeComposerInput]);
 
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();

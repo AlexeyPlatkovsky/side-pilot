@@ -90,6 +90,23 @@ describe("Bubble", () => {
     ).toBeInTheDocument();
   });
 
+  it("does NOT minimize when the header identity icon is dragged", () => {
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+    const markIcon = screen
+      .getByRole("button", { name: /minimize/i })
+      .querySelector("img");
+    expect(markIcon).not.toBeNull();
+    if (!markIcon) return;
+
+    fireEvent.mouseDown(markIcon, { screenX: 0, screenY: 0 });
+    fireEvent.click(markIcon, { screenX: 80, screenY: 40 });
+
+    expect(screen.getByTestId("panel")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /open side-pilot/i }),
+    ).not.toBeInTheDocument();
+  });
+
   it("places the settings (gear) control to the left of the close control", async () => {
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
 
@@ -207,5 +224,21 @@ describe("Bubble", () => {
   it("marks a drag region so the window can be moved", () => {
     const { container } = render(<Bubble resizeWindow={vi.fn()} />);
     expect(container.querySelector("[data-tauri-drag-region]")).not.toBeNull();
+  });
+
+  it("marks visible header identity targets as drag regions", () => {
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+
+    const minimize = screen.getByRole("button", { name: /minimize/i });
+    expect(minimize).toHaveAttribute("data-tauri-drag-region");
+    expect(minimize.querySelector("img")).toHaveAttribute(
+      "data-tauri-drag-region",
+    );
+    expect(
+      screen.getByRole("heading", { name: /side-pilot companion/i }),
+    ).toHaveAttribute("data-tauri-drag-region");
+    expect(screen.getByText(/ready when you are/i)).toHaveAttribute(
+      "data-tauri-drag-region",
+    );
   });
 });
