@@ -66,15 +66,29 @@ SP-NNN
 
 `NNN` is a zero-padded decimal sequence number such as `001`, `002`, or `127`.
 
+**Never run `bd create` without `--id`.** Plain `bd create` mints a hash-style ID (e.g. `SP-0gx`, `SP-a3f2dd`), which breaks the sequence. `--id SP-NNN` is mandatory on every create.
+
 Before creating any item:
 
-1. Inspect existing Beads IDs with `bd list --json` or an equivalent read-only query.
+1. Inspect existing Beads IDs with `bd list --json` or an equivalent read-only query. Include closed items (e.g. `bd list --all --json`) so the sequence is not reused — closed items are hidden by default.
 2. Consider only IDs that match `^SP-[0-9]{3}$`.
 3. Pick the next unused sequence number: highest existing `NNN` plus one, or `SP-001` when none exist.
 4. Create the item with `bd create --id SP-NNN`.
-5. If Beads creates a non-conforming ID, rename it immediately with `bd rename <old-id> SP-NNN` before using it elsewhere.
 
 Do not create hash-style IDs such as `SP-a3f2dd`.
+
+### Recovering a non-conforming ID
+
+This applies only to repairing a freshly-minted non-conforming (hash-style) ID — **never** to renumber a conforming `SP-NNN` item.
+
+`bd delete --force` is destructive and irreversible: it discards the item's audit trail (creation/transition timestamps, change log), which recreation cannot restore — only capturable state (content, comments, dependencies, status) is replayed. If the non-conforming item is already referenced by other items or has accumulated meaningful history, **confirm with the user before deleting**.
+
+**Do not use `bd rename`** to fix a hash ID: `bd rename` rejects a purely numeric suffix (it errors `invalid new ID format "SP-NNN": must be prefix-suffix`), so it cannot turn a hash ID into `SP-NNN`. Instead recreate it (one `bd` command at a time):
+
+1. Capture full content with `bd show <old-id> --json` (title, type, priority, labels, description, design, acceptance, parent, status, comments) **and** inbound references — any other items whose parent or dependency is the old ID (`bd list --json`).
+2. Delete the offending item(s) with `bd delete <id> --force`; delete children before their parent.
+3. Recreate with `bd create --id SP-NNN`, re-supplying every captured field (`--type`, `--priority`, `--labels`, `--description`, `--acceptance`, `--design`) per "Item Detail Rules" — do not recreate a stub. For a child, create without `--parent`, then `bd update SP-NNN --parent <parent-id>`.
+4. Restore all edges and state: re-parent any orphaned children, re-point inbound dependencies that referenced the old ID, re-add comments, and re-close with `bd close` if the original was closed.
 
 ## Hierarchy Rules
 

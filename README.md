@@ -54,6 +54,16 @@ If `cargo nextest` is missing:
 cargo install cargo-nextest
 ```
 
+WebKit end-to-end tests (runtime UI validation):
+
+```bash
+npm run test:e2e
+```
+
+This runs the React UI in Playwright's **WebKit** engine — the closest approximation to the WKWebView the Tauri app renders in — to catch the runtime-only UI bugs that Vitest + jsdom and Chromium previews cannot (WebKit rendering, layout sizing, scroll/pin, auto-grow, drag-region DOM contracts). It is the automated backbone of the `AGENTS.md` "Runtime UI validation" quality gate. First-time setup downloads the engine: `npx playwright install webkit`.
+
+Scope: WebKit *engine* correctness, not a native OS window — true OS-level window dragging (vs. drag-region markup) stays a manual check in the real Tauri window (`npm run tauri dev`).
+
 ## Build
 
 Build the front-end:

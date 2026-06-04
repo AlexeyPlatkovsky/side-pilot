@@ -402,12 +402,10 @@ body {
 .composer__input {
   flex: 1;
   min-width: 0;
-  /* `block`, not the textarea default `inline-block`: inline-block adds a
-     baseline/descender gap below the field (visible in WebKit/WKWebView) that
-     reads as dead space under the text and an over-tall first row. */
-  display: block;
-  /* Starts at one row (rows=1) and auto-grows via JS up to this cap, then
-     scrolls. box-sizing keeps the measured scrollHeight aligned with height. */
+  /* Auto-grows from one row (rows=1) via JS up to this cap, then scrolls.
+     border-box keeps the measured scrollHeight aligned with the set height.
+     (The field is a flex item, so it is already blockified — no inline-block
+     line-box gap applies here.) */
   box-sizing: border-box;
   min-height: 32px;
   max-height: 96px;

@@ -9,6 +9,12 @@ node_modules/
 dist/
 *.local
 
+# Playwright (WebKit e2e harness)
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # Rust / Tauri
 src-tauri/target/
 src-tauri/gen/

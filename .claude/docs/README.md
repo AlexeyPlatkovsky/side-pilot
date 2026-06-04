@@ -11,3 +11,4 @@
 - Non-trivial UI design variants route through `.claude/pipelines/implement-design-variant.md`.
 - side-pilot targets macOS and Windows desktop only; generated iOS/Android assets are outside scope unless the user explicitly changes platform targets.
 - Non-trivial validation evidence comes from `.claude/agents/test-runner.md`; non-trivial visual review comes from `.claude/agents/design-reviewer.md`.
+- UI/interaction changes require runtime validation in the real Tauri window (WKWebView) or the WebKit harness, with captured evidence; Vitest + jsdom passing is necessary but not sufficient (`AGENTS.md` → Quality Gates).

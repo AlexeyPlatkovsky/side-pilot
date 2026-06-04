@@ -19,9 +19,9 @@ Read:
 - `.claude/conventions/react-tauri/tauri-windowing.md`
 - `.claude/conventions/react-tauri/desktop-platform-scope.md`
 - the implementation diff or changed-file list
-- manual UI validation evidence, including screenshots or a browser/Tauri visual check when available
+- runtime UI validation evidence from the real Tauri window (WKWebView) or the WebKit end-to-end harness (required for visual/interaction changes — see below): screenshot(s) or a recording, plus any measured sizes/positions relevant to the change
 
-If the diff or visual-validation evidence is missing for non-trivial UI work, return `Blocked`.
+For visual or interaction changes, runtime evidence is **required**, not "when available": reviewing the diff alone cannot confirm layout, sizing, drag behavior, focus, or WebKit-specific rendering. Return `Blocked` if the diff is missing, or if runtime evidence is missing for a visual/interaction change. A Chromium-only check (e.g. a generic browser preview) does **not** satisfy this for WebKit-sensitive changes — say so explicitly if that is all that was provided, and treat the WebKit-sensitive aspects as unverified.
 
 ## Review Criteria
 
@@ -39,6 +39,7 @@ If the diff or visual-validation evidence is missing for non-trivial UI work, re
 - Text fits the intended collapsed and expanded window sizes without overlapping.
 - The color palette is not one-note and has sufficient contrast.
 - The Tauri transparent-window constraints remain intact: no opaque page canvas behind rounded shapes.
+- **Interaction behavior (verify against runtime evidence, not the diff):** window chrome is fully draggable (`data-tauri-drag-region` on the whole header, not just part); controls on drag surfaces discriminate click vs. drag; keyboard paths (Enter / Shift+Enter / Esc / focus moves) behave; auto-sizing elements have a sensible default (e.g. one row), grow and scroll within bounds, and reflow on window resize; empty/loading/error states render without dead space or clipping. See `.claude/conventions/react-tauri/tauri-windowing.md`.
 - Icon changes are simple, original, recognizable at small sizes, and not based on copyrighted or brand-like symbols.
 - Desktop-only scope is preserved: no iOS or Android generated assets are introduced unless the user explicitly requested mobile targets.
 - Dev-port changes keep the worktree independently launchable and do not collide with other active variants.
@@ -61,6 +62,8 @@ Then provide:
 Severity: Blocking / Major / Minor / Info.
 
 **Design-System Check** — Pass / Fail / Blocked, with one sentence on token adherence and styles.css ↔ design-book.md sync.
+
+**Runtime Evidence Check** — Pass / Fail / Blocked, naming the evidence reviewed (real Tauri window / WebKit harness / Chromium-only / none). Fail or Blocked if a visual or interaction change has no real-runtime evidence.
 
 **Platform Scope Check** — Pass / Fail / Blocked, with one sentence.
 

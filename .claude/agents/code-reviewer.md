@@ -46,6 +46,7 @@ If the diff or list of changed files is missing, return verdict `Blocked` immedi
 - No abstractions beyond what the task requires
 - No error handling for scenarios that cannot happen
 - Comments explain only non-obvious *why*, not *what*
+- Reuses existing project helpers/conventions instead of re-deriving them (e.g. window drag / click-vs-drag via `src/state/drag.ts`, window sizing via `src/state/windowResize.ts`); re-implementing behavior that already exists is a Major finding
 - If the project does not build after implementation, flag as Blocking
 
 ## Severity Levels

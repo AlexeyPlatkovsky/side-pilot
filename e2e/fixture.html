@@ -1,0 +1,25 @@
+<!doctype html>
+<!--
+  WebKit e2e fixture (SP-0gx). Served by the Vite dev server and loaded by the
+  Playwright WebKit harness. Mounts the real chat panel with the no-IPC
+  `inertChatApi`, so layout/interaction can be exercised without a Tauri backend.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>side-pilot · e2e fixture</title>
+    <style>
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/e2e-fixture.tsx"></script>
+  </body>
+</html>

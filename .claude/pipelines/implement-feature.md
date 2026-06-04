@@ -35,6 +35,7 @@ Skill: `.claude/skills/implement-tauri-feature/SKILL.md`
 Required output: `Skill: implement-tauri-feature - output below`
 
 Consult `react-tauri-expert` reference topics as needed; follow TDD order (Red → Green → Refactor) via `testing-pro`.
+For UI/interaction surfaces, state the **interaction contract** before writing component code and treat it as acceptance criteria — drag/click-vs-drag, keyboard (Enter/Shift+Enter/Esc/focus), sizing (default rows, max, scroll vs. pin, reflow on resize), empty/loading/error states, known WebKit quirks (see `AGENTS.md` → Quality Gates and `.claude/conventions/react-tauri/tauri-windowing.md`).
 Do not advance to Step 3 until this artifact is present and Build Status (tsc + cargo) is clean.
 
 ---
@@ -46,6 +47,8 @@ Agent: `.claude/agents/test-runner.md`
 Required output: `Agent: test-runner - output below`
 
 The agent runs locally whichever build/test/manual checks apply to the touched layers. If validation fails, return to Step 2.
+
+For UI/interaction changes, validation must include **runtime evidence** from the real Tauri window (WKWebView) or the WebKit harness (not jsdom alone) — a screenshot/recording and any measured sizes/positions relevant to the change. See `AGENTS.md` → Quality Gates ("Runtime UI validation"). Vitest passing does not satisfy this on its own. Until the WebKit harness exists (Phase 2), this evidence may be operator-supplied; the agent records and cites it.
 
 ---
 
