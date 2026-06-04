@@ -16,6 +16,7 @@ Extends the `implement-feature` pattern with an additional adapter verification 
 Before this pipeline begins:
 - The manager has classified the task as non-trivial and selected this pipeline.
 - `Manager: manager - output below` artifact is present in the conversation.
+- The Beads and git gates have run when required by the manager.
 
 ## Steps
 
@@ -53,16 +54,13 @@ Do not advance to Step 4 until all checks are Pass or Skipped-with-reason.
 
 ---
 
-### Step 4 — Validate
+### Step 4 — Dedicated Validation
 
-Run locally:
+Agent: `.claude/agents/test-runner.md`
+Required output: `Agent: test-runner - output below`
 
-```
-cargo nextest run   # (or: cargo test)
-```
-
-All tests must pass. If tests fail, return to Step 2.
-Record the result (pass or fail + count) inline before advancing.
+The agent runs the Rust core test suite for the touched adapter. All tests must pass. If validation fails, return to Step 2.
+Do not advance to Step 5 until this artifact is present with a passing result.
 
 ---
 

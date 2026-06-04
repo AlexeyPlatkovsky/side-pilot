@@ -94,6 +94,8 @@ When creating or materially changing any instruction artifact:
 - Use `instruction-evaluator` before accepting the artifact.
 - Use `artifact-acceptance-tester` before accepting any skill, pipeline, agent, manager routing, validation gate, or output contract.
 
+The `instruction-evaluator` and `artifact-acceptance-tester` agents read their review rubric from the committed `.manifesto/` framework files (`MANIFEST.md`, `IMPLEMENTATION.md`, and `conventions/`). Keep `.manifesto/` tracked in git — do not add it to `.gitignore`, or these mandatory agents lose their authority source.
+
 ---
 
 ## Final Response Gate

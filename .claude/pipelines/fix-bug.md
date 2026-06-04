@@ -59,18 +59,13 @@ Do not advance to Step 3 until Build Status (tsc + cargo) is clean and the new t
 
 ---
 
-### Step 3 — Validate
+### Step 3 — Dedicated Validation
 
-Run the full test suite for every touched layer.
+Agent: `.claude/agents/test-runner.md`
+Required output: `Agent: test-runner - output below`
 
-```
-npm run test        # front-end (if affected)
-cargo nextest run   # Rust core (if affected)
-```
-
-All tests — new and pre-existing — must pass. If any test fails, return to Step 2.
-
-Record: layer(s) run, pass/fail status, total test count per layer.
+The agent runs the full test suite for every touched layer (`npm run test` front-end, `cargo nextest run` Rust core). All tests — new and pre-existing — must pass. If validation fails, return to Step 2.
+Do not advance to Step 3a/Step 4 until this artifact is present with a passing result.
 
 ---
 

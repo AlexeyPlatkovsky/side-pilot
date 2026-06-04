@@ -14,6 +14,7 @@ Sequence the steps for implementing a non-trivial Tauri/React/Rust feature: desi
 Before this pipeline begins:
 - The manager has classified the task as non-trivial and selected this pipeline.
 - `Manager: manager - output below` artifact is present in the conversation.
+- The Beads and git gates have run when required by the manager.
 
 ## Steps
 
