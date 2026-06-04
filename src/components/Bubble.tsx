@@ -2,6 +2,10 @@ import { useEffect, useReducer, useRef } from "react";
 import { bubbleReducer, type BubbleState } from "../state/bubbleState";
 import { applyWindowSize } from "../state/windowResize";
 import { wasDragged, type Point } from "../state/drag";
+// Single source of truth for the app mark: the same artwork bundled as the
+// macOS/Windows app (Dock) icon, reused for the collapsed bubble and the
+// panel header so all three reads identically.
+import appIcon from "../assets/app-icon_3.png";
 
 export interface BubbleProps {
   /** Initial visual state. Defaults to the compact bubble. */
@@ -32,8 +36,19 @@ export function Bubble({
   // window drag so dragging the bubble doesn't spuriously expand it.
   const pressOrigin = useRef<Point | null>(null);
 
+  // The collapsed bubble has its own tiny size; every other ("panel") view —
+  // expanded, settings, and any future view — shares one window size. We only
+  // resize when crossing that bubble<->panel boundary (or on first render), so
+  // switching between panel views preserves whatever size the user dragged the
+  // window to instead of snapping it back to a canonical size.
+  const prevSizeStateRef = useRef<BubbleState | null>(null);
   useEffect(() => {
-    resizeWindow(state);
+    const prev = prevSizeStateRef.current;
+    prevSizeStateRef.current = state;
+    const crossedBoundary = (prev === "collapsed") !== (state === "collapsed");
+    if (prev === null || crossedBoundary) {
+      resizeWindow(state);
+    }
   }, [state, resizeWindow]);
 
   useEffect(() => {
@@ -89,7 +104,7 @@ export function Bubble({
           onMouseDown={onMouseDown}
           onClick={onClick}
         >
-          sp
+          <img className="bubble__icon" src={appIcon} alt="" draggable={false} />
         </button>
       </div>
     );
@@ -105,9 +120,20 @@ export function Bubble({
       >
         <header className="panel__header" data-tauri-drag-region>
           <div className="panel__identity">
-            <span className="panel__mark" aria-hidden="true">
-              sp
-            </span>
+            <button
+              type="button"
+              className="panel__mark"
+              aria-label="Minimize"
+              title="Minimize"
+              onClick={() => dispatch("collapse")}
+            >
+              <img
+                className="panel__mark-icon"
+                src={appIcon}
+                alt=""
+                draggable={false}
+              />
+            </button>
             <div>
               <h1 className="panel__title">
                 {inSettings ? "Settings" : "side-pilot companion"}

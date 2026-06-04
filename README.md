@@ -71,8 +71,17 @@ npm run tauri build
 ## Useful Files
 
 - `docs/idea.md` - product and architecture specification
+- `docs/design-book.md` - design system reference: the spacing, radius, color,
+  icon, and type tokens defined in `src/styles.css` `:root` (change values there,
+  not in component rules)
+- `src/styles.css` - design tokens + component styles
 - `src/App.tsx` - React UI root
 - `src-tauri/src/lib.rs` - Tauri command and plugin setup
 - `src-tauri/tauri.conf.json` - Tauri app/window configuration
 - `src-tauri/icons/warm-friendly-source.svg` - source icon for this warm
   friendly assistant variant
+- `src/assets/app-icon_3.png` - single source for the app mark: the UI imports
+  it for the collapsed bubble and panel header, and the bundled app/Dock icons
+  in `src-tauri/icons/` are generated from it via `npm run tauri -- icon
+  src/assets/app-icon_3.png` (macOS/Windows outputs only; remove any generated
+  `ios/`/`android/` folders per the platform scope)

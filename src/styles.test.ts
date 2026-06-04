@@ -20,6 +20,12 @@ function rgbaAlpha(value: string): number | undefined {
   return match ? Number(match[1]) : undefined;
 }
 
+// Resolves a design token (e.g. "--surface-panel") from the :root block so guards
+// can follow values that components reference indirectly via var().
+function rootToken(name: string): string | undefined {
+  return cssDeclaration(cssRule(":root"), name);
+}
+
 describe("floating shell styles", () => {
   it("keeps the full-window bubble shell transparent", () => {
     const bubbleRule = cssRule(".bubble");
@@ -43,7 +49,9 @@ describe("floating shell styles", () => {
     const panelRule = cssRule(".panel");
     const background = cssDeclaration(panelRule, "background");
 
-    expect(background).toBeDefined();
-    expect(rgbaAlpha(background!)).toBeLessThanOrEqual(0.95);
+    // The panel references the surface token; the token must stay translucent so
+    // the rounded corners never paint an opaque square on the transparent window.
+    expect(background).toBe("var(--surface-panel)");
+    expect(rgbaAlpha(rootToken("--surface-panel")!)).toBeLessThanOrEqual(0.95);
   });
 });

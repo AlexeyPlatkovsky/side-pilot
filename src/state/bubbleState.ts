@@ -30,11 +30,11 @@ export const COLLAPSED_SIZE: WindowSize = { width: 64, height: 64 };
 export const EXPANDED_SIZE: WindowSize = { width: 380, height: 520 };
 
 /**
- * Logical size of the settings view. Slightly larger than the panel so the
- * section rail and content (SP-031) have room to breathe; closing settings
- * restores the expanded size automatically through the resize effect.
+ * Logical size of the settings view. Settings is an in-panel sub-view, not a
+ * separate window, so it shares the expanded panel's size — opening it must not
+ * resize the window away from the main panel.
  */
-export const SETTINGS_SIZE: WindowSize = { width: 460, height: 560 };
+export const SETTINGS_SIZE: WindowSize = EXPANDED_SIZE;
 
 export function bubbleReducer(
   state: BubbleState,

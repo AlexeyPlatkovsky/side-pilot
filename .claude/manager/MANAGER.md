@@ -58,6 +58,8 @@ The manager only routes the git branch gate. The skill decides whether to create
 |---|---|
 | Implement a Tauri/React/Rust feature (floating window, hotkey, chat UI, storage, etc.) | `.claude/pipelines/implement-feature.md` |
 | Implement a non-trivial UI design variant, visual redesign, theme, or matching desktop app icon | `.claude/pipelines/implement-design-variant.md` |
+| Add, change, re-snap, or audit design tokens (spacing, radius, color, icon, type) and `docs/design-book.md` | `.claude/pipelines/design-system.md` |
+| Apply a small visual/styling change through existing design tokens | `.claude/skills/design/SKILL.md` |
 | Implement a CLI adapter (ClaudeAdapter, CodexAdapter, GeminiAdapter) | `.claude/pipelines/implement-cli-adapter.md` |
 | Bug report or unexpected behavior (root cause unknown) | `.claude/pipelines/triage-bug.md` |
 | Fix a confirmed bug (root cause known, reproduction steps available) | `.claude/pipelines/fix-bug.md` |

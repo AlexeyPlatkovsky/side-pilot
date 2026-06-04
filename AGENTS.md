@@ -101,6 +101,7 @@ Compact artifacts must preserve the label, status/verdict, and required table sh
 
 ### Skills
 - `.claude/skills/brainstorm/SKILL.md` — open design decisions with meaningful trade-offs
+- `.claude/skills/design/SKILL.md` — apply and maintain the design system (CSS tokens) and keep `docs/design-book.md` in sync
 - `.claude/skills/implement-tauri-feature/SKILL.md` — implement a Tauri/React/Rust feature with tests
 - `.claude/skills/react-tauri-expert/SKILL.md` — review, improve, and implement React + TypeScript + Tauri v2 code; Topic Router over windowing, IPC/permissions, state, performance, accessibility, cross-platform conventions
 - `.claude/skills/testing-pro/SKILL.md` — write and improve tests across both layers (Vitest front-end + cargo-nextest Rust core)
@@ -114,6 +115,7 @@ Compact artifacts must preserve the label, status/verdict, and required table sh
 ### Pipelines
 - `.claude/pipelines/implement-feature.md` — Tauri/React/Rust feature implementation
 - `.claude/pipelines/implement-design-variant.md` — UI design variants, visual redesigns, desktop icon work, and visual validation
+- `.claude/pipelines/design-system.md` — design-system token work (spacing, radius, color, icon, type) and `docs/design-book.md` maintenance
 - `.claude/pipelines/implement-cli-adapter.md` — CLI adapter (Rust core) implementation
 - `.claude/pipelines/triage-bug.md` — bug investigation, classification, and disposition routing
 - `.claude/pipelines/fix-bug.md` — TDD-ordered bug fix for confirmed, root-caused defects
@@ -138,6 +140,7 @@ Compact artifacts must preserve the label, status/verdict, and required table sh
 | `docs/idea.md` | Primary design specification — single source of truth for features, MVP scope, architecture intent |
 | `.claude/docs/project_specification.md` | Project profile — role, duties, quality expectations, domain vocabulary |
 | `README.md` | Developer guide — prerequisites, build/dev/test commands, source layout, cross-platform notes |
+| `docs/design-book.md` | Design system reference — spacing, radius, color, icon, and type tokens defined in `src/styles.css` |
 | `src-tauri/src/main.rs` | Tauri/Rust core entry point — calls `side_pilot_lib::run()` |
 | `src-tauri/src/lib.rs` | Tauri core library — builder, command registration, module map (`commands`, `adapters`, `storage`) |
 | `src/App.tsx` | React UI root — renders the floating `Bubble` |

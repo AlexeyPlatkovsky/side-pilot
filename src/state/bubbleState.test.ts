@@ -81,14 +81,14 @@ describe("sizeFor", () => {
     expect(EXPANDED_SIZE.height).toBeGreaterThan(COLLAPSED_SIZE.height);
   });
 
-  it("returns a distinct settings size when in the settings view", () => {
-    expect(sizeFor("settings")).toEqual(SETTINGS_SIZE);
-    expect(SETTINGS_SIZE).not.toEqual(EXPANDED_SIZE);
+  it("uses the same size as the expanded panel in the settings view", () => {
+    // Settings is an in-panel sub-view, not a separate window, so opening it
+    // must not resize the window away from the main panel size.
+    expect(sizeFor("settings")).toEqual(EXPANDED_SIZE);
   });
 
-  it("the settings view is at least as large as the expanded panel", () => {
-    expect(SETTINGS_SIZE.width).toBeGreaterThanOrEqual(EXPANDED_SIZE.width);
-    expect(SETTINGS_SIZE.height).toBeGreaterThanOrEqual(EXPANDED_SIZE.height);
+  it("keeps the settings size identical to the expanded panel size", () => {
+    expect(SETTINGS_SIZE).toEqual(EXPANDED_SIZE);
   });
 
   it("narrows the union type", () => {

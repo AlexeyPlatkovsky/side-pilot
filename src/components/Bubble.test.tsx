@@ -74,11 +74,16 @@ describe("Bubble", () => {
     expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
   });
 
-  it("has no minimize control (gear replaces it)", () => {
+  it("minimizes to the bubble when the header identity icon is clicked", async () => {
+    const user = userEvent.setup();
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /minimize/i }));
+
+    expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /minimize/i }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: /open side-pilot/i }),
+    ).toBeInTheDocument();
   });
 
   it("places the settings (gear) control to the left of the close control", () => {
@@ -146,13 +151,20 @@ describe("Bubble", () => {
     ).toHaveFocus();
   });
 
-  it("resizes the OS window to the settings size when settings opens", async () => {
+  it("does NOT resize the OS window when switching between the panel and settings views", async () => {
     const user = userEvent.setup();
     const resizeWindow = vi.fn();
     render(<Bubble initialState="expanded" resizeWindow={resizeWindow} />);
 
+    // Mount resizes once (into the panel). After that, switching among
+    // non-collapsed views must preserve whatever size the user dragged the
+    // window to, so no further resize calls should fire.
+    resizeWindow.mockClear();
+
     await user.click(screen.getByRole("button", { name: /open settings/i }));
-    expect(resizeWindow).toHaveBeenLastCalledWith("settings");
+    await user.click(screen.getByRole("button", { name: /back/i }));
+
+    expect(resizeWindow).not.toHaveBeenCalled();
   });
 
   it("collapses when Escape is pressed", async () => {
@@ -165,15 +177,20 @@ describe("Bubble", () => {
     expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
   });
 
-  it("resizes the OS window on mount and on every state change", async () => {
+  it("resizes the OS window on mount and when crossing the bubble/panel boundary", async () => {
     const user = userEvent.setup();
     const resizeWindow = vi.fn();
     render(<Bubble resizeWindow={resizeWindow} />);
 
     expect(resizeWindow).toHaveBeenLastCalledWith("collapsed");
 
+    // Expanding from the bubble crosses the boundary, so it resizes.
     await user.click(screen.getByRole("button", { name: /open side-pilot/i }));
     expect(resizeWindow).toHaveBeenLastCalledWith("expanded");
+
+    // Minimizing back to the bubble crosses the boundary again.
+    await user.click(screen.getByRole("button", { name: /minimize/i }));
+    expect(resizeWindow).toHaveBeenLastCalledWith("collapsed");
   });
 
   it("marks a drag region so the window can be moved", () => {
