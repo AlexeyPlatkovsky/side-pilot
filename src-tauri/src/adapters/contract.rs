@@ -46,6 +46,11 @@ pub struct AdapterRequest {
     /// Optional model id override (`-m/--model`).
     #[serde(default)]
     pub model: Option<String>,
+    /// Optional reasoning-effort override (`-c model_reasoning_effort=...`),
+    /// e.g. "low" | "medium" | "high". Applied on fresh runs only; a resumed
+    /// session inherits the effort of its originating session (§6).
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
     /// Permission posture for this run.
     #[serde(default)]
     pub permission_mode: PermissionMode,
@@ -121,6 +126,7 @@ mod tests {
         assert_eq!(req.timeout_ms, DEFAULT_TIMEOUT_MS);
         assert_eq!(req.resume_session_id, None);
         assert_eq!(req.run_id, None);
+        assert_eq!(req.reasoning_effort, None);
     }
 
     #[test]
@@ -134,10 +140,12 @@ mod tests {
             "timeoutMs": 5000,
             "resumeSessionId": "abc-123",
             "runId": "run-1",
+            "reasoningEffort": "medium",
         });
         let req: AdapterRequest = serde_json::from_value(json).unwrap();
         assert_eq!(req.working_directory.as_deref(), Some("/tmp/work"));
         assert_eq!(req.model.as_deref(), Some("gpt-5"));
+        assert_eq!(req.reasoning_effort.as_deref(), Some("medium"));
         assert_eq!(req.timeout(), Duration::from_millis(5000));
         assert_eq!(req.resume_session_id.as_deref(), Some("abc-123"));
         assert_eq!(req.run_id.as_deref(), Some("run-1"));

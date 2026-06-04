@@ -30,6 +30,11 @@ async-trait = "0.1"
 # CancellationToken backs the per-adapter cancellation hook (CLI Invocation Contract §7).
 tokio-util = "0.7"
 libc = "0.2"
+# Local SQLite store for chat sessions/messages (SP-007). `bundled` compiles
+# SQLite in-tree so there is no system dependency on macOS or Windows.
+rusqlite = { version = "0.32", features = ["bundled"] }
+# Stable ids for sessions and persisted messages.
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 # Trait-based mocking so adapter unit tests never spawn a real CLI (testing-pro: references/rust.md).

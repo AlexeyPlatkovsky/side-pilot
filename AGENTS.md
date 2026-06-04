@@ -62,6 +62,20 @@ These apply to all non-trivial work and may not be skipped:
 - For non-trivial routed work, testing/validation evidence must come from the dedicated `test-runner` agent. Directly running a single command is allowed only for trivial requests such as "run npm test".
 - Non-trivial UI or icon work must be reviewed by the dedicated `design-reviewer` agent in addition to code review.
 
+---
+
+## Agent Execution Mode
+
+Dedicated agents are first-class executors, not optional helpers. Every registered agent — `test-runner`, `code-reviewer`, `design-reviewer`, `instruction-evaluator`, `artifact-acceptance-tester`, and any agent added later — MUST be run as a real spawned subagent through the Agent/Task tool whenever work routes to it or a gate requires it.
+
+- Inline substitution is prohibited: the main thread must not simulate, paraphrase, or stand in for an agent's validation or review in its own voice.
+- This holds even when a tool-specific adapter or runtime default discourages spawning subagents. As the root contract, this rule overrides those defaults (see `CLAUDE.md`).
+- An `Agent: <name> - output below` artifact asserts that the named subagent was actually spawned via the Agent/Task tool. Emitting that artifact for work the main thread performed inline is a prohibited substitution, not compliance. If a subagent could not be spawned, do not emit its artifact — report the blocker instead.
+- Single exception: the user explicitly directs inline execution for a specific task (for example "review this inline" or "don't spawn a subagent"). A general request to do the work is not such a direction. An inline run permitted under this exception must still emit the agent's labeled output artifact and be disclosed as inline in the response.
+- If an agent genuinely cannot be spawned in the current environment, stop and report it as a blocker rather than silently substituting an inline result.
+
+---
+
 ## Platform Asset Boundary
 
 side-pilot is a desktop app targeting **macOS and Windows only**.
@@ -91,6 +105,8 @@ At minimum include compact versions of:
 - `Agent: instruction-evaluator - output below` and `Agent: artifact-acceptance-tester - output below` when instruction artifacts, routing, validation gates, or output contracts changed
 
 Compact artifacts must preserve the label, status/verdict, and required table shape. If any required final artifact is missing from the final response draft, revise the final response before sending.
+
+Each required `Agent:` artifact must originate from an actually spawned subagent (see "Agent Execution Mode"); a main-thread-authored stand-in does not satisfy this gate.
 
 ---
 

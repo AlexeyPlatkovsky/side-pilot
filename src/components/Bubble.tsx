@@ -2,6 +2,8 @@ import { useEffect, useReducer, useRef } from "react";
 import { bubbleReducer, type BubbleState } from "../state/bubbleState";
 import { applyWindowSize } from "../state/windowResize";
 import { wasDragged, type Point } from "../state/drag";
+import { ChatPanel } from "./ChatPanel";
+import { inertChatApi, type ChatApi } from "../chat/api";
 // Single source of truth for the app mark: the same artwork bundled as the
 // macOS/Windows app (Dock) icon, reused for the collapsed bubble and the
 // panel header so all three reads identically.
@@ -15,6 +17,11 @@ export interface BubbleProps {
    * without a live Tauri window; defaults to the real Tauri resize.
    */
   resizeWindow?: (state: BubbleState) => void;
+  /**
+   * Backend seam for the chat body, forwarded to {@link ChatPanel}. Injectable
+   * so shell tests stay offline; the real app passes `tauriChatApi`.
+   */
+  chatApi?: ChatApi;
 }
 
 /**
@@ -29,6 +36,7 @@ export interface BubbleProps {
 export function Bubble({
   initialState = "collapsed",
   resizeWindow = applyWindowSize,
+  chatApi = inertChatApi,
 }: BubbleProps) {
   const [state, dispatch] = useReducer(bubbleReducer, initialState);
 
@@ -186,29 +194,7 @@ export function Bubble({
             </p>
           </div>
         ) : (
-          <div className="panel__body">
-            <div className="conversation" aria-live="polite">
-              <article className="message message--assistant">
-                <span className="message__label">Codex</span>
-                <p>The desk is quiet and ready.</p>
-              </article>
-              <article className="message message--user">
-                <span className="message__label">You</span>
-                <p>Keep the desktop flow calm and close at hand.</p>
-              </article>
-            </div>
-            <div className="composer" role="group" aria-label="Prompt composer">
-              <span className="composer__text">Ask side-pilot</span>
-              <button
-                type="button"
-                className="composer__send"
-                aria-label="Send"
-                disabled
-              >
-                Send
-              </button>
-            </div>
-          </div>
+          <ChatPanel api={chatApi} />
         )}
       </section>
     </div>

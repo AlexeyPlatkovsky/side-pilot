@@ -13,6 +13,11 @@
     "core:window:allow-hide",
     "allow-app-version",
     "allow-run-adapter",
-    "allow-cancel-adapter-run"
+    "allow-cancel-adapter-run",
+    "allow-create-session",
+    "allow-append-message",
+    "allow-read-history",
+    "allow-list-sessions",
+    "allow-update-codex-session-id"
   ]
 }

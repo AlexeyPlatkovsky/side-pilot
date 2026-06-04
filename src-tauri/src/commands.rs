@@ -13,6 +13,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult};
+use crate::storage::{Message, NewMessage, Session, StorageError, Store};
 
 pub struct AppState {
     registry: AdapterRegistry,
@@ -97,6 +98,47 @@ pub async fn cancel_adapter_run(
     run_id: String,
 ) -> Result<bool, String> {
     Ok(state.cancel_run(&run_id).await)
+}
+
+// --- Local session/message store (SP-007) -------------------------------
+//
+// These commands are the front-end's typed seam into the SQLite history store.
+// The store is the display/history source of truth (§6); the work is fast and
+// synchronous, so each command locks the connection, runs one operation, and
+// returns a typed [`StorageError`] the UI can branch on.
+
+/// Create a new local chat session.
+#[tauri::command]
+pub fn create_session(store: State<'_, Store>, title: Option<String>) -> Result<Session, StorageError> {
+    store.create_session(title)
+}
+
+/// Append a message to a session, returning the persisted row.
+#[tauri::command]
+pub fn append_message(store: State<'_, Store>, message: NewMessage) -> Result<Message, StorageError> {
+    store.append_message(message)
+}
+
+/// Read a session's messages in send order.
+#[tauri::command]
+pub fn read_history(store: State<'_, Store>, session_id: String) -> Result<Vec<Message>, StorageError> {
+    store.read_history(&session_id)
+}
+
+/// List all sessions, most recently updated first.
+#[tauri::command]
+pub fn list_sessions(store: State<'_, Store>) -> Result<Vec<Session>, StorageError> {
+    store.list_sessions()
+}
+
+/// Record the native Codex session id for a local session (resume, §6).
+#[tauri::command]
+pub fn update_codex_session_id(
+    store: State<'_, Store>,
+    session_id: String,
+    codex_session_id: String,
+) -> Result<(), StorageError> {
+    store.update_codex_session_id(&session_id, &codex_session_id)
 }
 
 #[cfg(test)]

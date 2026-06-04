@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-codex-session-id"
+description = "Enables the update_codex_session_id command without any pre-configured scope."
+commands.allow = ["update_codex_session_id"]
+
+[[permission]]
+identifier = "deny-update-codex-session-id"
+description = "Denies the update_codex_session_id command without any pre-configured scope."
+commands.deny = ["update_codex_session_id"]

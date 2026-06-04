@@ -4,6 +4,11 @@ fn main() {
             "app_version",
             "run_adapter",
             "cancel_adapter_run",
+            "create_session",
+            "append_message",
+            "read_history",
+            "list_sessions",
+            "update_codex_session_id",
         ]),
     ))
     .expect("failed to run Tauri build script")

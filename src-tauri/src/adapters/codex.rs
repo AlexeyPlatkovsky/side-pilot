@@ -86,18 +86,25 @@ impl CodexAdapter {
         args.push("--json".to_string());
         args.push("--skip-git-repo-check".to_string());
 
+        // Model and reasoning effort are applied on fresh runs only. A resumed
+        // session (`codex exec resume`) inherits the model/effort/posture of its
+        // originating session, so re-specifying them is unnecessary and the
+        // subcommand may reject the flags (verified constraint, §6).
         if !resuming {
             let PermissionMode::ReadOnly = req.permission_mode;
             args.push("-s".to_string());
             args.push("read-only".to_string());
-        }
 
-        if let Some(model) = &req.model {
-            args.push("-m".to_string());
-            args.push(model.clone());
-        }
+            if let Some(model) = &req.model {
+                args.push("-m".to_string());
+                args.push(model.clone());
+            }
 
-        if !resuming {
+            if let Some(effort) = &req.reasoning_effort {
+                args.push("-c".to_string());
+                args.push(format!("model_reasoning_effort=\"{effort}\""));
+            }
+
             args.push("-C".to_string());
             args.push(cwd.to_string());
         }
@@ -330,6 +337,7 @@ mod tests {
             prompt: prompt.to_string(),
             working_directory: None,
             model: None,
+            reasoning_effort: None,
             permission_mode: PermissionMode::ReadOnly,
             timeout_ms: 120_000,
             resume_session_id: None,
@@ -364,6 +372,27 @@ mod tests {
         let args = CodexAdapter::build_args(&req, "/work");
         let model_pos = args.iter().position(|a| a == "-m").expect("has -m");
         assert_eq!(args[model_pos + 1], "gpt-5");
+    }
+
+    #[test]
+    fn build_args_fresh_run_includes_reasoning_effort_when_present() {
+        let mut req = request("hi");
+        req.reasoning_effort = Some("medium".to_string());
+        let args = CodexAdapter::build_args(&req, "/work");
+        let cfg_pos = args.iter().position(|a| a == "-c").expect("has -c");
+        assert_eq!(args[cfg_pos + 1], "model_reasoning_effort=\"medium\"");
+    }
+
+    #[test]
+    fn build_args_resume_omits_model_and_reasoning_effort() {
+        let mut req = request("again");
+        req.resume_session_id = Some("sid-123".to_string());
+        req.model = Some("gpt-5".to_string());
+        req.reasoning_effort = Some("high".to_string());
+        let args = CodexAdapter::build_args(&req, "/work");
+        // A resumed session inherits model/effort; the flags must not appear.
+        assert!(!args.contains(&"-m".to_string()), "resume must not set -m");
+        assert!(!args.contains(&"-c".to_string()), "resume must not set -c");
     }
 
     #[test]

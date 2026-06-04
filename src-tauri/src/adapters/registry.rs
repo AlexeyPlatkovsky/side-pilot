@@ -79,6 +79,7 @@ mod tests {
             prompt: "hi".to_string(),
             working_directory: None,
             model: None,
+            reasoning_effort: None,
             permission_mode: PermissionMode::ReadOnly,
             timeout_ms: 1000,
             resume_session_id: None,

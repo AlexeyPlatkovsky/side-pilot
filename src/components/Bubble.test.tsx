@@ -19,6 +19,8 @@ describe("Bubble", () => {
     await user.click(screen.getByRole("button", { name: /open side-pilot/i }));
 
     expect(screen.getByTestId("panel")).toBeInTheDocument();
+    // Let the freshly-mounted chat body finish its async load.
+    await screen.findByLabelText("Ask side-pilot");
   });
 
   it("does NOT expand when the bubble is dragged (pointer moves before release)", () => {
@@ -32,7 +34,7 @@ describe("Bubble", () => {
     expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
   });
 
-  it("expands on a click that does not move (press and release in place)", () => {
+  it("expands on a click that does not move (press and release in place)", async () => {
     render(<Bubble resizeWindow={vi.fn()} />);
     const dot = screen.getByRole("button", { name: /open side-pilot/i });
 
@@ -40,6 +42,7 @@ describe("Bubble", () => {
     fireEvent.click(dot, { screenX: 12, screenY: 12 });
 
     expect(screen.getByTestId("panel")).toBeInTheDocument();
+    await screen.findByLabelText("Ask side-pilot");
   });
 
   it("collapses back when the close control is clicked", async () => {
@@ -54,11 +57,12 @@ describe("Bubble", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the warm companion panel identity", () => {
+  it("renders the warm companion panel identity", async () => {
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
 
+    // findBy lets the chat body's async mount-load settle before asserting.
     expect(
-      screen.getByRole("heading", { name: /side-pilot companion/i }),
+      await screen.findByRole("heading", { name: /side-pilot companion/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/ready when you are/i)).toBeInTheDocument();
   });
@@ -86,10 +90,12 @@ describe("Bubble", () => {
     ).toBeInTheDocument();
   });
 
-  it("places the settings (gear) control to the left of the close control", () => {
+  it("places the settings (gear) control to the left of the close control", async () => {
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
 
-    const settings = screen.getByRole("button", { name: /open settings/i });
+    const settings = await screen.findByRole("button", {
+      name: /open settings/i,
+    });
     const close = screen.getByRole("button", { name: /collapse/i });
 
     // The gear precedes close in document order (it sits to its left).
@@ -107,6 +113,8 @@ describe("Bubble", () => {
 
     expect(screen.getByTestId("panel")).toBeInTheDocument();
     expect(screen.queryByTestId("settings")).not.toBeInTheDocument();
+    // Let the freshly-mounted chat body finish its async load.
+    await screen.findByLabelText("Ask side-pilot");
   });
 
   it("steps back to the panel when Escape is pressed in settings", async () => {
@@ -117,6 +125,7 @@ describe("Bubble", () => {
 
     expect(screen.getByTestId("panel")).toBeInTheDocument();
     expect(screen.queryByTestId("settings")).not.toBeInTheDocument();
+    await screen.findByLabelText("Ask side-pilot");
   });
 
   it("collapses to the bubble when close is clicked in settings", async () => {
@@ -149,6 +158,7 @@ describe("Bubble", () => {
     expect(
       screen.getByRole("button", { name: /open settings/i }),
     ).toHaveFocus();
+    await screen.findByLabelText("Ask side-pilot");
   });
 
   it("does NOT resize the OS window when switching between the panel and settings views", async () => {
@@ -165,6 +175,7 @@ describe("Bubble", () => {
     await user.click(screen.getByRole("button", { name: /back/i }));
 
     expect(resizeWindow).not.toHaveBeenCalled();
+    await screen.findByLabelText("Ask side-pilot");
   });
 
   it("collapses when Escape is pressed", async () => {

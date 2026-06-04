@@ -93,6 +93,7 @@ Before sending the final response:
 3. Include `Agent: test-runner - output below` when validation was required.
 4. Include `Agent: instruction-evaluator - output below` and `Agent: artifact-acceptance-tester - output below` when instruction artifacts, routing, validation gates, or output contracts changed.
 5. If a required artifact is missing from the final response draft, revise the final response before sending.
+6. Each required `Agent:` artifact must come from an actually spawned subagent per `AGENTS.md` → "Agent Execution Mode"; a main-thread-authored stand-in does not satisfy this gate.
 
 ## Risk Escalation
 

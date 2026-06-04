@@ -98,6 +98,8 @@ Expanded chat panel:
 - Response area
 - Optional split-view for comparing multiple AI responses
 
+**Brand vs. tool:** the user-facing assistant is presented as **ChatGPT** ("GPT" in the UI), even though the MVP is powered by the OpenAI **Codex CLI**. Each assistant reply is badged with the model and reasoning effort it ran with (e.g. "GPT-5.5-medium"). Code identifiers, the `codex` binary/commands, and `codex_session_id` keep the Codex name.
+
 ## Slash Commands
 
 Possible command format:
@@ -224,7 +226,8 @@ trait CliAdapter {
     async fn run(&self, req: AdapterRequest) -> Result<AdapterResult, AdapterError>;
 }
 
-// AdapterRequest: prompt, working_directory?, model?, permission_mode, timeout, resume_session_id?, run_id?
+// AdapterRequest: prompt, working_directory?, model?, reasoning_effort?, permission_mode, timeout, resume_session_id?, run_id?
+//   model + reasoning_effort apply on fresh runs (`-m`, `-c model_reasoning_effort=...`); resumed sessions inherit theirs (§6).
 // AdapterResult: assistant_text (Markdown), raw_json, native_session_id?, usage?
 // AdapterError: §8 taxonomy
 ```

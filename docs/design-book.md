@@ -40,16 +40,18 @@ Use these in components.
 | `--color-text-muted` | `--muted` | Secondary text, placeholders, labels |
 | `--color-accent` | `--teal` | Accent surfaces (user message bubble) |
 | `--color-on-accent` | `--cream` | Text/icons on an accent surface |
-| `--color-on-accent-muted` | `--cream` 78% | Secondary text on an accent surface (user-message label) |
+| `--color-on-accent-muted` | `--cream` 78% | Secondary text on an accent surface (currently unused — was the user-message label, removed when "You" labels were dropped) |
+| `--color-danger` | `--clay` | Error text/border (chat failure banner) |
 | `--surface-panel` | warm cream 95% | Main panel background |
 | `--surface-panel-soft` | warm cream 82% | Header gradient stop |
 | `--surface-warm` | warm 96% | Header gradient stop |
 | `--surface-raised` | white 82% | Raised cards — assistant message, composer |
 | `--surface-body-top` / `--surface-body-bottom` | warm tints | Body gradient stops |
+| `--surface-danger` | `--coral` 12% | Chat failure banner background |
 | `--border-soft` | `--clay` 16% | Default 1px border (panel, header, composer) |
 | `--border-accent` | `--sage` 20% | Assistant message border |
 | `--overlay-hover` | `--coral` 12% | Control hover background |
-| `--tint-honey` | `--honey` 34% | Header radial glow |
+| `--tint-honey` | `--honey` 34% | Header radial glow; assistant Markdown code background |
 
 ### Focus ring
 
@@ -71,7 +73,7 @@ only four steps — pick the nearest one rather than introducing an odd value.
 | Token | Value | Typical use |
 |---|---|---|
 | `--space-1` | `4px` | Tight gaps (control row), micro-padding (composer inset) |
-| `--space-2` | `8px` | Small gaps (composer items) |
+| `--space-2` | `8px` | Small gaps (header controls, compact panel padding) |
 | `--space-3` | `12px` | Default gap/padding (header, identity, messages, conversation) |
 | `--space-4` | `16px` | Section padding/gap (panel body) |
 
@@ -118,8 +120,8 @@ the app reads at one consistent size across states.
 A few component-specific dimensions are intentionally left as literals because
 they are not part of any repeated scale:
 
-- Composer `min-height: 44px` — accessible minimum touch/click target.
-- Send button `min-width: 58px; height: 32px` — single-purpose control sizing.
+- Composer `min-height: 42px` with `4px` inset — wraps a compact one-row input and send control.
+- Send button `width: 32px; height: 32px` — single-purpose icon control sizing.
 - `max-width: 86%` on messages, `opacity` values, and `line-height` values.
 
 If any of these starts repeating across components, promote it to a token here.

@@ -1,6 +1,18 @@
-//! Local persistence seam.
+//! Local persistence seam (SP-007).
 //!
-//! Chat sessions, messages, and CLI session references are stored in SQLite
-//! (see `docs/idea.md` §"Local Storage" and §"Session Model"). The schema and
-//! data-access layer arrive in SP-007; the scaffold defines only the module
-//! location so the rest of the core can depend on a stable path.
+//! Chat sessions, messages, and the native Codex session reference are stored
+//! in SQLite (see `docs/idea.md` §"Local Storage" and §"Session Model"). The
+//! local store is the display/history source of truth regardless of how
+//! model-context continuity is carried (§6).
+//!
+//! - [`Store`] — the SQLite-backed data-access layer (bundled `rusqlite`).
+//! - [`model`] — the typed session/message values that cross the IPC boundary.
+//! - [`StorageError`] — typed failures surfaced to the UI.
+
+pub mod error;
+pub mod model;
+pub mod store;
+
+pub use error::StorageError;
+pub use model::{Message, NewMessage, Sender, Session};
+pub use store::Store;

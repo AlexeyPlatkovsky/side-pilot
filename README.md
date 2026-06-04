@@ -76,11 +76,22 @@ npm run tauri build
   not in component rules)
 - `src/styles.css` - design tokens + component styles
 - `src/App.tsx` - React UI root
-- `src-tauri/src/lib.rs` - Tauri command and plugin setup
+- `src/components/ChatPanel.tsx` - expanded-panel chat UI: transcript with safe
+  Markdown rendering (`react-markdown` + `remark-gfm`), blocking "thinking"
+  state, and the prompt composer; the `useChat` hook wires it to the backend
+- `src/chat/api.ts` - typed front-end seam over the Tauri chat commands
+  (`run_adapter` + the session/message store); injectable for tests
+- `src/state/chat.ts` - pure chat reducer (transcript + idle/pending/error status)
+- `src-tauri/src/lib.rs` - Tauri command and plugin setup; opens the SQLite
+  history store under the app data directory on startup
 - `src-tauri/src/adapters/` - CLI routing seam: the `CliAdapter` trait, typed
   request/result/error contract, binary and environment resolution, the
   `AdapterRegistry`, and the read-only Codex adapter behind the `run_adapter`
   and `cancel_adapter_run` commands
+- `src-tauri/src/storage/` - local SQLite store (bundled `rusqlite`) for chat
+  sessions and messages: the display/history source of truth, behind the
+  `create_session`, `append_message`, `read_history`, `list_sessions`, and
+  `update_codex_session_id` commands
 - `src-tauri/tauri.conf.json` - Tauri app/window configuration
 - `src-tauri/icons/warm-friendly-source.svg` - source icon for this warm
   friendly assistant variant
