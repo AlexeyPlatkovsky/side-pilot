@@ -35,6 +35,9 @@ libc = "0.2"
 rusqlite = { version = "0.32", features = ["bundled"] }
 # Stable ids for sessions and persisted messages.
 uuid = { version = "1", features = ["v4"] }
+# Open validated external links (assistant Markdown) in the OS default browser
+# instead of navigating the app's WebView.
+open = "5"
 
 [dev-dependencies]
 # Trait-based mocking so adapter unit tests never spawn a real CLI (testing-pro: references/rust.md).

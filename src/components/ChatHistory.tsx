@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PersistedSession } from "../chat/api";
-import { formatRelativeTime, isValidTitle, MAX_TITLE_LENGTH } from "../chat/history";
+import { formatRelativeTime } from "../chat/history";
 import { Dialog } from "./Dialog";
+import { RenameDialog } from "./RenameDialog";
+
+const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 export interface ChatHistoryProps {
   /** Sessions in display order (most recently updated first). */
@@ -10,6 +13,10 @@ export interface ChatHistoryProps {
   activeSessionId: string | null;
   /** Injectable clock so relative times are deterministic in tests. */
   now?: number;
+  /** Sessions with an AI reply in flight — show a spinner instead of the time. */
+  pendingIds?: ReadonlySet<string>;
+  /** Sessions with a reply that arrived while inactive — show an unread dot. */
+  unreadIds?: ReadonlySet<string>;
   onSelect: (sessionId: string) => void;
   onNewChat: () => void;
   onRename: (sessionId: string, title: string) => void;
@@ -34,6 +41,8 @@ export function ChatHistory({
   sessions,
   activeSessionId,
   now = Date.now(),
+  pendingIds = EMPTY_IDS,
+  unreadIds = EMPTY_IDS,
   onSelect,
   onNewChat,
   onRename,
@@ -58,6 +67,15 @@ export function ChatHistory({
         {sessions.map((session) => {
           const title = displayTitle(session);
           const active = session.id === activeSessionId;
+          const pending = pendingIds.has(session.id);
+          // A pending reply takes precedence over an unread one (it's the live
+          // state); unread only shows once the reply has actually arrived.
+          const unread = !pending && unreadIds.has(session.id);
+          const statusLabel = pending
+            ? "reply in progress"
+            : unread
+              ? "unread answer"
+              : null;
           return (
             <li
               key={session.id}
@@ -70,14 +88,22 @@ export function ChatHistory({
               <button
                 type="button"
                 className="chat-row__select"
-                aria-label={title}
+                // Fold the status into the accessible name so it is announced
+                // (the visual indicator itself is aria-hidden).
+                aria-label={statusLabel ? `${title}, ${statusLabel}` : title}
                 aria-current={active ? "true" : undefined}
                 onClick={() => onSelect(session.id)}
               >
                 <span className="chat-row__title">{title}</span>
-                <span className="chat-row__time" aria-hidden="true">
-                  {formatRelativeTime(session.updatedAt, now)}
-                </span>
+                {pending ? (
+                  <span className="chat-row__spinner" aria-hidden="true" />
+                ) : unread ? (
+                  <span className="chat-row__unread" aria-hidden="true" />
+                ) : (
+                  <span className="chat-row__time" aria-hidden="true">
+                    {formatRelativeTime(session.updatedAt, now)}
+                  </span>
+                )}
               </button>
               <button
                 type="button"
@@ -185,72 +211,6 @@ function RowMenu({ id, onClose, onRename, onDelete }: RowMenuProps) {
         Delete
       </button>
     </div>
-  );
-}
-
-interface RenameDialogProps {
-  session: PersistedSession;
-  onCancel: () => void;
-  onSave: (title: string) => void;
-}
-
-/** Modal to rename a chat: prefilled, Enter saves, Escape cancels, invalid blocked. */
-function RenameDialog({ session, onCancel, onSave }: RenameDialogProps) {
-  const [value, setValue] = useState(session.title ?? "");
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, []);
-
-  const canSave = isValidTitle(value);
-  // Only nudge once the user has typed something invalid (not on an empty field).
-  const showHint = value.trim().length > 0 && !canSave;
-
-  return (
-    <Dialog label="Rename chat" onClose={onCancel}>
-      <form
-        className="dialog__body"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (canSave) onSave(value.trim());
-        }}
-      >
-        <label className="dialog__label" htmlFor="rename-chat-input">
-          Chat title
-        </label>
-        <input
-          id="rename-chat-input"
-          ref={inputRef}
-          className="dialog__input"
-          type="text"
-          value={value}
-          maxLength={MAX_TITLE_LENGTH}
-          aria-invalid={showHint}
-          aria-describedby={showHint ? "rename-chat-hint" : undefined}
-          onChange={(event) => setValue(event.target.value)}
-        />
-        {showHint && (
-          <p id="rename-chat-hint" className="dialog__hint" role="alert">
-            Use letters, digits, spaces, and basic punctuation
-            (’ . , - ( )), up to {MAX_TITLE_LENGTH} characters.
-          </p>
-        )}
-        <div className="dialog__actions">
-          <button type="button" className="dialog__button" onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="dialog__button dialog__button--primary"
-            disabled={!canSave}
-          >
-            Save
-          </button>
-        </div>
-      </form>
-    </Dialog>
   );
 }
 

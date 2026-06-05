@@ -163,6 +163,14 @@ pub fn update_codex_session_id(
     store.update_codex_session_id(&session_id, &codex_session_id)
 }
 
+/// Open an assistant-provided link in the OS default browser instead of the
+/// app's WebView. Unsafe schemes (`javascript:`, `file:`, …) are rejected by
+/// [`links::open_external`], so the panel never navigates away from itself.
+#[tauri::command]
+pub fn open_external(url: String) -> Result<(), crate::links::OpenError> {
+    crate::links::open_external(&url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

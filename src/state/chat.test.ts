@@ -10,6 +10,7 @@ const userMsg = (content: string): ChatMessage => ({
   id: `u-${content}`,
   sender: "user",
   content,
+  createdAt: 1,
 });
 
 const assistantMsg = (content: string): ChatMessage => ({
@@ -17,6 +18,7 @@ const assistantMsg = (content: string): ChatMessage => ({
   sender: "assistant",
   assistantId: "codex",
   content,
+  createdAt: 1,
 });
 
 describe("chatReducer", () => {
@@ -27,6 +29,18 @@ describe("chatReducer", () => {
     });
     expect(state.messages.map((m) => m.content)).toEqual(["hi", "hello"]);
     expect(state.status).toEqual({ kind: "idle" });
+  });
+
+  it("loads history into the pending state when the session has a reply in flight", () => {
+    // Switching back to a chat whose reply is still running must restore the
+    // thinking indicator (SP-005 bug fix), not show it as idle.
+    const state = chatReducer(initialChatState, {
+      type: "loaded",
+      messages: [userMsg("still working?")],
+      pending: true,
+    });
+    expect(state.messages.map((m) => m.content)).toEqual(["still working?"]);
+    expect(state.status).toEqual({ kind: "pending" });
   });
 
   it("submit appends the user message and enters the pending state", () => {

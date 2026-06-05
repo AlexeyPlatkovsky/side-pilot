@@ -2,11 +2,12 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
 } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   chatReducer,
@@ -21,6 +22,7 @@ import {
   type PersistedSession,
 } from "../chat/api";
 import {
+  formatMessageTimestamp,
   generateTitle,
   pickNextActiveSession,
   sortSessions,
@@ -28,8 +30,12 @@ import {
 import { ASSISTANT_MODEL, assistantModelLabel } from "../chat/config";
 import { ChatHistory } from "./ChatHistory";
 import { Dialog } from "./Dialog";
+import { RenameDialog } from "./RenameDialog";
 
 const COMPOSER_INPUT_MIN_HEIGHT = 32;
+
+/** Shared empty status set so unchanged renders keep a stable identity. */
+const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 /** Stable id for an optimistic (not-yet-persisted) message row. */
 function newId(): string {
@@ -58,10 +64,32 @@ export function useChat(api: ChatApi) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [sessions, setSessions] = useState<PersistedSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
-  // Refs mirror the latest list/active session so the async callbacks below read
-  // current values without being re-created (and without stale closures).
+  // Per-session status for the rail (SP-056): chats with a reply in flight, and
+  // chats whose reply arrived while they were not the active chat (unread).
+  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(EMPTY_IDS);
+  const [unreadIds, setUnreadIds] = useState<ReadonlySet<string>>(EMPTY_IDS);
+  // Refs mirror the latest list/active session and status sets so the async
+  // callbacks below read current values without stale closures.
   const sessionsRef = useRef<PersistedSession[]>([]);
   const activeRef = useRef<ActiveSession | null>(null);
+  const pendingRef = useRef<ReadonlySet<string>>(EMPTY_IDS);
+  const unreadRef = useRef<ReadonlySet<string>>(EMPTY_IDS);
+
+  // Update a status set through its ref+state together (immutable copy so React
+  // sees a new identity). `mutate` adds/removes ids on the working copy.
+  const editSet = useCallback(
+    (
+      ref: React.MutableRefObject<ReadonlySet<string>>,
+      setState: React.Dispatch<React.SetStateAction<ReadonlySet<string>>>,
+      mutate: (working: Set<string>) => void,
+    ) => {
+      const next = new Set(ref.current);
+      mutate(next);
+      ref.current = next;
+      setState(next);
+    },
+    [],
+  );
 
   const applySessions = useCallback((list: PersistedSession[]) => {
     const sorted = sortSessions(list);
@@ -81,7 +109,13 @@ export function useChat(api: ChatApi) {
         title: session.title,
       };
       setActiveSessionId(session.id);
-      dispatch({ type: "loaded", messages });
+      // Restore the thinking state if this chat still has a reply in flight, so
+      // switching back to it shows "Thinking…" instead of an idle transcript.
+      dispatch({
+        type: "loaded",
+        messages,
+        pending: pendingRef.current.has(session.id),
+      });
     },
     [],
   );
@@ -120,9 +154,12 @@ export function useChat(api: ChatApi) {
         id: newId(),
         sender: "user",
         content: trimmed,
+        createdAt: Date.now(),
       };
-      // Show the user's message immediately and enter the pending state.
+      // Show the user's message immediately and enter the pending state, and
+      // mark this chat in-flight so the rail shows a spinner (SP-056).
       dispatch({ type: "submit", message: userMessage });
+      editSet(pendingRef, setPendingIds, (s) => s.add(originId));
 
       try {
         // Persist the user turn first so it survives a failed/late reply.
@@ -153,10 +190,15 @@ export function useChat(api: ChatApi) {
           content: result.assistantText,
           rawJson: result.rawJson,
         });
-        // Only re-render the transcript if this chat is still the active one;
-        // the reply is persisted either way and loads when the user returns.
+        // This turn is no longer in flight.
+        editSet(pendingRef, setPendingIds, (s) => s.delete(originId));
         if (activeRef.current?.id === originId) {
+          // Still viewing this chat — show the reply.
           dispatch({ type: "success", message: toChatMessage(persisted) });
+        } else if (sessionsRef.current.some((s) => s.id === originId)) {
+          // Replied in the background — flag it unread until the user opens it.
+          // Skip if the chat was deleted meanwhile, so no phantom dot lingers.
+          editSet(unreadRef, setUnreadIds, (s) => s.add(originId));
         }
 
         // Capture the native Codex session for future resume (§6).
@@ -166,6 +208,7 @@ export function useChat(api: ChatApi) {
           await api.updateCodexSessionId(session.id, native);
         }
       } catch (err) {
+        editSet(pendingRef, setPendingIds, (s) => s.delete(originId));
         // Same guard: don't surface this turn's error in a chat the user moved to.
         if (activeRef.current?.id === originId) {
           dispatch({ type: "error", message: describeError(err) });
@@ -179,7 +222,7 @@ export function useChat(api: ChatApi) {
         }
       }
     },
-    [api, refresh],
+    [api, refresh, editSet],
   );
 
   const selectSession = useCallback(
@@ -187,6 +230,8 @@ export function useChat(api: ChatApi) {
       if (activeRef.current?.id === id) return;
       const session = sessionsRef.current.find((s) => s.id === id);
       if (!session) return;
+      // Opening a chat clears its unread flag (SP-056).
+      editSet(unreadRef, setUnreadIds, (s) => s.delete(id));
       try {
         const history = await api.readHistory(id);
         setActive(session, history.map(toChatMessage));
@@ -194,7 +239,7 @@ export function useChat(api: ChatApi) {
         dispatch({ type: "error", message: describeError(err) });
       }
     },
-    [api, setActive],
+    [api, setActive, editSet],
   );
 
   const newChat = useCallback(async () => {
@@ -228,6 +273,10 @@ export function useChat(api: ChatApi) {
       const nextId = pickNextActiveSession(sessionsRef.current, id);
       try {
         await api.deleteSession(id);
+        // The chat is gone — drop any in-flight/unread status it held so the
+        // sets don't leak ids for a session that no longer exists.
+        editSet(pendingRef, setPendingIds, (s) => s.delete(id));
+        editSet(unreadRef, setUnreadIds, (s) => s.delete(id));
         const remaining = sessionsRef.current.filter((s) => s.id !== id);
         if (!wasActive) {
           applySessions(remaining);
@@ -248,7 +297,7 @@ export function useChat(api: ChatApi) {
         dispatch({ type: "error", message: describeError(err) });
       }
     },
-    [api, applySessions, setActive],
+    [api, applySessions, setActive, editSet],
   );
 
   const clearActive = useCallback(async () => {
@@ -258,6 +307,9 @@ export function useChat(api: ChatApi) {
       const cleared = await api.clearSession(session.id);
       session.codexSessionId = null;
       session.title = cleared.title;
+      // A cleared chat is emptied, so it carries no in-flight/unread status.
+      editSet(pendingRef, setPendingIds, (s) => s.delete(cleared.id));
+      editSet(unreadRef, setUnreadIds, (s) => s.delete(cleared.id));
       dispatch({ type: "loaded", messages: [] });
       applySessions(
         sessionsRef.current.map((s) => (s.id === cleared.id ? cleared : s)),
@@ -265,12 +317,14 @@ export function useChat(api: ChatApi) {
     } catch (err) {
       dispatch({ type: "error", message: describeError(err) });
     }
-  }, [api, applySessions]);
+  }, [api, applySessions, editSet]);
 
   return {
     state,
     sessions,
     activeSessionId,
+    pendingIds,
+    unreadIds,
     submit,
     selectSession,
     newChat,
@@ -298,6 +352,8 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
     state,
     sessions,
     activeSessionId,
+    pendingIds,
+    unreadIds,
     submit,
     selectSession,
     newChat,
@@ -308,13 +364,46 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
   const [draft, setDraft] = useState("");
   const [railOpen, setRailOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
+  const [renamingActive, setRenamingActive] = useState(false);
   const isPending = state.status.kind === "pending";
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  // A single clock for the whole transcript render; "today" vs "earlier" only
+  // needs day-level accuracy, so a per-render value is fine and stays cheap.
+  const now = Date.now();
+
+  // Render assistant-Markdown links so they open in the system browser and never
+  // navigate the app's WebView. preventDefault covers primary and middle clicks
+  // (and keyboard activation); the Rust side validates the scheme.
+  const markdownComponents = useMemo<Components>(
+    () => ({
+      a({ href, children }) {
+        const openExternally = (event: React.MouseEvent<HTMLAnchorElement>) => {
+          event.preventDefault();
+          if (href) void api.openExternal(href);
+        };
+        return (
+          <a
+            href={href}
+            rel="noreferrer"
+            onClick={openExternally}
+            onAuxClick={openExternally}
+          >
+            {children}
+          </a>
+        );
+      },
+    }),
+    [api],
+  );
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
   const activeTitle = activeSession?.title?.trim() || "New chat";
   const canClear = !isPending && state.messages.length > 0;
+  // A background reply landed in some non-active chat. Surface it on the toggle
+  // while the rail is collapsed, so the in-row dot isn't the only indicator.
+  const hasUnread = unreadIds.size > 0;
+  const showUnreadBadge = !railOpen && hasUnread;
 
   // Keep the latest turn in view as the transcript grows. Guarded because
   // `scrollIntoView` is not implemented in the jsdom test environment.
@@ -369,6 +458,8 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
         <ChatHistory
           sessions={sessions}
           activeSessionId={activeSessionId}
+          pendingIds={pendingIds}
+          unreadIds={unreadIds}
           onSelect={(id) => void selectSession(id)}
           onNewChat={() => void newChat()}
           onRename={(id, title) => void renameSession(id, title)}
@@ -380,16 +471,36 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
           <button
             type="button"
             className="chat__rail-toggle"
-            aria-label={railOpen ? "Hide chat history" : "Show chat history"}
+            aria-label={
+              railOpen
+                ? "Hide chat history"
+                : showUnreadBadge
+                  ? "Show chat history, unread answers"
+                  : "Show chat history"
+            }
             aria-expanded={railOpen}
             aria-controls="chat-history-rail"
             onClick={() => setRailOpen((open) => !open)}
           >
             <span aria-hidden="true">☰</span>
+            {showUnreadBadge && (
+              <span className="chat__rail-toggle-badge" aria-hidden="true" />
+            )}
           </button>
           <span className="chat__active-title" title={activeTitle}>
             {activeTitle}
           </span>
+          <button
+            type="button"
+            className="chat__edit"
+            aria-label="Rename chat"
+            title="Rename chat"
+            onClick={() => setRenamingActive(true)}
+            disabled={!activeSession}
+          >
+            {/* Pencil glyph — opens the rename dialog for the active chat. */}
+            <span aria-hidden="true">✎</span>
+          </button>
           <button
             type="button"
             className="chat__clear"
@@ -405,17 +516,32 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
           {state.messages.map((message) =>
             message.sender === "assistant" ? (
               <article key={message.id} className="message message--assistant">
-                {/* Badge shows which model + effort produced the reply. */}
-                <span className="message__label">{assistantModelLabel}</span>
+                {/* One-row meta: model+effort badge then the timestamp. Kept on a
+                    single line (nowrap) so a narrow panel never wraps it. */}
+                <div className="message__meta">
+                  <span className="message__label">{assistantModelLabel}</span>
+                  <time className="message__time">
+                    {formatMessageTimestamp(message.createdAt, now)}
+                  </time>
+                </div>
                 <div className="message__markdown">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={markdownComponents}
+                  >
                     {message.content}
                   </ReactMarkdown>
                 </div>
               </article>
             ) : (
-              // User messages carry no label — the bubble alignment is enough.
+              // User messages carry only a timestamp; bubble alignment marks the
+              // sender.
               <article key={message.id} className="message message--user">
+                <div className="message__meta">
+                  <time className="message__time">
+                    {formatMessageTimestamp(message.createdAt, now)}
+                  </time>
+                </div>
                 <p>{message.content}</p>
               </article>
             ),
@@ -466,6 +592,17 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
           </button>
         </form>
       </div>
+
+      {renamingActive && activeSession && (
+        <RenameDialog
+          session={activeSession}
+          onCancel={() => setRenamingActive(false)}
+          onSave={(title) => {
+            void renameSession(activeSession.id, title);
+            setRenamingActive(false);
+          }}
+        />
+      )}
 
       {confirmingClear && (
         <Dialog label="Clear chat" onClose={() => setConfirmingClear(false)}>

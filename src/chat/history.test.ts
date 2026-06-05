@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  formatMessageTimestamp,
   formatRelativeTime,
   generateTitle,
   isValidTitle,
@@ -145,6 +146,30 @@ describe("formatRelativeTime", () => {
 
   it("clamps a future timestamp to 'now'", () => {
     expect(formatRelativeTime(now + 5 * M, now)).toBe("now");
+  });
+});
+
+describe("formatMessageTimestamp", () => {
+  // Build local-time dates so the 24h clock assertions are timezone-stable
+  // (the formatter reads the same local fields it is given).
+  const at = (...parts: [number, number, number, number, number]) =>
+    new Date(parts[0], parts[1], parts[2], parts[3], parts[4]).getTime();
+  const now = at(2026, 5, 5, 9, 0); // Jun 5 2026, 09:00 local
+
+  it("shows 24h clock time only for a message from today", () => {
+    expect(formatMessageTimestamp(at(2026, 5, 5, 14, 32), now)).toBe("14:32");
+  });
+
+  it("zero-pads hours and minutes in 24h form", () => {
+    expect(formatMessageTimestamp(at(2026, 5, 5, 8, 5), now)).toBe("08:05");
+    expect(formatMessageTimestamp(at(2026, 5, 5, 0, 0), now)).toBe("00:00");
+    expect(formatMessageTimestamp(at(2026, 5, 5, 23, 9), now)).toBe("23:09");
+  });
+
+  it("prefixes a date when the message is not from today", () => {
+    const out = formatMessageTimestamp(at(2026, 5, 4, 14, 32), now);
+    expect(out).toMatch(/, 14:32$/);
+    expect(out).not.toBe("14:32");
   });
 });
 

@@ -21,6 +21,7 @@
     "allow-rename-session",
     "allow-delete-session",
     "allow-clear-session",
-    "allow-update-codex-session-id"
+    "allow-update-codex-session-id",
+    "allow-open-external"
   ]
 }

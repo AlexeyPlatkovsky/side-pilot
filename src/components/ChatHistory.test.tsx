@@ -23,6 +23,8 @@ function renderHistory(over: Partial<Parameters<typeof ChatHistory>[0]> = {}) {
     ],
     activeSessionId: over.activeSessionId ?? "a",
     now: NOW,
+    pendingIds: over.pendingIds,
+    unreadIds: over.unreadIds,
     onSelect: over.onSelect ?? vi.fn(),
     onNewChat: over.onNewChat ?? vi.fn(),
     onRename: over.onRename ?? vi.fn(),
@@ -42,6 +44,35 @@ describe("ChatHistory", () => {
     expect(within(row).getByText("1h")).toBeInTheDocument();
     // Title column carries the ellipsis class so long titles truncate.
     expect(row.querySelector(".chat-row__title")).not.toBeNull();
+  });
+
+  it("shows a spinner instead of the time for a chat with a reply in flight", () => {
+    renderHistory({ pendingIds: new Set(["a"]) });
+    const row = screen
+      .getByRole("button", { name: /First chat, reply in progress/ })
+      .closest(".chat-row") as HTMLElement;
+    expect(row.querySelector(".chat-row__spinner")).not.toBeNull();
+    expect(row.querySelector(".chat-row__time")).toBeNull();
+    // The other row is unaffected and still shows its relative time.
+    expect(screen.getByText("2h")).toBeInTheDocument();
+  });
+
+  it("shows an unread dot instead of the time for a chat with an unread answer", () => {
+    renderHistory({ unreadIds: new Set(["b"]) });
+    const row = screen
+      .getByRole("button", { name: /Second chat, unread answer/ })
+      .closest(".chat-row") as HTMLElement;
+    expect(row.querySelector(".chat-row__unread")).not.toBeNull();
+    expect(row.querySelector(".chat-row__time")).toBeNull();
+  });
+
+  it("prefers the in-progress spinner over an unread dot for the same chat", () => {
+    renderHistory({ pendingIds: new Set(["a"]), unreadIds: new Set(["a"]) });
+    const row = screen
+      .getByRole("button", { name: /First chat, reply in progress/ })
+      .closest(".chat-row") as HTMLElement;
+    expect(row.querySelector(".chat-row__spinner")).not.toBeNull();
+    expect(row.querySelector(".chat-row__unread")).toBeNull();
   });
 
   it("marks the active chat with aria-current", () => {

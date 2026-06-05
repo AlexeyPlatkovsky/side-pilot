@@ -12,6 +12,7 @@ fn main() {
             "delete_session",
             "clear_session",
             "update_codex_session_id",
+            "open_external",
         ]),
     ))
     .expect("failed to run Tauri build script")

@@ -97,6 +97,27 @@ export function formatRelativeTime(updatedAt: number, now: number): string {
 }
 
 /**
+ * Format a message's creation time for the transcript: 24h clock (`HH:MM`)
+ * always, prefixed with a short local date (e.g. `Jun 4, 14:32`) when the
+ * message is not from the same calendar day as `now`. The hour is always 24h
+ * regardless of locale; only the date prefix is locale-formatted.
+ */
+export function formatMessageTimestamp(createdAt: number, now: number): string {
+  const d = new Date(createdAt);
+  const today = new Date(now);
+  const time = `${String(d.getHours()).padStart(2, "0")}:${String(
+    d.getMinutes(),
+  ).padStart(2, "0")}`;
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  if (sameDay) return time;
+  const date = d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${date}, ${time}`;
+}
+
+/**
  * Order sessions for the rail: most recently updated first, tie-broken on id
  * ascending to match the Rust `list_sessions` ordering and stay deterministic.
  * Returns a new array; the input is not mutated.

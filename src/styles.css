@@ -18,6 +18,9 @@
   --clay: #8a4f3f;
   --cream: #fffaf2;
   --teal: #2f6f63;
+  /* Notable orange — distinct from coral (danger) and honey (tints). Kept dark
+     enough that the small unread dot clears the 3:1 non-text contrast bar. */
+  --orange: #c75a00;
 
   /* --- Semantic color tokens ---------------------------------------------- */
   --color-text: var(--ink);
@@ -27,6 +30,8 @@
   --color-on-accent-muted: color-mix(in srgb, var(--cream) 78%, transparent);
   /* Error / failure state — clay reads clearly on the warm cream surfaces. */
   --color-danger: var(--clay);
+  /* Unread-answer indicator dot in the chat list (notable orange). */
+  --color-unread: var(--orange);
 
   /* Surfaces */
   --surface-panel: rgba(255, 248, 238, 0.95);
@@ -65,6 +70,7 @@
   --radius-md: 8px;
   --radius-lg: 14px;
   --radius-xl: 18px;
+  --radius-pill: 999px; /* Fully rounded — circular dots and the spinner ring. */
 
   /* --- Icon / mark sizes -------------------------------------------------- */
   --icon-sm: 22px; /* header control button */
@@ -289,7 +295,9 @@ body {
 .conversation {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  /* Vertical scroll for history; horizontal scroll only kicks in when a narrow
+     panel can't fit a message's one-row meta label (SP-055). */
+  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -314,6 +322,33 @@ body {
   font-weight: var(--font-weight-bold);
   letter-spacing: 0;
   text-transform: uppercase;
+}
+
+/* Per-message meta line: model badge (assistant only) + timestamp. Kept on one
+   row (nowrap), and its intrinsic width sets the message's minimum width so a
+   narrowed panel never wraps the label (SP-055). */
+.message__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.message {
+  /* Don't shrink a bubble below its meta line's single-row width. */
+  min-width: min-content;
+}
+
+.message__time {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  letter-spacing: 0;
+}
+
+/* Timestamp on the accent-filled user bubble: full on-accent cream so the small
+   text clears AA contrast against the teal bubble. */
+.message--user .message__time {
+  color: var(--color-on-accent);
 }
 
 .message--assistant {
@@ -490,6 +525,7 @@ body {
 }
 
 .chat__rail-toggle {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -505,6 +541,19 @@ body {
   cursor: pointer;
 }
 
+/* Unread-answer badge on the collapsed rail toggle — the same orange dot as the
+   chat-row indicator, so a closed rail still signals a background reply. */
+.chat__rail-toggle-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-unread);
+  box-shadow: 0 0 0 1px var(--surface-panel);
+}
+
 .chat__rail-toggle:hover {
   background: var(--overlay-hover);
 }
@@ -514,6 +563,7 @@ body {
 }
 
 .chat__rail-toggle:focus-visible,
+.chat__edit:focus-visible,
 .chat__clear:focus-visible,
 .chat-rail__new:focus-visible,
 .chat-row__select:focus-visible,
@@ -523,6 +573,33 @@ body {
 .dialog__input:focus-visible {
   outline: var(--focus-ring-width) solid var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
+}
+
+/* Pencil/Edit control next to the active chat title (SP-057). */
+.chat__edit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat__edit:hover:not(:disabled) {
+  background: var(--overlay-hover);
+  color: var(--color-text);
+}
+
+.chat__edit:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .chat__active-title {
@@ -563,9 +640,10 @@ body {
   flex-direction: column;
   gap: var(--space-2);
   flex-shrink: 0;
-  /* Compact fixed rail; kept narrow so the transcript stays usable beside it
-     inside the 380px expanded panel (EXPANDED_SIZE). */
-  width: 140px;
+  /* Fixed rail, ~50% wider than the original 140px so titles and the row
+     indicators read comfortably inside the 380px expanded panel (EXPANDED_SIZE);
+     the transcript reclaims this width when the rail is hidden. */
+  width: 210px;
   min-height: 0;
   padding-right: var(--space-2);
   border-right: 1px solid var(--border-soft);
@@ -618,7 +696,8 @@ body {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: baseline;
+  /* Vertically center the title within the row (SP-049 fix). */
+  align-items: center;
   gap: var(--space-2);
   /* Compact row height per SP-049 (about 32px). */
   height: 32px;
@@ -643,6 +722,40 @@ body {
   flex-shrink: 0;
   color: var(--color-text-muted);
   font-size: var(--font-xs);
+}
+
+/* Row status indicators (SP-056), shown in place of the relative time. */
+.chat-row__spinner {
+  flex-shrink: 0;
+  width: var(--font-md);
+  height: var(--font-md);
+  border: 2px solid var(--border-soft);
+  border-top-color: var(--color-accent);
+  border-radius: var(--radius-pill);
+  animation: chat-row-spin 0.7s linear infinite;
+}
+
+.chat-row__unread {
+  flex-shrink: 0;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-unread);
+  /* Light halo separates the dot from the honey-tinted active row so it stays
+     visible regardless of the row background. */
+  box-shadow: 0 0 0 1px var(--surface-raised);
+}
+
+@keyframes chat-row-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-row__spinner {
+    animation: none;
+  }
 }
 
 .chat-row__menu {

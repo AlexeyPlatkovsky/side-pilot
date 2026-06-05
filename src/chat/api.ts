@@ -79,6 +79,12 @@ export interface ChatApi {
     sessionId: string,
     codexSessionId: string,
   ): Promise<void>;
+  /**
+   * Open an assistant-provided link in the OS default browser. The Rust side
+   * validates the scheme (http/https/mailto only); the app's WebView never
+   * navigates away from itself.
+   */
+  openExternal(url: string): Promise<void>;
 }
 
 /** The real backend, wired to the registered Tauri commands. */
@@ -94,6 +100,7 @@ export const tauriChatApi: ChatApi = {
   clearSession: (sessionId) => invoke("clear_session", { sessionId }),
   updateCodexSessionId: (sessionId, codexSessionId) =>
     invoke("update_codex_session_id", { sessionId, codexSessionId }),
+  openExternal: (url) => invoke("open_external", { url }),
 };
 
 /**
@@ -143,6 +150,7 @@ export const inertChatApi: ChatApi = {
       codexSessionId: null,
     }),
   updateCodexSessionId: () => Promise.resolve(),
+  openExternal: () => Promise.resolve(),
 };
 
 /** Map a `storage::Message` row onto the UI transcript shape. */
@@ -151,12 +159,14 @@ export function toChatMessage(row: PersistedMessage): {
   sender: Sender;
   assistantId?: string;
   content: string;
+  createdAt: number;
 } {
   return {
     id: row.id,
     sender: row.sender,
     assistantId: row.assistantId ?? undefined,
     content: row.content,
+    createdAt: row.createdAt,
   };
 }
 

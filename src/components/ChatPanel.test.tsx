@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "./ChatPanel";
 import type {
@@ -65,6 +65,7 @@ function makeApi(opts: {
       Promise.resolve({ ...SESSION, id: sessionId, codexSessionId: null }),
     ),
     updateCodexSessionId: vi.fn(() => Promise.resolve()),
+    openExternal: vi.fn(() => Promise.resolve()),
   };
 }
 
@@ -473,5 +474,210 @@ describe("ChatPanel", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(api.clearSession).not.toHaveBeenCalled();
     expect(screen.getByText("old message")).toBeInTheDocument();
+  });
+
+  it("shows a 24h timestamp above each message", async () => {
+    const api = makeApi({
+      history: [persisted({ sender: "user", content: "hi", createdAt: Date.now() })],
+    });
+    const { container } = render(<ChatPanel api={api} />);
+    expect(await screen.findByText("hi")).toBeInTheDocument();
+
+    const time = container.querySelector(".message__time");
+    expect(time).not.toBeNull();
+    // 24h HH:MM for a same-day message (no date prefix).
+    expect(time?.textContent).toMatch(/^\d{2}:\d{2}$/);
+  });
+
+  it("restores the thinking indicator when returning to a chat whose reply is still pending", async () => {
+    const user = userEvent.setup();
+    let resolveAdapter!: (result: AdapterResult) => void;
+    const adapterPromise = new Promise<AdapterResult>((resolve) => {
+      resolveAdapter = resolve;
+    });
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({ sessions, runAdapter: vi.fn(() => adapterPromise) });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
+    await user.click(screen.getByRole("button", { name: /send/i }));
+    expect(screen.getByTestId("thinking")).toBeInTheDocument();
+
+    // Switch away: the other chat is idle, no thinking indicator.
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    expect(screen.queryByTestId("thinking")).toBeNull();
+
+    // Switch back: the reply is still in flight, so thinking must reappear.
+    await user.click(screen.getByRole("button", { name: /^One/ }));
+    expect(screen.getByTestId("thinking")).toBeInTheDocument();
+
+    resolveAdapter({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
+    await waitFor(() => expect(screen.queryByTestId("thinking")).toBeNull());
+  });
+
+  it("marks a background reply unread in the rail and clears it when reopened", async () => {
+    const user = userEvent.setup();
+    let resolveAdapter!: (result: AdapterResult) => void;
+    const adapterPromise = new Promise<AdapterResult>((resolve) => {
+      resolveAdapter = resolve;
+    });
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({ sessions, runAdapter: vi.fn(() => adapterPromise) });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
+    await user.click(screen.getByRole("button", { name: /send/i }));
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+
+    // While pending, the One row shows a reply-in-progress indicator.
+    expect(
+      screen.getByRole("button", { name: /One, reply in progress/ }),
+    ).toBeInTheDocument();
+
+    // Switch to Two, then let One's reply land in the background → unread.
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    resolveAdapter({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
+    expect(
+      await screen.findByRole("button", { name: /One, unread answer/ }),
+    ).toBeInTheDocument();
+
+    // Reopening One clears its unread flag.
+    await user.click(screen.getByRole("button", { name: /One, unread answer/ }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /One, unread answer/ })).toBeNull(),
+    );
+  });
+
+  it("clears a background chat's unread flag when that chat is deleted", async () => {
+    const user = userEvent.setup();
+    let resolveAdapter!: (result: AdapterResult) => void;
+    const adapterPromise = new Promise<AdapterResult>((resolve) => {
+      resolveAdapter = resolve;
+    });
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({ sessions, runAdapter: vi.fn(() => adapterPromise) });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Reply on One lands while viewing Two → One is unread.
+    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
+    await user.click(screen.getByRole("button", { name: /send/i }));
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    resolveAdapter({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
+    const unread = await screen.findByRole("button", { name: /One, unread answer/ });
+
+    // Delete One via its options menu; its unread status must not linger.
+    await user.click(screen.getByRole("button", { name: /Options for One/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Delete chat/ })).getByRole(
+        "button",
+        { name: "Delete" },
+      ),
+    );
+
+    await waitFor(() => expect(api.deleteSession).toHaveBeenCalledWith("s1"));
+    expect(unread).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /unread answer/ })).toBeNull();
+  });
+
+  it("surfaces an unread badge on the rail toggle when a background reply lands and the rail is closed", async () => {
+    const user = userEvent.setup();
+    let resolveAdapter!: (result: AdapterResult) => void;
+    const adapterPromise = new Promise<AdapterResult>((resolve) => {
+      resolveAdapter = resolve;
+    });
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({ sessions, runAdapter: vi.fn(() => adapterPromise) });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // With nothing unread, the closed toggle has no unread signal.
+    expect(
+      screen.getByRole("button", { name: "Show chat history" }),
+    ).toBeInTheDocument();
+
+    // Reply on One lands while viewing Two → One is unread in the background.
+    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
+    await user.click(screen.getByRole("button", { name: /send/i }));
+    await user.click(screen.getByRole("button", { name: /^Show chat history/ }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    resolveAdapter({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
+    await screen.findByRole("button", { name: /One, unread answer/ });
+
+    // Close the rail: the toggle itself must now signal there's an unread answer
+    // (otherwise a collapsed rail hides the only indicator).
+    await user.click(screen.getByRole("button", { name: "Hide chat history" }));
+    expect(
+      screen.getByRole("button", { name: /Show chat history, unread/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens an assistant-provided link in the system browser, not the app", async () => {
+    const api = makeApi({
+      history: [
+        persisted({
+          sender: "assistant",
+          content: "See [the docs](https://example.com/guide) for details.",
+        }),
+      ],
+    });
+    render(<ChatPanel api={api} />);
+
+    const link = await screen.findByRole("link", { name: "the docs" });
+    // Href is kept for hover/accessibility, but the click is intercepted.
+    expect(link).toHaveAttribute("href", "https://example.com/guide");
+
+    const clickEvent = createEvent.click(link);
+    fireEvent(link, clickEvent);
+    // Default navigation is prevented so the WebView never leaves the app.
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(api.openExternal).toHaveBeenCalledWith("https://example.com/guide");
+
+    // Middle-click (auxclick) is intercepted the same way — no new-tab nav.
+    const auxEvent = new MouseEvent("auxclick", {
+      bubbles: true,
+      cancelable: true,
+      button: 1,
+    });
+    fireEvent(link, auxEvent);
+    expect(auxEvent.defaultPrevented).toBe(true);
+    expect(api.openExternal).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens the rename dialog from the toolbar pencil and saves", async () => {
+    const user = userEvent.setup();
+    const api = makeApi({ sessions: [{ ...SESSION, id: "s1", title: "One" }] });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.click(screen.getByRole("button", { name: "Rename chat" }));
+    const dialog = screen.getByRole("dialog", { name: /Rename chat/ });
+    const input = within(dialog).getByRole("textbox", { name: /Chat title/ });
+    expect(input).toHaveValue("One");
+
+    await user.clear(input);
+    await user.type(input, "Renamed");
+    await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(api.renameSession).toHaveBeenCalledWith("s1", "Renamed"),
+    );
   });
 });

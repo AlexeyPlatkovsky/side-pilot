@@ -1,0 +1,27 @@
+<!doctype html>
+<!--
+  Seeded WebKit e2e fixture (SP-055/056). Served by the Vite dev server and loaded
+  by the Playwright WebKit harness. Mounts the real chat panel over a small
+  in-memory ChatApi pre-seeded with chats + a transcript and a delayed reply, so
+  per-message timestamps and the rail's in-progress/unread indicators can be
+  exercised in the real engine — surfaces the inert fixture cannot reach.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>side-pilot · e2e seeded fixture</title>
+    <style>
+      html,
+      body,
+      #root {
+        height: 100%;
+        margin: 0;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/e2e-seeded-fixture.tsx"></script>
+  </body>
+</html>

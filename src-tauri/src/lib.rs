@@ -10,6 +10,7 @@ use tauri::Manager;
 
 pub mod adapters;
 pub mod commands;
+pub mod links;
 pub mod storage;
 
 use storage::Store;
@@ -38,7 +39,8 @@ pub fn run() {
             commands::rename_session,
             commands::delete_session,
             commands::clear_session,
-            commands::update_codex_session_id
+            commands::update_codex_session_id,
+            commands::open_external
         ])
         .run(tauri::generate_context!())
         .expect("error while running side-pilot");

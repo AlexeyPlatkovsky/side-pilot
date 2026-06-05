@@ -29,6 +29,7 @@ with `color-mix()`, so changing a primitive updates every tint built from it.
 | `--clay` | `#8a4f3f` | Red-brown (borders) |
 | `--cream` | `#fffaf2` | Lightest warm tint — text on accent, body base |
 | `--teal` | `#2f6f63` | Accent / focus / user message |
+| `--orange` | `#c75a00` | Notable orange — distinct from coral (danger) and honey (tints); unread-answer dot (dark enough for 3:1 non-text contrast) |
 
 ### Semantic tokens
 
@@ -42,6 +43,7 @@ Use these in components.
 | `--color-on-accent` | `--cream` | Text/icons on an accent surface |
 | `--color-on-accent-muted` | `--cream` 78% | Secondary text on an accent surface (currently unused — was the user-message label, removed when "You" labels were dropped) |
 | `--color-danger` | `--clay` | Error text/border (chat failure banner) |
+| `--color-unread` | `--orange` | Unread-answer dot in the chat list |
 | `--surface-panel` | warm cream 95% | Main panel background |
 | `--surface-panel-soft` | warm cream 82% | Header gradient stop |
 | `--surface-warm` | warm 96% | Header gradient stop |
@@ -97,6 +99,7 @@ only four steps — pick the nearest one rather than introducing an odd value.
 | `--radius-md` | `8px` | Cards & inputs (messages, composer, send) |
 | `--radius-lg` | `14px` | Icon / mark corners |
 | `--radius-xl` | `18px` | The outer panel |
+| `--radius-pill` | `999px` | Fully rounded — chat-list unread dot and the in-progress spinner ring |
 
 ---
 
@@ -133,7 +136,7 @@ they are not part of any repeated scale:
 - Composer `min-height: 42px` with `4px` inset — wraps a compact one-row input and send control.
 - Send button `width: 32px; height: 32px` — single-purpose icon control sizing.
 - `max-width: 86%` on messages, `opacity` values, and `line-height` values.
-- Chat history rail (SP-048–051): `.chat-rail` `width: 140px` (fixed, kept narrow so the transcript stays usable beside it inside the 380px expanded panel); `.chat-row__select` `height: 32px` (compact one-line rows); `.chat-row__options` `min-width: 120px` (options popup); `.dialog` `max-width: 280px` (modal width, fits the 380px window).
+- Chat history rail (SP-048–057): `.chat-rail` `width: 210px` (fixed, ~50% wider than the original 140px so titles and row indicators read inside the 380px expanded panel); `.chat-row__select` `height: 32px` (compact one-line rows); `.chat-row__options` `min-width: 120px` (options popup); `.dialog` `max-width: 280px` (modal width, fits the 380px window). Message bubbles use `min-width: min-content` so a narrowed panel never wraps the one-row `.message__meta` label (model + timestamp). `.chat-row__spinner` uses a `2px` ring stroke (the in-progress indicator's only literal; thicker than the default `1px` borders so the small ring reads).
 
 If any of these starts repeating across components, promote it to a token here.
 
@@ -142,7 +145,10 @@ If any of these starts repeating across components, promote it to a token here.
 These class groups compose the tokens above; they are not tokens themselves but
 are documented so the vocabulary stays discoverable.
 
-- **Chat history rail & dialogs (SP-048–051):** `.chat-rail` / `.chat-rail__new` / `.chat-rail__list` (collapsible left rail), `.chat-row*` (one-line title + relative time + `⋯` options trigger + `.chat-row__options` menu), `.chat__toolbar` (rail toggle + active title + Clear), and `.dialog*` (shared modal chrome behind `--surface-scrim` with `--shadow-dialog`, including `.dialog__hint` — the `--color-danger` inline validation note under the rename input for an invalid title). All spacing/radius/color/type go through the tokens above; the only literals are the one-offs listed in the previous section.
+- **Chat history rail & dialogs (SP-048–057):** `.chat-rail` / `.chat-rail__new` / `.chat-rail__list` (collapsible left rail), `.chat-row*` (one-line title + a status slot that shows the relative time, the in-progress `.chat-row__spinner`, or the unread `.chat-row__unread` dot in `--color-unread`, plus the `⋯` options trigger + `.chat-row__options` menu), `.chat__toolbar` (rail toggle + active title + `.chat__edit` pencil/rename + Clear; the toggle carries a `.chat__rail-toggle-badge` unread dot in `--color-unread` while the rail is collapsed and a background chat has an unread answer), and `.dialog*` (shared modal chrome behind `--surface-scrim` with `--shadow-dialog`, including `.dialog__hint` — the `--color-danger` inline validation note under the rename input for an invalid title).
+- **Message meta (SP-055):** `.message__meta` (single nowrap row) holds the assistant `.message__label` model badge and the `.message__time` 24h timestamp (date-prefixed when not today); user bubbles carry just `.message__time`. `.message` uses `min-width: min-content` so the meta row never wraps.
+
+All spacing/radius/color/type go through the tokens above; the only literals are the one-offs listed in the previous section.
 
 ---
 

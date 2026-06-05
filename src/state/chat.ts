@@ -20,6 +20,8 @@ export interface ChatMessage {
   assistantId?: string;
   /** Message text; assistant content is rendered as Markdown. */
   content: string;
+  /** Creation time (ms epoch): DB `created_at`, or `Date.now()` for optimistic rows. */
+  createdAt: number;
 }
 
 /**
@@ -37,8 +39,12 @@ export interface ChatState {
 }
 
 export type ChatAction =
-  /** Replace the transcript with reloaded history (app start / session switch). */
-  | { type: "loaded"; messages: ChatMessage[] }
+  /**
+   * Replace the transcript with reloaded history (app start / session switch).
+   * `pending` restores the thinking state when the loaded session still has a
+   * reply in flight, so switching back to it shows "Thinking…" again.
+   */
+  | { type: "loaded"; messages: ChatMessage[]; pending?: boolean }
   /** Optimistically append the user's message and enter the pending state. */
   | { type: "submit"; message: ChatMessage }
   /** Append the assistant's reply and return to idle. */
@@ -54,7 +60,10 @@ export const initialChatState: ChatState = {
 export function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
     case "loaded":
-      return { messages: action.messages, status: { kind: "idle" } };
+      return {
+        messages: action.messages,
+        status: action.pending ? { kind: "pending" } : { kind: "idle" },
+      };
     case "submit":
       return {
         messages: [...state.messages, action.message],

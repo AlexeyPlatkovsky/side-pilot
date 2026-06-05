@@ -79,3 +79,22 @@ test("the rail toggles open and reclaims transcript width when hidden", async ({
   await expect(page.getByRole("complementary", { name: "Chat history" })).toHaveCount(0);
   expect(await mainWidth(page)).toBe(widthClosed);
 });
+
+test("the toolbar pencil opens the rename dialog for the active chat", async ({
+  page,
+}) => {
+  await gotoPanel(page);
+
+  // The Edit/pencil control lives next to the active chat title in the toolbar.
+  await page.getByRole("button", { name: "Rename chat" }).click();
+  const dialog = page.getByRole("dialog", { name: /Rename chat/ });
+  await expect(dialog).toBeVisible();
+  // Fits within the 380px window like the rail-triggered rename.
+  const box = (await dialog.locator(".dialog").boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(380);
+  await page.screenshot({ path: "e2e/.artifacts/chat-toolbar-rename.png" });
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
