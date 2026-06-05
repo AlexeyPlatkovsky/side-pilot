@@ -186,6 +186,76 @@ impl Store {
         Ok(sessions)
     }
 
+    /// Rename a session, returning the updated row. `updated_at` is left
+    /// untouched: the list is ordered by latest-message time (SP-049), and a
+    /// rename is not a message, so it must not reorder the chat. Fails with
+    /// `NotFound` if the session does not exist.
+    pub fn rename_session(
+        &self,
+        session_id: &str,
+        title: Option<String>,
+    ) -> Result<Session, StorageError> {
+        let conn = self.lock();
+        let changed = conn.execute(
+            "UPDATE sessions SET title = ?1 WHERE id = ?2",
+            params![title, session_id],
+        )?;
+        if changed == 0 {
+            return Err(StorageError::NotFound {
+                entity: format!("session {session_id}"),
+            });
+        }
+        load_session(&conn, session_id)
+    }
+
+    /// Delete a session and all of its messages (cascade). Fails with
+    /// `NotFound` if the session does not exist.
+    pub fn delete_session(&self, session_id: &str) -> Result<(), StorageError> {
+        let conn = self.lock();
+        let changed = conn.execute(
+            "DELETE FROM sessions WHERE id = ?1",
+            params![session_id],
+        )?;
+        if changed == 0 {
+            return Err(StorageError::NotFound {
+                entity: format!("session {session_id}"),
+            });
+        }
+        Ok(())
+    }
+
+    /// Clear a session's contents (SP-051): delete every message and reset the
+    /// native Codex resume id so future prompts do not resume stale context.
+    /// The session row survives so it stays selectable as an empty chat.
+    /// `updated_at` is left untouched: clearing is not a message, so (like
+    /// rename, SP-049) it must not reorder the latest-message-ordered rail.
+    /// Fails with `NotFound` if the session does not exist.
+    pub fn clear_session(&self, session_id: &str) -> Result<Session, StorageError> {
+        let conn = self.lock();
+        let exists: bool = conn
+            .query_row(
+                "SELECT 1 FROM sessions WHERE id = ?1",
+                params![session_id],
+                |_| Ok(true),
+            )
+            .optional()?
+            .unwrap_or(false);
+        if !exists {
+            return Err(StorageError::NotFound {
+                entity: format!("session {session_id}"),
+            });
+        }
+        conn.execute(
+            "DELETE FROM messages WHERE session_id = ?1",
+            params![session_id],
+        )?;
+        conn.execute(
+            "UPDATE sessions SET codex_session_id = NULL WHERE id = ?1",
+            params![session_id],
+        )?;
+        load_session(&conn, session_id)
+    }
+
     /// Record the native Codex session id for a local session (§6, resume).
     pub fn update_codex_session_id(
         &self,
@@ -204,6 +274,21 @@ impl Store {
         }
         Ok(())
     }
+}
+
+/// Read a single session by id from an already-held connection. Used by the
+/// mutating helpers that need to return the post-update row.
+fn load_session(conn: &Connection, session_id: &str) -> Result<Session, StorageError> {
+    conn.query_row(
+        "SELECT id, title, created_at, updated_at, codex_session_id
+         FROM sessions WHERE id = ?1",
+        params![session_id],
+        row_to_session,
+    )
+    .optional()?
+    .ok_or_else(|| StorageError::NotFound {
+        entity: format!("session {session_id}"),
+    })
 }
 
 fn row_to_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Session> {
@@ -352,6 +437,99 @@ mod tests {
         let err = store
             .update_codex_session_id("missing", "x")
             .unwrap_err();
+        assert!(matches!(err, StorageError::NotFound { .. }));
+    }
+
+    #[test]
+    fn rename_session_updates_title_without_reordering() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(Some("old".to_string())).unwrap();
+        // A message bumps updated_at; the rename must not change it (sort order
+        // is by latest message, and a rename is not a message).
+        store.append_message(user_msg(&session.id, "hi")).unwrap();
+        let before = store.list_sessions().unwrap().pop().unwrap();
+
+        let renamed = store
+            .rename_session(&session.id, Some("new title".to_string()))
+            .unwrap();
+
+        assert_eq!(renamed.title.as_deref(), Some("new title"));
+        assert_eq!(renamed.updated_at, before.updated_at);
+        let reloaded = store.list_sessions().unwrap().pop().unwrap();
+        assert_eq!(reloaded.title.as_deref(), Some("new title"));
+        assert_eq!(reloaded.updated_at, before.updated_at);
+    }
+
+    #[test]
+    fn rename_session_for_unknown_session_is_not_found() {
+        let store = Store::in_memory().unwrap();
+        let err = store
+            .rename_session("missing", Some("x".to_string()))
+            .unwrap_err();
+        assert!(matches!(err, StorageError::NotFound { .. }));
+    }
+
+    #[test]
+    fn delete_session_removes_session_and_cascades_messages() {
+        let store = Store::in_memory().unwrap();
+        let keep = store.create_session(Some("keep".to_string())).unwrap();
+        let drop = store.create_session(Some("drop".to_string())).unwrap();
+        store.append_message(user_msg(&drop.id, "one")).unwrap();
+        store.append_message(assistant_msg(&drop.id, "two")).unwrap();
+
+        store.delete_session(&drop.id).unwrap();
+
+        let remaining: Vec<String> =
+            store.list_sessions().unwrap().into_iter().map(|s| s.id).collect();
+        assert_eq!(remaining, vec![keep.id]);
+        // Messages of the deleted session are gone (cascade), so re-reading is empty.
+        assert!(store.read_history(&drop.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn delete_session_for_unknown_session_is_not_found() {
+        let store = Store::in_memory().unwrap();
+        let err = store.delete_session("missing").unwrap_err();
+        assert!(matches!(err, StorageError::NotFound { .. }));
+    }
+
+    #[test]
+    fn clear_session_deletes_messages_and_resets_codex_id() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(Some("chat".to_string())).unwrap();
+        store.append_message(user_msg(&session.id, "one")).unwrap();
+        store.append_message(assistant_msg(&session.id, "two")).unwrap();
+        store
+            .update_codex_session_id(&session.id, "thread-stale")
+            .unwrap();
+        // updated_at as it stands after the last write, before clearing.
+        let before = store.list_sessions().unwrap().pop().unwrap();
+        // Force a wall-clock gap so a (regressed) bump to now would be visible
+        // rather than colliding within the same millisecond.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+
+        let cleared = store.clear_session(&session.id).unwrap();
+
+        // Session itself survives (still selectable as an empty chat) but its
+        // title is kept while messages and the native resume id are cleared.
+        assert_eq!(cleared.title.as_deref(), Some("chat"));
+        assert_eq!(cleared.codex_session_id, None);
+        // Clearing is not a message, so it must not bump updated_at / reorder
+        // the rail (matches rename semantics, SP-049/SP-051).
+        assert_eq!(cleared.updated_at, before.updated_at);
+        assert!(store.read_history(&session.id).unwrap().is_empty());
+        let reloaded = store.list_sessions().unwrap().pop().unwrap();
+        assert_eq!(reloaded.codex_session_id, None);
+        assert_eq!(reloaded.updated_at, before.updated_at);
+        // Next appended message restarts the sequence at 1.
+        let next = store.append_message(user_msg(&session.id, "fresh")).unwrap();
+        assert_eq!(next.seq, 1);
+    }
+
+    #[test]
+    fn clear_session_for_unknown_session_is_not_found() {
+        let store = Store::in_memory().unwrap();
+        let err = store.clear_session("missing").unwrap_err();
         assert!(matches!(err, StorageError::NotFound { .. }));
     }
 

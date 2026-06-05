@@ -86,11 +86,22 @@ npm run tauri build
   not in component rules)
 - `src/styles.css` - design tokens + component styles
 - `src/App.tsx` - React UI root
-- `src/components/ChatPanel.tsx` - expanded-panel chat UI: transcript with safe
-  Markdown rendering (`react-markdown` + `remark-gfm`), blocking "thinking"
-  state, and the prompt composer; the `useChat` hook wires it to the backend
+- `src/components/ChatPanel.tsx` - expanded-panel chat UI: a collapsible history
+  rail toggle + active-chat toolbar, transcript with safe Markdown rendering
+  (`react-markdown` + `remark-gfm`), blocking "thinking" state, the prompt
+  composer, and the Clear-chat confirm dialog; the `useChat` hook owns the
+  session list, active session, and new/rename/delete/clear flows
+- `src/components/ChatHistory.tsx` - chat history rail: "New chat" control,
+  compact one-line rows (title + relative update time), per-row options menu
+  (rename / delete), and the rename/delete dialogs
+- `src/components/Dialog.tsx` - shared modal chrome (focus trap, Escape-to-close,
+  focus restore) used by the rename/delete/clear dialogs
 - `src/chat/api.ts` - typed front-end seam over the Tauri chat commands
   (`run_adapter` + the session/message store); injectable for tests
+- `src/chat/history.ts` - pure rail helpers: title generation and validation
+  (1–120 chars, letters/digits/spaces/basic punctuation, no special symbols;
+  same rule for generated and user-entered titles), relative-time formatting,
+  session sorting, and post-delete selection
 - `src/state/chat.ts` - pure chat reducer (transcript + idle/pending/error status)
 - `src-tauri/src/lib.rs` - Tauri command and plugin setup; opens the SQLite
   history store under the app data directory on startup
@@ -100,8 +111,11 @@ npm run tauri build
   and `cancel_adapter_run` commands
 - `src-tauri/src/storage/` - local SQLite store (bundled `rusqlite`) for chat
   sessions and messages: the display/history source of truth, behind the
-  `create_session`, `append_message`, `read_history`, `list_sessions`, and
-  `update_codex_session_id` commands
+  `create_session`, `append_message`, `read_history`, `list_sessions`,
+  `rename_session`, `delete_session` (cascade), `clear_session`, and
+  `update_codex_session_id` commands. Both `rename_session` and `clear_session`
+  leave `updated_at` untouched, so neither reorders the latest-message-ordered
+  rail
 - `src-tauri/tauri.conf.json` - Tauri app/window configuration
 - `src-tauri/icons/warm-friendly-source.svg` - source icon for this warm
   friendly assistant variant

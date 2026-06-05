@@ -35,12 +35,16 @@ function persisted(
 /** Build a fake ChatApi with overridable behavior and spies. */
 function makeApi(opts: {
   history?: PersistedMessage[];
+  sessions?: PersistedSession[];
   runAdapter?: ChatApi["runAdapter"];
+  readHistory?: ChatApi["readHistory"];
 } = {}): ChatApi {
   return {
-    listSessions: vi.fn(() => Promise.resolve([SESSION])),
-    createSession: vi.fn(() => Promise.resolve(SESSION)),
-    readHistory: vi.fn(() => Promise.resolve(opts.history ?? [])),
+    listSessions: vi.fn(() => Promise.resolve(opts.sessions ?? [SESSION])),
+    createSession: vi.fn((title = null) =>
+      Promise.resolve({ ...SESSION, id: "new-session", title }),
+    ),
+    readHistory: opts.readHistory ?? vi.fn(() => Promise.resolve(opts.history ?? [])),
     appendMessage: vi.fn((m) =>
       Promise.resolve(persisted({ sender: m.sender, content: m.content })),
     ),
@@ -53,6 +57,13 @@ function makeApi(opts: {
           nativeSessionId: null,
         }),
       ),
+    renameSession: vi.fn((sessionId, title) =>
+      Promise.resolve({ ...SESSION, id: sessionId, title }),
+    ),
+    deleteSession: vi.fn(() => Promise.resolve()),
+    clearSession: vi.fn((sessionId) =>
+      Promise.resolve({ ...SESSION, id: sessionId, codexSessionId: null }),
+    ),
     updateCodexSessionId: vi.fn(() => Promise.resolve()),
   };
 }
@@ -304,5 +315,163 @@ describe("ChatPanel", () => {
         }),
       ),
     );
+  });
+
+  it("toggles the chat history rail and keeps the active draft", async () => {
+    const user = userEvent.setup();
+    const api = makeApi();
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.type(screen.getByLabelText("Ask side-pilot"), "keep me");
+    // Rail starts hidden; the toggle is always available.
+    expect(screen.queryByRole("complementary", { name: "Chat history" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    expect(
+      screen.getByRole("complementary", { name: "Chat history" }),
+    ).toBeInTheDocument();
+    // Opening the rail must not reset the draft.
+    expect(screen.getByLabelText("Ask side-pilot")).toHaveValue("keep me");
+
+    await user.click(screen.getByRole("button", { name: "Hide chat history" }));
+    expect(screen.queryByRole("complementary", { name: "Chat history" })).toBeNull();
+    expect(screen.getByLabelText("Ask side-pilot")).toHaveValue("keep me");
+  });
+
+  it("titles an untitled chat from its first prompt", async () => {
+    const user = userEvent.setup();
+    const api = makeApi(); // SESSION.title is null
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.type(screen.getByLabelText("Ask side-pilot"), "Explain JS closures");
+    await user.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() =>
+      expect(api.renameSession).toHaveBeenCalledWith("s1", "Explain JS closures"),
+    );
+  });
+
+  it("switches to another chat from the rail and loads its history", async () => {
+    const user = userEvent.setup();
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({
+      sessions,
+      readHistory: vi.fn((id: string) =>
+        Promise.resolve(
+          id === "s2"
+            ? [persisted({ id: "m2", sender: "user", content: "from chat two" })]
+            : [],
+        ),
+      ),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: "Two" }));
+
+    expect(await screen.findByText("from chat two")).toBeInTheDocument();
+    expect(api.readHistory).toHaveBeenCalledWith("s2");
+  });
+
+  it("does not place a late reply into a chat the user switched to mid-request", async () => {
+    const user = userEvent.setup();
+    let resolveAdapter!: (result: AdapterResult) => void;
+    const adapterPromise = new Promise<AdapterResult>((resolve) => {
+      resolveAdapter = resolve;
+    });
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({
+      sessions,
+      runAdapter: vi.fn(() => adapterPromise),
+      readHistory: vi.fn((id: string) =>
+        Promise.resolve(
+          id === "s2"
+            ? [persisted({ id: "m2", sender: "user", content: "from chat two" })]
+            : [],
+        ),
+      ),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Submit a prompt in chat One; the reply is still in flight.
+    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
+    await user.click(screen.getByRole("button", { name: /send/i }));
+
+    // Switch to chat Two while One's reply is pending.
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: "Two" }));
+    expect(await screen.findByText("from chat two")).toBeInTheDocument();
+
+    // The late reply resolves; it is persisted but must not appear in chat Two.
+    resolveAdapter({ assistantText: "REPLY-ONE", rawJson: "{}", nativeSessionId: null });
+    await waitFor(() =>
+      expect(api.appendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ sender: "assistant" }),
+      ),
+    );
+    expect(screen.queryByText("REPLY-ONE")).not.toBeInTheDocument();
+    expect(screen.getByText("from chat two")).toBeInTheDocument();
+  });
+
+  it("clears the active chat after confirmation and resets the transcript", async () => {
+    const user = userEvent.setup();
+    const api = makeApi({
+      history: [persisted({ sender: "user", content: "old message" })],
+    });
+    render(<ChatPanel api={api} />);
+    expect(await screen.findByText("old message")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear chat" }));
+    const dialog = screen.getByRole("dialog", { name: "Clear chat" });
+    await user.click(within(dialog).getByRole("button", { name: "Clear" }));
+
+    await waitFor(() => expect(api.clearSession).toHaveBeenCalledWith("s1"));
+    await waitFor(() =>
+      expect(screen.queryByText("old message")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("does not clear the chat when the confirmation is cancelled", async () => {
+    const user = userEvent.setup();
+    const api = makeApi({
+      history: [persisted({ sender: "user", content: "old message" })],
+    });
+    render(<ChatPanel api={api} />);
+    expect(await screen.findByText("old message")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear chat" }));
+    await user.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }),
+    );
+
+    expect(api.clearSession).not.toHaveBeenCalled();
+    expect(screen.getByText("old message")).toBeInTheDocument();
+  });
+
+  it("closes the clear confirmation on Escape without clearing", async () => {
+    const user = userEvent.setup();
+    const api = makeApi({
+      history: [persisted({ sender: "user", content: "old message" })],
+    });
+    render(<ChatPanel api={api} />);
+    expect(await screen.findByText("old message")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear chat" }));
+    expect(screen.getByRole("dialog", { name: "Clear chat" })).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(api.clearSession).not.toHaveBeenCalled();
+    expect(screen.getByText("old message")).toBeInTheDocument();
   });
 });

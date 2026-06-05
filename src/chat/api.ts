@@ -69,6 +69,12 @@ export interface ChatApi {
   appendMessage(message: NewMessage): Promise<PersistedMessage>;
   readHistory(sessionId: string): Promise<PersistedMessage[]>;
   listSessions(): Promise<PersistedSession[]>;
+  /** Rename a session (SP-050); does not reorder the list. */
+  renameSession(sessionId: string, title: string | null): Promise<PersistedSession>;
+  /** Delete a session and all of its messages (SP-050, cascade). */
+  deleteSession(sessionId: string): Promise<void>;
+  /** Clear a session's messages and native resume id, keeping the chat (SP-051). */
+  clearSession(sessionId: string): Promise<PersistedSession>;
   updateCodexSessionId(
     sessionId: string,
     codexSessionId: string,
@@ -82,6 +88,10 @@ export const tauriChatApi: ChatApi = {
   appendMessage: (message) => invoke("append_message", { message }),
   readHistory: (sessionId) => invoke("read_history", { sessionId }),
   listSessions: () => invoke("list_sessions"),
+  renameSession: (sessionId, title) =>
+    invoke("rename_session", { sessionId, title }),
+  deleteSession: (sessionId) => invoke("delete_session", { sessionId }),
+  clearSession: (sessionId) => invoke("clear_session", { sessionId }),
   updateCodexSessionId: (sessionId, codexSessionId) =>
     invoke("update_codex_session_id", { sessionId, codexSessionId }),
 };
@@ -115,6 +125,23 @@ export const inertChatApi: ChatApi = {
     }),
   readHistory: () => Promise.resolve([]),
   listSessions: () => Promise.resolve([]),
+  renameSession: (sessionId, title) =>
+    Promise.resolve({
+      id: sessionId,
+      title,
+      createdAt: 0,
+      updatedAt: 0,
+      codexSessionId: null,
+    }),
+  deleteSession: () => Promise.resolve(),
+  clearSession: (sessionId) =>
+    Promise.resolve({
+      id: sessionId,
+      title: null,
+      createdAt: 0,
+      updatedAt: 0,
+      codexSessionId: null,
+    }),
   updateCodexSessionId: () => Promise.resolve(),
 };
 

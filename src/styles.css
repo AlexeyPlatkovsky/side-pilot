@@ -36,12 +36,18 @@
   --surface-raised: rgba(255, 255, 255, 0.82);
   --surface-body-top: rgba(255, 250, 242, 0.75);
   --surface-body-bottom: rgba(255, 242, 223, 0.55);
+  /* Modal scrim behind dialogs (rename / delete / clear). */
+  --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
 
   /* Borders & overlays (derived from primitives) */
   --border-soft: color-mix(in srgb, var(--clay) 16%, transparent);
   --border-accent: color-mix(in srgb, var(--sage) 20%, transparent);
   --overlay-hover: color-mix(in srgb, var(--coral) 12%, transparent);
   --tint-honey: color-mix(in srgb, var(--honey) 34%, transparent);
+
+  /* Elevation — popups (row options menu) and modal dialogs. */
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.16);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.22);
 
   /* Focus ring */
   --focus-ring: var(--teal);
@@ -453,4 +459,354 @@ body {
 .composer__send:disabled {
   cursor: default;
   opacity: 0.76;
+}
+
+/* --- Chat history rail + toolbar + dialogs (SP-048–051) ------------------- */
+
+/* The chat body lays the rail beside the main column. `position: relative`
+   anchors the modal overlay to the chat area (below the header). */
+.chat {
+  flex-direction: row;
+  gap: var(--space-2);
+  position: relative;
+}
+
+.chat__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* Allow the column to shrink so the transcript scrolls instead of overflowing
+     and so it reclaims the rail's width when the rail is hidden. */
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.chat__rail-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--clay);
+  font-size: var(--font-md);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat__rail-toggle:hover {
+  background: var(--overlay-hover);
+}
+
+.chat__rail-toggle[aria-expanded="true"] {
+  background: var(--tint-honey);
+}
+
+.chat__rail-toggle:focus-visible,
+.chat__clear:focus-visible,
+.chat-rail__new:focus-visible,
+.chat-row__select:focus-visible,
+.chat-row__menu:focus-visible,
+.chat-row__option:focus-visible,
+.dialog__button:focus-visible,
+.dialog__input:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.chat__active-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.chat__clear {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-danger);
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.chat__clear:hover:not(:disabled) {
+  background: var(--surface-danger);
+}
+
+.chat__clear:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Rail — fixed, compact, work-focused. */
+.chat-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  /* Compact fixed rail; kept narrow so the transcript stays usable beside it
+     inside the 380px expanded panel (EXPANDED_SIZE). */
+  width: 140px;
+  min-height: 0;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--border-soft);
+}
+
+.chat-rail__new {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--color-accent);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.chat-rail__new:hover {
+  background: var(--tint-honey);
+}
+
+.chat-rail__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.chat-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.chat-row--active {
+  background: var(--tint-honey);
+}
+
+.chat-row:hover {
+  background: var(--overlay-hover);
+}
+
+.chat-row__select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  /* Compact row height per SP-049 (about 32px). */
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-row__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-sm);
+}
+
+.chat-row__time {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+}
+
+.chat-row__menu {
+  flex-shrink: 0;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-md);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chat-row__menu:hover {
+  color: var(--color-text);
+}
+
+/* Per-row options popup. */
+.chat-row__options {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 2;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-popup);
+}
+
+.chat-row__option {
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-row__option:hover {
+  background: var(--overlay-hover);
+}
+
+.chat-row__option--danger {
+  color: var(--color-danger);
+}
+
+/* Modal dialogs (rename / delete / clear). */
+.dialog__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: var(--surface-scrim);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 280px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-dialog);
+}
+
+.dialog__title {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.dialog__label {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.dialog__input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-md);
+}
+
+/* Invalid title: pair the danger hint text with a danger field border so the
+   field itself signals the error, not color-on-text alone. */
+.dialog__input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.dialog__message {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: 1.4;
+  color: var(--color-text);
+}
+
+/* Inline validation hint under the rename input (invalid title). */
+.dialog__hint {
+  margin: 0;
+  font-size: var(--font-xs);
+  line-height: 1.4;
+  color: var(--color-danger);
+}
+
+.dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.dialog__button {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+}
+
+.dialog__button:hover {
+  background: var(--overlay-hover);
+}
+
+.dialog__button--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.dialog__button--danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-on-accent);
+}
+
+.dialog__button:disabled {
+  cursor: default;
+  opacity: 0.5;
 }

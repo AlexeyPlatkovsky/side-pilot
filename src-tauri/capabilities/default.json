@@ -18,6 +18,9 @@
     "allow-append-message",
     "allow-read-history",
     "allow-list-sessions",
+    "allow-rename-session",
+    "allow-delete-session",
+    "allow-clear-session",
     "allow-update-codex-session-id"
   ]
 }

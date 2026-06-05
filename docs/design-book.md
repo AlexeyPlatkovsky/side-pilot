@@ -48,10 +48,20 @@ Use these in components.
 | `--surface-raised` | white 82% | Raised cards — assistant message, composer |
 | `--surface-body-top` / `--surface-body-bottom` | warm tints | Body gradient stops |
 | `--surface-danger` | `--coral` 12% | Chat failure banner background |
-| `--border-soft` | `--clay` 16% | Default 1px border (panel, header, composer) |
-| `--border-accent` | `--sage` 20% | Assistant message border |
+| `--surface-scrim` | `--ink` 28% | Modal scrim behind the rename/delete/clear dialogs |
+| `--border-soft` | `--clay` 16% | Default 1px border (panel, header, composer, rail divider, dialogs) |
+| `--border-accent` | `--sage` 20% | Assistant message border; "New chat" button border |
 | `--overlay-hover` | `--coral` 12% | Control hover background |
-| `--tint-honey` | `--honey` 34% | Header radial glow; assistant Markdown code background |
+| `--tint-honey` | `--honey` 34% | Header radial glow; assistant Markdown code background; active chat row / rail toggle |
+
+### Elevation
+
+Box-shadow tokens for floating layers above the panel surface.
+
+| Token | Value | Use |
+|---|---|---|
+| `--shadow-popup` | `0 6px 18px rgba(0,0,0,0.16)` | Chat-row options menu popup |
+| `--shadow-dialog` | `0 12px 32px rgba(0,0,0,0.22)` | Modal dialogs (rename / delete / clear) |
 
 ### Focus ring
 
@@ -123,8 +133,16 @@ they are not part of any repeated scale:
 - Composer `min-height: 42px` with `4px` inset — wraps a compact one-row input and send control.
 - Send button `width: 32px; height: 32px` — single-purpose icon control sizing.
 - `max-width: 86%` on messages, `opacity` values, and `line-height` values.
+- Chat history rail (SP-048–051): `.chat-rail` `width: 140px` (fixed, kept narrow so the transcript stays usable beside it inside the 380px expanded panel); `.chat-row__select` `height: 32px` (compact one-line rows); `.chat-row__options` `min-width: 120px` (options popup); `.dialog` `max-width: 280px` (modal width, fits the 380px window).
 
 If any of these starts repeating across components, promote it to a token here.
+
+## Component families
+
+These class groups compose the tokens above; they are not tokens themselves but
+are documented so the vocabulary stays discoverable.
+
+- **Chat history rail & dialogs (SP-048–051):** `.chat-rail` / `.chat-rail__new` / `.chat-rail__list` (collapsible left rail), `.chat-row*` (one-line title + relative time + `⋯` options trigger + `.chat-row__options` menu), `.chat__toolbar` (rail toggle + active title + Clear), and `.dialog*` (shared modal chrome behind `--surface-scrim` with `--shadow-dialog`, including `.dialog__hint` — the `--color-danger` inline validation note under the rename input for an invalid title). All spacing/radius/color/type go through the tokens above; the only literals are the one-offs listed in the previous section.
 
 ---
 

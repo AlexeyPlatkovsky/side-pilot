@@ -131,6 +131,28 @@ pub fn list_sessions(store: State<'_, Store>) -> Result<Vec<Session>, StorageErr
     store.list_sessions()
 }
 
+/// Rename a session (SP-050). Does not reorder the chat list.
+#[tauri::command]
+pub fn rename_session(
+    store: State<'_, Store>,
+    session_id: String,
+    title: Option<String>,
+) -> Result<Session, StorageError> {
+    store.rename_session(&session_id, title)
+}
+
+/// Delete a session and all of its messages (SP-050, cascade).
+#[tauri::command]
+pub fn delete_session(store: State<'_, Store>, session_id: String) -> Result<(), StorageError> {
+    store.delete_session(&session_id)
+}
+
+/// Clear a session's messages and native resume id, keeping the empty chat (SP-051).
+#[tauri::command]
+pub fn clear_session(store: State<'_, Store>, session_id: String) -> Result<Session, StorageError> {
+    store.clear_session(&session_id)
+}
+
 /// Record the native Codex session id for a local session (resume, §6).
 #[tauri::command]
 pub fn update_codex_session_id(

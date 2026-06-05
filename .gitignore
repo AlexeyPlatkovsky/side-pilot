@@ -14,6 +14,8 @@ test-results/
 playwright-report/
 blob-report/
 .playwright/
+# Captured runtime screenshots are validation evidence, not committed source.
+e2e/.artifacts/
 
 # Rust / Tauri
 src-tauri/target/

@@ -35,6 +35,9 @@ pub fn run() {
             commands::append_message,
             commands::read_history,
             commands::list_sessions,
+            commands::rename_session,
+            commands::delete_session,
+            commands::clear_session,
             commands::update_codex_session_id
         ])
         .run(tauri::generate_context!())

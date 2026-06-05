@@ -8,6 +8,9 @@ fn main() {
             "append_message",
             "read_history",
             "list_sessions",
+            "rename_session",
+            "delete_session",
+            "clear_session",
             "update_codex_session_id",
         ]),
     ))
