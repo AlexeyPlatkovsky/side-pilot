@@ -150,7 +150,7 @@ describe("ChatHistory", () => {
     expect(onRename).not.toHaveBeenCalled();
   });
 
-  it("caps the title input at 120 characters", async () => {
+  it("caps the title input at 40 characters", async () => {
     const user = userEvent.setup();
     const onRename = vi.fn();
     renderHistory({ onRename });
@@ -161,10 +161,10 @@ describe("ChatHistory", () => {
     const dialog = screen.getByRole("dialog", { name: /Rename chat/ });
     const input = within(dialog).getByRole("textbox", { name: /Chat title/ });
     await user.clear(input);
-    // Attempting to type past the cap is hard-blocked at 120 characters.
-    await user.type(input, "a".repeat(130));
-    expect(input).toHaveValue("a".repeat(120));
-    // 120 valid chars is still saveable.
+    // Attempting to type past the cap is hard-blocked at 40 characters.
+    await user.type(input, "a".repeat(41));
+    expect(input).toHaveValue("a".repeat(40));
+    // 40 valid chars is still saveable.
     expect(within(dialog).getByRole("button", { name: "Save" })).toBeEnabled();
   });
 

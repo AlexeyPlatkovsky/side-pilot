@@ -10,7 +10,7 @@
 import type { PersistedSession } from "./api";
 
 /** Longest chat title we persist, in characters (after trimming). */
-export const MAX_TITLE_LENGTH = 120;
+export const MAX_TITLE_LENGTH = 40;
 /** Don't break a trimmed title before this many characters (keeps it readable). */
 const MIN_TITLE_BREAK = 80;
 
@@ -62,7 +62,7 @@ export function generateTitle(prompt: string): string {
   // short; otherwise hard-cut at MAX_TITLE_LENGTH. No ellipsis suffix: the cap
   // is the hard limit so the result stays within isValidTitle's length bound.
   const cut = (lastSpace >= MIN_TITLE_BREAK ? slice.slice(0, lastSpace) : slice).trimEnd();
-  // Degenerate input (e.g. 120+ leading punctuation chars before the first
+  // Degenerate input (e.g. 40+ leading punctuation chars before the first
   // letter) can leave a punctuation-only prefix; treat that as untitled rather
   // than persist a value that would fail isValidTitle.
   return HAS_ALNUM.test(cut) ? cut : "";

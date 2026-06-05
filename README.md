@@ -99,7 +99,7 @@ npm run tauri build
 - `src/chat/api.ts` - typed front-end seam over the Tauri chat commands
   (`run_adapter` + the session/message store); injectable for tests
 - `src/chat/history.ts` - pure rail helpers: title generation and validation
-  (1–120 chars, letters/digits/spaces/basic punctuation, no special symbols;
+  (1–40 chars, letters/digits/spaces/basic punctuation, no special symbols;
   same rule for generated and user-entered titles), relative-time formatting,
   session sorting, and post-delete selection
 - `src/state/chat.ts` - pure chat reducer (transcript + idle/pending/error status)
