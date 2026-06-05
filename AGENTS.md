@@ -129,6 +129,7 @@ Each required `Agent:` artifact must originate from an actually spawned subagent
 - `.claude/manager/MANAGER.md` — classifies and routes non-trivial work; enforces documentation maintenance and task-complete
 
 ### Skills
+- `.claude/skills/discover-requirements/SKILL.md` — structured Q&A to elicit complete, unambiguous requirements for a feature, epic, or task; never guesses; outputs a draft spec ready for scope-verifier and work-with-bead
 - `.claude/skills/brainstorm/SKILL.md` — open design decisions with meaningful trade-offs
 - `.claude/skills/design/SKILL.md` — apply and maintain the design system (CSS tokens) and keep `docs/design-book.md` in sync
 - `.claude/skills/implement-tauri-feature/SKILL.md` — implement a Tauri/React/Rust feature with tests
@@ -142,6 +143,7 @@ Each required `Agent:` artifact must originate from an actually spawned subagent
 - `.claude/skills/task-complete/SKILL.md` — closure reporting for non-trivial routed work
 
 ### Pipelines
+- `.claude/pipelines/discover-feature.md` — requirements discovery, scope verification, user approval, and Beads item creation before implementation
 - `.claude/pipelines/implement-feature.md` — Tauri/React/Rust feature implementation
 - `.claude/pipelines/implement-design-variant.md` — UI design variants, visual redesigns, desktop icon work, and visual validation
 - `.claude/pipelines/design-system.md` — design-system token work (spacing, radius, color, icon, type) and `docs/design-book.md` maintenance
@@ -150,6 +152,7 @@ Each required `Agent:` artifact must originate from an actually spawned subagent
 - `.claude/pipelines/fix-bug.md` — TDD-ordered bug fix for confirmed, root-caused defects
 
 ### Agents
+- `.claude/agents/scope-verifier.md` — checks a draft requirements spec for structural completeness; returns "No gaps" or a numbered gap list with targeted questions; does not write code
 - `.claude/agents/instruction-evaluator.md` — review instruction artifacts for quality and compliance
 - `.claude/agents/artifact-acceptance-tester.md` — acceptance-test new or changed instruction artifacts
 - `.claude/agents/code-reviewer.md` — review implementation diffs for correctness, TDD adherence, and project conventions

@@ -42,6 +42,8 @@ Exempt categories are listed in AGENTS.md §Beads Planning Gate.
 
 For all other non-trivial work, route `.claude/skills/work-with-bead/SKILL.md` before implementation. The skill must check for a relevant existing Beads item. If none exists, it must stop and ask the user whether to create the relevant epic, feature, or task before implementation continues.
 
+**Note:** When the manager routes to `discover-feature`, the Beads planning gate is handled inside that pipeline (Step 4 runs `work-with-bead`). The manager does not separately route `work-with-bead` before that pipeline — doing so would be a duplicate gate.
+
 The manager only decides whether the gate applies. The manager does not inspect or mutate Beads.
 
 ## Git Branch Gate
@@ -54,6 +56,7 @@ The manager only routes the git branch gate. The skill decides whether to create
 
 | Task | Route |
 |---|---|
+| Discover, specify, or scope requirements for a new or partially-defined feature, epic, or task (requirements unknown, incomplete, or unverified). **Do not route here** if a complete approved spec or Beads item with populated acceptance criteria already exists — route to `implement-feature` instead. | `.claude/pipelines/discover-feature.md` |
 | Implement a Tauri/React/Rust feature (floating window, hotkey, chat UI, storage, etc.) | `.claude/pipelines/implement-feature.md` |
 | Implement a non-trivial UI design variant, visual redesign, theme, or matching desktop app icon | `.claude/pipelines/implement-design-variant.md` |
 | Add, change, re-snap, or audit design tokens (spacing, radius, color, icon, type) and `docs/design-book.md` | `.claude/pipelines/design-system.md` |
