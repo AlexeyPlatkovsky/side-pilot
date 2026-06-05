@@ -36,11 +36,9 @@ Classification must be stated before any file is created, edited, or deleted.
 
 For each non-trivial task, decide whether the Beads planning gate applies before selecting the execution route.
 
-The gate is skipped for:
-- documentation-only work
-- AI staff work, including instruction artifacts, skills, pipelines, agents, manager routing, root contracts, and AI-tool governance
-- bug triage
-- bug fixes
+Exempt categories are listed in AGENTS.md §Beads Planning Gate.
+
+**Important: Beads exemption does not exempt a task from the manager itself.** The manager is still loaded for all non-trivial work (per AGENTS.md §Task Classification). Beads-exempt tasks still receive a routing plan from the manager; the exemption only means the manager will not route through the Beads skill.
 
 For all other non-trivial work, route `.claude/skills/work-with-bead/SKILL.md` before implementation. The skill must check for a relevant existing Beads item. If none exists, it must stop and ask the user whether to create the relevant epic, feature, or task before implementation continues.
 
@@ -69,6 +67,8 @@ The manager only routes the git branch gate. The skill decides whether to create
 | Validate non-trivial completed work with local build/test/manual checks | `.claude/agents/test-runner.md` |
 | Review non-trivial UI design or icon work | `.claude/agents/design-reviewer.md` |
 | Open design decision with meaningful trade-offs | `.claude/skills/brainstorm/SKILL.md` |
+| Instruction system change (root contract, manager, pipelines, skills, agents, conventions) | Direct execution with gates from AGENTS.md §Instruction System Changes. Task-complete still required. |
+| Create or update non-instruction reference documentation (e.g. `docs/architecture.md`, `.claude/docs/`) | Direct execution — no pipeline, Beads, or git branch required. Post-change documentation maintenance skill does not apply (the change *is* documentation). Task-complete still required. |
 | Review an instruction artifact for quality and compliance | `.claude/agents/instruction-evaluator.md` |
 | Acceptance-test a new or changed instruction artifact | `.claude/agents/artifact-acceptance-tester.md` |
 
@@ -86,14 +86,7 @@ After the substantive implementation step and before task-complete:
 3. Load `.claude/skills/task-complete/SKILL.md` as the final step.
 4. Before declaring task-complete, verify every required planned output artifact is present in the conversation. If any is missing, return to the missing step or report it as a blocker.
 
-Before sending the final response:
-
-1. Verify that every required routed final artifact appears in the final response draft, not only in earlier commentary.
-2. Always include `Skill: task-complete - output below` for non-trivial routed work.
-3. Include `Agent: test-runner - output below` when validation was required.
-4. Include `Agent: instruction-evaluator - output below` and `Agent: artifact-acceptance-tester - output below` when instruction artifacts, routing, validation gates, or output contracts changed.
-5. If a required artifact is missing from the final response draft, revise the final response before sending.
-6. Each required `Agent:` artifact must come from an actually spawned subagent per `AGENTS.md` → "Agent Execution Mode"; a main-thread-authored stand-in does not satisfy this gate.
+Apply AGENTS.md §Final Response Gate before sending the final response.
 
 ## Risk Escalation
 

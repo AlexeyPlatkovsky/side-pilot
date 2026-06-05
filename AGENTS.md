@@ -35,13 +35,15 @@ When a session begins as discussion and the user signals readiness to proceed ("
 
 ## Beads Planning Gate
 
-For applicable non-trivial work, the manager must route through `.claude/skills/work-with-bead/SKILL.md` before implementation starts.
+For applicable non-trivial work (after the classification gate has loaded the manager), the manager must route through `.claude/skills/work-with-bead/SKILL.md` before implementation starts.
 
 The Beads gate applies to non-trivial product or engineering work unless the task is one of these exempt categories:
 - documentation-only work
 - AI staff work, including instruction artifacts, skills, pipelines, agents, manager routing, root contracts, and AI-tool governance
 - bug triage
 - bug fixes
+
+**Important: exemption from the Beads gate does not exempt a task from the classification gate above.** All non-trivial work — including documentation-only work — must still stop, load MANAGER.md, and wait for the manager's routing plan. The manager will handle Beads-exempt tasks appropriately.
 
 When the Beads gate applies:
 - check whether a relevant Beads item already exists
