@@ -12,6 +12,7 @@ Read:
 - `AGENTS.md` (project root contract and quality gates)
 - The implementation diff or changed-file list for the current task. If using `git diff`, confirm the diff scope matches the current task; do not assume `HEAD~1` is the right boundary.
 - The `Agent: test-runner - output below` validation artifact for non-trivial routed work, unless the implementation artifact marks every validation layer N/A.
+- For any non-trivial change (front-end or Rust): `.claude/conventions/react-tauri/change-hygiene.md` — enforce §1–§3 (state-lifecycle completeness, refactor-invariant re-check, adversarial input coverage) at the severities below; §4 (integration re-audit) is advisory context, not a gated finding
 - For front-end changes: load only the relevant convention files based on the touched surface:
   - windowing: `.claude/conventions/react-tauri/tauri-windowing.md`
   - IPC/permissions: `.claude/conventions/react-tauri/tauri-ipc-permissions.md`
@@ -41,6 +42,11 @@ If the diff or list of changed files is missing, return verdict `Blocked` immedi
 - Tauri command handlers are thin wrappers — no business logic inside `#[tauri::command]` functions
 - External effects (subprocess, fs, time) are behind mockable traits; tests use `mockall`
 - Async tests use `#[tokio::test]`; errors are asserted by variant, not by string content
+
+### Change Hygiene (see `change-hygiene.md`)
+- **State-lifecycle completeness:** new state (status sets, refs, slices) is removed on *every* exit path — success, error, delete, clear, switch-away — not only the happy path. A stranded id (e.g. unread/pending left set after the chat is deleted) is **Major**.
+- **Refactor-invariant re-check:** after a multiplicity change (a component extracted to render more than once) static DOM ids / `htmlFor` / `aria-describedby` must be `useId()`-derived, not hard-coded; after a constant change, coupled constants/call sites are still consistent (no dead thresholds). A duplicate-id or broken-invariant regression is **Major**.
+- **Adversarial input coverage:** validators/formatters/parsers have tests for empty, whitespace, boundary, wrong-kind, and over-length inputs, and never return a value that violates their own documented invariant. A missing adversarial test for non-trivial validation logic is **Major**; an actual invariant-violating return is **Blocking**.
 
 ### General
 - No abstractions beyond what the task requires

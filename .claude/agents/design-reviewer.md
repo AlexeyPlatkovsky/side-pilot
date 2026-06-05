@@ -23,6 +23,8 @@ Read:
 
 For visual or interaction changes, runtime evidence is **required**, not "when available": reviewing the diff alone cannot confirm layout, sizing, drag behavior, focus, or WebKit-specific rendering. Return `Blocked` if the diff is missing, or if runtime evidence is missing for a visual/interaction change. A Chromium-only check (e.g. a generic browser preview) does **not** satisfy this for WebKit-sensitive changes — say so explicitly if that is all that was provided, and treat the WebKit-sensitive aspects as unverified.
 
+The evidence must exercise the change **from the default/initial state a user reaches it through** (panels collapsed, nothing pre-opened or pre-seeded into a convenient state), per `AGENTS.md` → Quality Gates ("Runtime UI validation"). Evidence that only demonstrates the feature in a non-default state (e.g. a rail pre-opened so an in-rail indicator is visible, when the rail is collapsed by default) does **not** satisfy the gate — treat the default-state behavior as unverified and `Fail` the Runtime Evidence Check.
+
 ## Review Criteria
 
 - **Design-system adherence:** CSS in changed files references design tokens
@@ -63,7 +65,7 @@ Severity: Blocking / Major / Minor / Info.
 
 **Design-System Check** — Pass / Fail / Blocked, with one sentence on token adherence and styles.css ↔ design-book.md sync.
 
-**Runtime Evidence Check** — Pass / Fail / Blocked, naming the evidence reviewed (real Tauri window / WebKit harness / Chromium-only / none). Fail or Blocked if a visual or interaction change has no real-runtime evidence.
+**Runtime Evidence Check** — Pass / Fail / Blocked, naming the evidence reviewed (real Tauri window / WebKit harness / Chromium-only / none). `Blocked` if a visual or interaction change has no real-runtime evidence; `Fail` if evidence exists but only demonstrates the feature in a non-default (pre-opened/pre-seeded) state rather than the default/initial state the user reaches it through.
 
 **Platform Scope Check** — Pass / Fail / Blocked, with one sentence.
 
