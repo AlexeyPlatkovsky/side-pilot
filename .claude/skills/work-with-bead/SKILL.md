@@ -15,12 +15,7 @@ Use this skill when the manager routes the Beads planning gate, or when planning
 
 Do not create or update Beads items for trivial work: single-step, low-risk work with no behavioral, structural, command, contract, or domain-fact change.
 
-Do not require Beads for these exempt non-trivial categories:
-
-- documentation-only work
-- AI staff work, including instruction artifacts, skills, pipelines, agents, manager routing, root contracts, and AI-tool governance
-- bug triage
-- bug fixes
+Beads exemption follows the non-trivial exempt categories defined in AGENTS.md § Beads Planning Gate. Do not restate the list here; refer to the root contract as the single source of truth.
 
 ## Repository Setup Rules
 
@@ -74,6 +69,7 @@ Before creating any item:
 2. Consider only IDs that match `^SP-[0-9]{3}$`.
 3. Pick the next unused sequence number: highest existing `NNN` plus one, or `SP-001` when none exist.
 4. Create the item with `bd create --id SP-NNN`.
+5. If `bd create --id SP-NNN` fails (e.g., duplicate ID from a concurrent agent), re-run `bd list --all --json` to re-scan existing IDs, pick the next unused sequence number, and retry. Repeat up to three times before reporting a blocking error.
 
 Do not create hash-style IDs such as `SP-a3f2dd`.
 
@@ -133,13 +129,14 @@ Features must include:
 - required child task breakdown
 - dependencies on other features or tasks
 - validation expectations
+- BDD scenario coverage for feature-level workflows in `docs/<feature-id>/<feature-id>.feature` (same convention as tasks)
 
 Tasks must include:
 
 - concrete implementation objective
 - parent feature or epic to read first when context would otherwise be duplicated
 - target files, modules, commands, or interfaces when known
-- acceptance criteria
+- acceptance — Definition of Done checklist in `--acceptance`, BDD scenarios in `docs/<feature-id>/<task-id>.feature`
 - test or manual validation expectations
 - dependencies on other tasks
 - documentation updates needed, or an explicit statement that none are expected
@@ -147,10 +144,47 @@ Tasks must include:
 Use Beads fields for detail instead of hiding requirements in the title:
 
 - `--description` for the main implementation context
-- `--acceptance` for done criteria
+- `--acceptance` for the **Definition of Done checklist** — a bullet list of verifiable conditions. Each bullet must be objectively pass/fail. This is the concise done criterion, not the full behavioral specification.
 - `--design` or `--context` for constraints, references, and rationale
 - `--labels` for searchable categories such as `frontend`, `rust`, `tauri`, `docs`, or `cli-adapter`
 - `--priority` only when the user or plan gives a real priority signal
+
+## BDD Scenario Files
+
+Tasks with behavioral expectations that can be expressed as concrete Given/When/Then steps must include BDD scenario specifications as separate Gherkin files. Tasks without behavioral change — pure refactors, performance tuning, DB migrations, or similar — may skip scenario files.
+
+Feature-level BDD coverage is required unless all child task scenarios collectively cover every feature workflow.
+
+- File path: `docs/<feature-id>/<task-id>.feature` for tasks with a parent feature; use `docs/tasks/<task-id>.feature` for standalone tasks that have no parent feature
+- Format: Standard Gherkin (`Feature:` / `Scenario:` / `Given` / `When` / `Then` / `And` / `But`)
+- Each scenario covers one behavioral case: happy path, error state, edge case, or permission denial
+- Scenario files are the authoritative behavior specification for implementation and testing — not a prose supplement to `--acceptance`, but the structured specification itself
+
+Example structure for `docs/SP-015/SP-016.feature`:
+
+```gherkin
+Feature: Multi-tool transcript replay and routing
+  As a user I want to route prompts to one or all assistants
+  so that I can compare responses and get synthesized results
+
+  Scenario: Route a prompt to a single selected assistant
+    Given the user has selected "Codex" as the target assistant
+    When the user submits a prompt
+    Then the route planner returns only the Codex adapter target
+    And the transcript composer includes prior relevant turns in deterministic order
+
+  Scenario: Route to all assistants concurrently
+    Given the user has selected "All" as the target
+    When the user submits a prompt
+    Then the route planner prepares concurrent requests for all available adapters
+    And partial failure for one adapter does not cancel other adapter requests
+```
+
+Rules:
+
+- Create or update the scenario file whenever the task's acceptance criteria or behavioral expectations change.
+- Keep the DoD checklist in `--acceptance` focused on verifiable outcomes. The detail lives in the scenario file.
+- When implementing, the scenario file is the primary specification an AI agent or developer reads first after the Beads item.
 
 ## Work Update Rules
 
