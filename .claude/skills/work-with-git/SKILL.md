@@ -47,6 +47,7 @@ Before edits:
 3. If fetching fails but local `origin/main` exists, create the branch from local `origin/main` and report the fetch failure in this skill's output.
 4. If `origin/main` is missing, stop and ask the user for the branch base.
 5. Check whether uncommitted changes are present and whether they appear related to the task.
+6. After creating a new branch, immediately publish it with `git push -u origin <branch-name>`. This sets the upstream tracking reference and makes the branch visible on the remote without requiring an empty commit. Report the push result in the output.
 
 After edits:
 
@@ -62,7 +63,7 @@ When this skill gates non-trivial routed work, begin with:
 
 Then report:
 
-| Status | Branch Decision | Base | Commit / Push Boundary |
-|--------|-----------------|------|------------------------|
+| Status | Branch Decision | Base | Remote Published | Commit / Push Boundary |
+|--------|-----------------|------|-----------------|------------------------|
 
 `Status` must be one of: `completed`, `skipped`, or `blocked`.
