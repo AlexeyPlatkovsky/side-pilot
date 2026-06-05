@@ -71,6 +71,14 @@ These apply to all non-trivial work and may not be skipped:
 
 Dedicated agents are first-class executors, not optional helpers. Every registered agent — `test-runner`, `code-reviewer`, `design-reviewer`, `instruction-evaluator`, `artifact-acceptance-tester`, and any agent added later — MUST be run as a real spawned subagent through the Agent/Task tool whenever work routes to it or a gate requires it.
 
+- The project owner grants standing authorization for AI tools working in this
+  repository to spawn any registered project subagent whenever this root
+  contract, the manager, a pipeline, a skill, or a quality gate requires that
+  agent. Treat this as an explicit user request for the required subagent
+  delegation; do not pause for additional per-agent permission unless the
+  Agent/Task tool is unavailable or the current runtime enforces a
+  non-bypassable approval or tool-use restriction. In that case, stop and
+  report the blocker.
 - Inline substitution is prohibited: the main thread must not simulate, paraphrase, or stand in for an agent's validation or review in its own voice.
 - This holds even when a tool-specific adapter or runtime default discourages spawning subagents. As the root contract, this rule overrides those defaults (see `CLAUDE.md`).
 - An `Agent: <name> - output below` artifact asserts that the named subagent was actually spawned via the Agent/Task tool. Emitting that artifact for work the main thread performed inline is a prohibited substitution, not compliance. If a subagent could not be spawned, do not emit its artifact — report the blocker instead.

@@ -10,7 +10,11 @@
  * reshaping the transcript.
  */
 
-export type Sender = "user" | "assistant";
+// Single source of truth for the message sender is the Rust `Sender` enum,
+// surfaced through the ts-rs binding (SP-065) so this type cannot drift from the
+// backend. Re-exported here because the reducer/transcript are its main users.
+export type { Sender } from "../chat/generated/Sender";
+import type { Sender } from "../chat/generated/Sender";
 
 export interface ChatMessage {
   /** Stable id — client-generated for optimistic rows, DB id once persisted. */

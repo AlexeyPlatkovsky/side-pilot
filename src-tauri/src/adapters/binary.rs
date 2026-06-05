@@ -5,12 +5,11 @@
 //! [`BinaryResolver`] turns an [`AssistantId`] into an **absolute path**,
 //! discovered once and cached. The seam is a trait so adapter tests mock it.
 
-use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
 
 use async_trait::async_trait;
 
+use super::cache::LookupCache;
 use super::error::AdapterError;
 use super::AssistantId;
 
@@ -30,7 +29,7 @@ type Lookup = Box<dyn Fn(AssistantId) -> std::io::Result<PathBuf> + Send + Sync>
 /// tool's real `PATH` is consulted) or `where` on Windows, and caches the
 /// result per assistant.
 pub struct SystemBinaryResolver {
-    cache: Mutex<HashMap<AssistantId, PathBuf>>,
+    cache: LookupCache<PathBuf>,
     lookup: Lookup,
 }
 
@@ -44,7 +43,7 @@ impl SystemBinaryResolver {
     /// Build a resolver backed by the real OS lookup.
     pub fn new() -> Self {
         Self {
-            cache: Mutex::new(HashMap::new()),
+            cache: LookupCache::new(),
             lookup: Box::new(os_lookup),
         }
     }
@@ -54,7 +53,7 @@ impl SystemBinaryResolver {
     #[cfg(test)]
     fn with_lookup(lookup: Lookup) -> Self {
         Self {
-            cache: Mutex::new(HashMap::new()),
+            cache: LookupCache::new(),
             lookup,
         }
     }
@@ -63,12 +62,9 @@ impl SystemBinaryResolver {
 #[async_trait]
 impl BinaryResolver for SystemBinaryResolver {
     async fn resolve(&self, id: AssistantId) -> Result<PathBuf, AdapterError> {
-        if let Some(path) = self.cache.lock().unwrap().get(&id).cloned() {
-            return Ok(path);
-        }
-        let path = (self.lookup)(id).map_err(|_| AdapterError::BinaryNotFound)?;
-        self.cache.lock().unwrap().insert(id, path.clone());
-        Ok(path)
+        self.cache
+            .get_or_try_insert_with(id, || (self.lookup)(id))
+            .map_err(|_| AdapterError::BinaryNotFound)
     }
 }
 

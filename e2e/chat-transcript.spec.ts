@@ -75,8 +75,6 @@ test("the rail shows a spinner while replying, then an unread dot in the backgro
   await page.getByRole("button", { name: /Show chat history/ }).click();
 
   // Reopening the chat clears the unread dot.
-  await page
-    .locator(".chat-row__select", { hasText: "Refactor auth module" })
-    .click();
+  await page.locator(".chat-row__select", { hasText: "Refactor auth module" }).click();
   await expect(page.locator(".chat-row__unread")).toHaveCount(0);
 });

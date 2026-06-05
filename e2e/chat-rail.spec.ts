@@ -16,9 +16,7 @@ async function gotoPanel(page: Page) {
 }
 
 async function mainWidth(page: Page) {
-  return page.$eval(".chat__main", (el) =>
-    Math.round(el.getBoundingClientRect().width),
-  );
+  return page.$eval(".chat__main", (el) => Math.round(el.getBoundingClientRect().width));
 }
 
 test("the rail toggles open and reclaims transcript width when hidden", async ({

@@ -183,7 +183,10 @@ describe("sortSessions", () => {
   });
 
   it("does not mutate the input array", () => {
-    const input = [session({ id: "a", updatedAt: 1 }), session({ id: "b", updatedAt: 2 })];
+    const input = [
+      session({ id: "a", updatedAt: 1 }),
+      session({ id: "b", updatedAt: 2 }),
+    ];
     sortSessions(input);
     expect(input.map((s) => s.id)).toEqual(["a", "b"]);
   });

@@ -34,9 +34,7 @@ test("composer starts at a single row", async ({ page }) => {
   expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight + 1);
 });
 
-test("composer auto-grows with newlines, then caps and scrolls", async ({
-  page,
-}) => {
+test("composer auto-grows with newlines, then caps and scrolls", async ({ page }) => {
   await gotoPanel(page);
   const start = (await inputBox(page)).height;
 
@@ -62,9 +60,7 @@ test("the auto-grown field fits its content exactly — no trailing gap", async 
   expect(box.scrollHeight).toBe(box.clientHeight);
 });
 
-test("a single-row composer stays compact (no over-tall box)", async ({
-  page,
-}) => {
+test("a single-row composer stays compact (no over-tall box)", async ({ page }) => {
   await gotoPanel(page);
   const composerHeight = await page.$eval(".composer", (el) =>
     Math.round(el.getBoundingClientRect().height),

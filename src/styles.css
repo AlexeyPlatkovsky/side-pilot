@@ -1,7 +1,28 @@
 /* =============================================================================
-   Design tokens — the single source of truth for spacing, radius, type, icon
-   sizes, and color. Change a value here and it propagates everywhere.
-   Human-readable reference and usage rules live in docs/design-book.md.
+   side-pilot stylesheet — section index (SP-069)
+
+   One file by design: the app has no CSS preprocessor and rule order matters
+   for the cascade, so styles stay in a single file with strong section banners
+   rather than split across @import-ed files (which would risk cascade drift and
+   brittle load order). The organization strategy is documented in
+   docs/design-book.md › "Stylesheet organization".
+
+     §1  Design tokens (:root)              — palette, spacing, radius, type, icons
+     §2  App shell                          — transparent window, collapsed bubble,
+                                              expanded panel + header
+     §3  Transcript                         — messages, meta, Markdown, thinking,
+                                              error banner
+     §4  History rail, toolbar & dialogs    — rail, row status, options, modals
+
+   Tokens are authoritative: components reference them via var(); never hardcode
+   a value a token already names. Human-readable token reference lives in
+   docs/design-book.md.
+   ========================================================================== */
+
+/* =============================================================================
+   §1  DESIGN TOKENS
+   The single source of truth for spacing, radius, type, icon sizes, and color.
+   Change a value here and it propagates everywhere.
    ========================================================================== */
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -84,6 +105,10 @@
   --font-lg: 18px;
   --font-weight-bold: 700;
 }
+
+/* =============================================================================
+   §2  APP SHELL — transparent window, collapsed bubble, expanded panel + header
+   ========================================================================== */
 
 /* The Tauri window itself is transparent and undecorated; the bubble/panel
    paint their own rounded surfaces so they float cleanly over other apps.
@@ -303,6 +328,10 @@ body {
   gap: var(--space-3);
 }
 
+/* =============================================================================
+   §3  TRANSCRIPT — messages, meta line, assistant Markdown, thinking, error
+   ========================================================================== */
+
 .message {
   max-width: 86%;
   padding: var(--space-3);
@@ -496,7 +525,10 @@ body {
   opacity: 0.76;
 }
 
-/* --- Chat history rail + toolbar + dialogs (SP-048–051) ------------------- */
+/* =============================================================================
+   §4  HISTORY RAIL, TOOLBAR & DIALOGS (SP-048–051) — rail, row status, options,
+   modal dialogs (rename / delete / clear)
+   ========================================================================== */
 
 /* The chat body lays the rail beside the main column. `position: relative`
    anchors the modal overlay to the chat area (below the header). */

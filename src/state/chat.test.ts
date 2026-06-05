@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  chatReducer,
-  initialChatState,
-  type ChatMessage,
-  type ChatState,
-} from "./chat";
+import { chatReducer, initialChatState, type ChatMessage, type ChatState } from "./chat";
 
 const userMsg = (content: string): ChatMessage => ({
   id: `u-${content}`,
@@ -62,10 +57,7 @@ describe("chatReducer", () => {
       type: "success",
       message: assistantMsg("here you go"),
     });
-    expect(state.messages.map((m) => m.content)).toEqual([
-      "explain this",
-      "here you go",
-    ]);
+    expect(state.messages.map((m) => m.content)).toEqual(["explain this", "here you go"]);
     expect(state.status).toEqual({ kind: "idle" });
   });
 

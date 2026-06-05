@@ -17,6 +17,6 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src", "e2e"],
+  "include": ["src", "e2e", "vitest.setup.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

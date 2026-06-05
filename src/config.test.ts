@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const viteConfig = readFileSync("vite.config.ts", "utf8");
-const tauriConfig = JSON.parse(
-  readFileSync("src-tauri/tauri.conf.json", "utf8"),
-) as {
+const tauriConfig = JSON.parse(readFileSync("src-tauri/tauri.conf.json", "utf8")) as {
   build: {
     devUrl: string;
   };

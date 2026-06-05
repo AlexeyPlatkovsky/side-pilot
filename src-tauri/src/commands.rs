@@ -7,9 +7,9 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
 use tauri::State;
-use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult};
@@ -37,18 +37,28 @@ impl AppState {
         format!("adapter-run-{id}")
     }
 
-    pub async fn register_run(&self, run_id: String) -> CancellationToken {
+    pub fn register_run(&self, run_id: String) -> CancellationToken {
         let token = CancellationToken::new();
-        self.active_runs.lock().await.insert(run_id, token.clone());
+        self.active_runs
+            .lock()
+            .expect("active run mutex poisoned")
+            .insert(run_id, token.clone());
         token
     }
 
-    async fn finish_run(&self, run_id: &str) {
-        self.active_runs.lock().await.remove(run_id);
+    fn finish_run(&self, run_id: &str) {
+        self.active_runs
+            .lock()
+            .expect("active run mutex poisoned")
+            .remove(run_id);
     }
 
     pub async fn cancel_run(&self, run_id: &str) -> bool {
-        let token = self.active_runs.lock().await.remove(run_id);
+        let token = self
+            .active_runs
+            .lock()
+            .expect("active run mutex poisoned")
+            .remove(run_id);
         match token {
             Some(token) => {
                 token.cancel();
@@ -56,6 +66,25 @@ impl AppState {
             }
             None => false,
         }
+    }
+
+    #[cfg(test)]
+    fn active_run_count(&self) -> usize {
+        self.active_runs
+            .lock()
+            .expect("active run mutex poisoned")
+            .len()
+    }
+}
+
+struct ActiveRunGuard<'a> {
+    state: &'a AppState,
+    run_id: String,
+}
+
+impl Drop for ActiveRunGuard<'_> {
+    fn drop(&mut self) {
+        self.state.finish_run(&self.run_id);
     }
 }
 
@@ -85,9 +114,12 @@ async fn run_adapter_with_state(
         .run_id
         .clone()
         .unwrap_or_else(|| state.next_run_id());
-    let cancel = state.register_run(run_id.clone()).await;
+    let cancel = state.register_run(run_id.clone());
+    let _active_run = ActiveRunGuard {
+        state,
+        run_id,
+    };
     let result = state.registry.run(request, cancel).await;
-    state.finish_run(&run_id).await;
     result
 }
 
@@ -174,6 +206,77 @@ pub fn open_external(url: String) -> Result<(), crate::links::OpenError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use crate::adapters::{AssistantId, CliAdapter, PermissionMode};
+    use async_trait::async_trait;
+
+    fn request(run_id: &str) -> AdapterRequest {
+        AdapterRequest {
+            assistant: AssistantId::Codex,
+            prompt: "hi".to_string(),
+            working_directory: None,
+            model: None,
+            reasoning_effort: None,
+            permission_mode: PermissionMode::ReadOnly,
+            timeout_ms: 1000,
+            resume_session_id: None,
+            run_id: Some(run_id.to_string()),
+        }
+    }
+
+    struct StaticAdapter {
+        result: Result<AdapterResult, AdapterError>,
+    }
+
+    #[async_trait]
+    impl CliAdapter for StaticAdapter {
+        fn id(&self) -> AssistantId {
+            AssistantId::Codex
+        }
+
+        async fn run(
+            &self,
+            _req: AdapterRequest,
+            _cancel: CancellationToken,
+        ) -> Result<AdapterResult, AdapterError> {
+            self.result.clone()
+        }
+    }
+
+    struct PendingAdapter;
+
+    #[async_trait]
+    impl CliAdapter for PendingAdapter {
+        fn id(&self) -> AssistantId {
+            AssistantId::Codex
+        }
+
+        async fn run(
+            &self,
+            _req: AdapterRequest,
+            cancel: CancellationToken,
+        ) -> Result<AdapterResult, AdapterError> {
+            cancel.cancelled().await;
+            Ok(AdapterResult {
+                assistant_text: "cancelled".to_string(),
+                raw_json: "{}".to_string(),
+                native_session_id: None,
+                usage: None,
+            })
+        }
+    }
+
+    fn state_with(adapter: Arc<dyn CliAdapter>) -> AppState {
+        let mut registry = AdapterRegistry::new();
+        registry.register(adapter);
+        AppState {
+            registry,
+            active_runs: Default::default(),
+            next_run: AtomicU64::new(1),
+        }
+    }
 
     #[test]
     fn app_version_is_non_empty() {
@@ -183,10 +286,63 @@ mod tests {
     #[tokio::test]
     async fn app_state_can_cancel_active_run_by_id() {
         let state = AppState::default();
-        let token = state.register_run("run-1".to_string()).await;
+        let token = state.register_run("run-1".to_string());
 
         assert!(state.cancel_run("run-1").await);
         assert!(token.is_cancelled());
         assert!(!state.cancel_run("run-1").await);
+    }
+
+    #[tokio::test]
+    async fn run_adapter_removes_active_run_after_success() {
+        let state = state_with(Arc::new(StaticAdapter {
+            result: Ok(AdapterResult {
+                assistant_text: "ok".to_string(),
+                raw_json: "{}".to_string(),
+                native_session_id: None,
+                usage: None,
+            }),
+        }));
+
+        let result = run_adapter_with_state(&state, request("run-success"))
+            .await
+            .unwrap();
+
+        assert_eq!(result.assistant_text, "ok");
+        assert!(!state.cancel_run("run-success").await);
+    }
+
+    #[tokio::test]
+    async fn run_adapter_removes_active_run_after_error() {
+        let state = state_with(Arc::new(StaticAdapter {
+            result: Err(AdapterError::BinaryNotFound),
+        }));
+
+        let err = run_adapter_with_state(&state, request("run-error"))
+            .await
+            .unwrap_err();
+
+        assert_eq!(err, AdapterError::BinaryNotFound);
+        assert!(!state.cancel_run("run-error").await);
+    }
+
+    #[tokio::test]
+    async fn run_adapter_removes_active_run_when_future_is_dropped() {
+        let state = Arc::new(state_with(Arc::new(PendingAdapter)));
+        let task_state = Arc::clone(&state);
+        let handle = tokio::spawn(async move {
+            run_adapter_with_state(&task_state, request("run-drop")).await
+        });
+        loop {
+            if state.active_run_count() == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(1)).await;
+        }
+
+        handle.abort();
+        let _ = handle.await;
+
+        assert!(!state.cancel_run("run-drop").await);
     }
 }

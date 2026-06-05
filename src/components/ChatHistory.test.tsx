@@ -77,21 +77,21 @@ describe("ChatHistory", () => {
 
   it("marks the active chat with aria-current", () => {
     renderHistory({ activeSessionId: "b" });
-    expect(
-      screen.getByRole("button", { name: "Second chat" }),
-    ).toHaveAttribute("aria-current", "true");
-    expect(
-      screen.getByRole("button", { name: "First chat" }),
-    ).not.toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: "Second chat" })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "First chat" })).not.toHaveAttribute(
+      "aria-current",
+      "true",
+    );
   });
 
   it("shows an Untitled placeholder for a session with no title", () => {
     renderHistory({
       sessions: [session({ id: "a", title: null })],
     });
-    expect(
-      screen.getByRole("button", { name: "Untitled chat" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Untitled chat" })).toBeInTheDocument();
   });
 
   it("selects a chat when its row is clicked", async () => {

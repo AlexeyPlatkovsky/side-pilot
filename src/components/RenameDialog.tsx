@@ -59,8 +59,8 @@ export function RenameDialog({ session, onCancel, onSave }: RenameDialogProps) {
         />
         {showHint && (
           <p id={hintId} className="dialog__hint" role="alert">
-            Use letters, digits, spaces, and basic punctuation
-            (’ . , - ( )), up to {MAX_TITLE_LENGTH} characters.
+            Use letters, digits, spaces, and basic punctuation (’ . , - ( )), up to{" "}
+            {MAX_TITLE_LENGTH} characters.
           </p>
         )}
         <div className="dialog__actions">

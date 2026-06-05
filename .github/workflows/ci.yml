@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cargo-nextest
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Test frontend
+        run: npm run test
+
+      - name: Install Playwright WebKit
+        run: npx playwright install --with-deps webkit
+
+      - name: Test WebKit runtime harness
+        run: npm run test:e2e
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Test Rust core
+        run: cargo nextest run --manifest-path src-tauri/Cargo.toml
+
+      - name: Check IPC bindings are up to date
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml export_bindings
+          git diff --exit-code src/chat/generated
+
+      - name: Lint Rust core
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings

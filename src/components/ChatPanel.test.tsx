@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
-import { createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  createEvent,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "./ChatPanel";
 import type {
@@ -33,12 +40,14 @@ function persisted(
 }
 
 /** Build a fake ChatApi with overridable behavior and spies. */
-function makeApi(opts: {
-  history?: PersistedMessage[];
-  sessions?: PersistedSession[];
-  runAdapter?: ChatApi["runAdapter"];
-  readHistory?: ChatApi["readHistory"];
-} = {}): ChatApi {
+function makeApi(
+  opts: {
+    history?: PersistedMessage[];
+    sessions?: PersistedSession[];
+    runAdapter?: ChatApi["runAdapter"];
+    readHistory?: ChatApi["readHistory"];
+  } = {},
+): ChatApi {
   return {
     listSessions: vi.fn(() => Promise.resolve(opts.sessions ?? [SESSION])),
     createSession: vi.fn((title = null) =>
@@ -140,9 +149,7 @@ describe("ChatPanel", () => {
 
     resolveRun({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
 
-    await waitFor(() =>
-      expect(screen.queryByTestId("thinking")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("thinking")).not.toBeInTheDocument());
   });
 
   it("surfaces an error without losing the user's message", async () => {
@@ -583,10 +590,9 @@ describe("ChatPanel", () => {
     await user.click(screen.getByRole("button", { name: /Options for One/ }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(
-      within(screen.getByRole("dialog", { name: /Delete chat/ })).getByRole(
-        "button",
-        { name: "Delete" },
-      ),
+      within(screen.getByRole("dialog", { name: /Delete chat/ })).getByRole("button", {
+        name: "Delete",
+      }),
     );
 
     await waitFor(() => expect(api.deleteSession).toHaveBeenCalledWith("s1"));
@@ -609,9 +615,7 @@ describe("ChatPanel", () => {
     await waitForReady(api);
 
     // With nothing unread, the closed toggle has no unread signal.
-    expect(
-      screen.getByRole("button", { name: "Show chat history" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show chat history" })).toBeInTheDocument();
 
     // Reply on One lands while viewing Two → One is unread in the background.
     await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
@@ -676,8 +680,6 @@ describe("ChatPanel", () => {
     await user.type(input, "Renamed");
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(api.renameSession).toHaveBeenCalledWith("s1", "Renamed"),
-    );
+    await waitFor(() => expect(api.renameSession).toHaveBeenCalledWith("s1", "Renamed"));
   });
 });

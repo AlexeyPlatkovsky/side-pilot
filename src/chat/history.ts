@@ -18,8 +18,8 @@ const MIN_TITLE_BREAK = 80;
 // punctuation (hyphen, straight/curly apostrophe, period, comma, parentheses).
 // Everything else — `@ # $ % ^ & * / = < > !`, emoji, control chars — is a
 // "special symbol" and is rejected on rename and stripped from generated titles.
-const ALLOWED_TITLE = /^[\p{L}\p{N} '’.,()\-]+$/u;
-const DISALLOWED_TITLE_CHARS = /[^\p{L}\p{N} '’.,()\-]+/gu;
+const ALLOWED_TITLE = /^[\p{L}\p{N} '’.,()-]+$/u;
+const DISALLOWED_TITLE_CHARS = /[^\p{L}\p{N} '’.,()-]+/gu;
 /** A valid title must carry at least one letter or digit (not punctuation-only). */
 const HAS_ALNUM = /[\p{L}\p{N}]/u;
 
@@ -49,10 +49,7 @@ export function isValidTitle(raw: string): boolean {
 export function generateTitle(prompt: string): string {
   // Replace disallowed runs with a space so adjacent words don't fuse, then
   // collapse the whitespace that leaves behind.
-  const cleaned = prompt
-    .replace(DISALLOWED_TITLE_CHARS, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const cleaned = prompt.replace(DISALLOWED_TITLE_CHARS, " ").replace(/\s+/g, " ").trim();
   if (!HAS_ALNUM.test(cleaned)) return "";
   if (cleaned.length <= MAX_TITLE_LENGTH) return cleaned;
 
@@ -61,7 +58,9 @@ export function generateTitle(prompt: string): string {
   // Break on the last word boundary, but only if that doesn't cut the title too
   // short; otherwise hard-cut at MAX_TITLE_LENGTH. No ellipsis suffix: the cap
   // is the hard limit so the result stays within isValidTitle's length bound.
-  const cut = (lastSpace >= MIN_TITLE_BREAK ? slice.slice(0, lastSpace) : slice).trimEnd();
+  const cut = (
+    lastSpace >= MIN_TITLE_BREAK ? slice.slice(0, lastSpace) : slice
+  ).trimEnd();
   // Degenerate input (e.g. 40+ leading punctuation chars before the first
   // letter) can leave a punctuation-only prefix; treat that as untitled rather
   // than persist a value that would fail isValidTitle.

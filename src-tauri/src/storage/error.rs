@@ -15,6 +15,10 @@ pub enum StorageError {
     NotFound { entity: String },
     /// A SQL query or connection operation failed.
     Query { detail: String },
+    /// The store cannot be used safely because its connection state is suspect.
+    StorageUnavailable { detail: String },
+    /// The database was created by a newer schema than this binary supports.
+    UnsupportedSchemaVersion { found: i64, supported: i64 },
 }
 
 impl std::fmt::Display for StorageError {
@@ -22,6 +26,13 @@ impl std::fmt::Display for StorageError {
         match self {
             StorageError::NotFound { entity } => write!(f, "not found: {entity}"),
             StorageError::Query { detail } => write!(f, "storage query failed: {detail}"),
+            StorageError::StorageUnavailable { detail } => {
+                write!(f, "storage unavailable: {detail}")
+            }
+            StorageError::UnsupportedSchemaVersion { found, supported } => write!(
+                f,
+                "unsupported storage schema version {found}; supported version is {supported}"
+            ),
         }
     }
 }
@@ -60,5 +71,20 @@ mod tests {
         let json = serde_json::to_string(&original).unwrap();
         let parsed: StorageError = serde_json::from_str(&json).unwrap();
         assert_eq!(original, parsed);
+    }
+
+    #[test]
+    fn storage_unavailable_serializes_with_kind_tag() {
+        let json = serde_json::to_value(StorageError::StorageUnavailable {
+            detail: "connection mutex poisoned".to_string(),
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "kind": "storageUnavailable",
+                "detail": "connection mutex poisoned"
+            })
+        );
     }
 }

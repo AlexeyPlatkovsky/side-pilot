@@ -5,11 +5,9 @@
 //! CLIs can still find their config and credentials when launched from Finder
 //! or Explorer-like contexts.
 
-use std::collections::HashMap;
-use std::sync::Mutex;
-
 use async_trait::async_trait;
 
+use super::cache::LookupCache;
 use super::error::AdapterError;
 use super::AssistantId;
 
@@ -22,7 +20,7 @@ pub trait EnvironmentProvider: Send + Sync {
 }
 
 pub struct SystemEnvironmentProvider {
-    cache: Mutex<HashMap<AssistantId, Vec<(String, String)>>>,
+    cache: LookupCache<Vec<(String, String)>>,
     lookup: Lookup,
 }
 
@@ -35,7 +33,7 @@ impl Default for SystemEnvironmentProvider {
 impl SystemEnvironmentProvider {
     pub fn new() -> Self {
         Self {
-            cache: Mutex::new(HashMap::new()),
+            cache: LookupCache::new(),
             lookup: Box::new(os_environment),
         }
     }
@@ -43,7 +41,7 @@ impl SystemEnvironmentProvider {
     #[cfg(test)]
     fn with_lookup(lookup: Lookup) -> Self {
         Self {
-            cache: Mutex::new(HashMap::new()),
+            cache: LookupCache::new(),
             lookup,
         }
     }
@@ -52,16 +50,12 @@ impl SystemEnvironmentProvider {
 #[async_trait]
 impl EnvironmentProvider for SystemEnvironmentProvider {
     async fn environment(&self, id: AssistantId) -> Result<Vec<(String, String)>, AdapterError> {
-        if let Some(env) = self.cache.lock().unwrap().get(&id).cloned() {
-            return Ok(env);
-        }
-
-        let env = (self.lookup)(id).map_err(|err| AdapterError::NonZeroExit {
-            code: None,
-            stderr: format!("failed to resolve CLI environment: {err}"),
-        })?;
-        self.cache.lock().unwrap().insert(id, env.clone());
-        Ok(env)
+        self.cache
+            .get_or_try_insert_with(id, || (self.lookup)(id))
+            .map_err(|err| AdapterError::NonZeroExit {
+                code: None,
+                stderr: format!("failed to resolve CLI environment: {err}"),
+            })
     }
 }
 

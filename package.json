@@ -8,9 +8,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier eslint.config.js package.json tsconfig.json tsconfig.node.json vite.config.ts playwright.config.ts vitest.setup.ts README.md \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.ts\" .github/workflows/ci.yml --write",
+    "format:check": "prettier eslint.config.js package.json tsconfig.json tsconfig.node.json vite.config.ts playwright.config.ts vitest.setup.ts README.md \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.ts\" .github/workflows/ci.yml --check",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "rust:test": "cargo nextest run --manifest-path src-tauri/Cargo.toml",
+    "rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "gen:bindings": "cargo test --manifest-path src-tauri/Cargo.toml export_bindings",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -21,6 +28,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.60.0",
     "@tauri-apps/cli": "^2.11.2",
     "@testing-library/jest-dom": "^6.6.3",
@@ -30,8 +38,13 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^10.4.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
     "jsdom": "^25.0.1",
+    "prettier": "^3.8.3",
     "typescript": "^5.6.3",
+    "typescript-eslint": "^8.60.1",
     "vite": "^6.0.3",
     "vitest": "^2.1.8"
   }

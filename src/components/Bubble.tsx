@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef } from "react";
 import { bubbleReducer, type BubbleState } from "../state/bubbleState";
 import { applyWindowSize } from "../state/windowResize";
-import { wasDragged, type Point } from "../state/drag";
+import { useClickVsDrag } from "../state/drag";
 import { ChatPanel } from "./ChatPanel";
 import { inertChatApi, type ChatApi } from "../chat/api";
 // Single source of truth for the app mark: the same artwork bundled as the
@@ -40,9 +40,11 @@ export function Bubble({
 }: BubbleProps) {
   const [state, dispatch] = useReducer(bubbleReducer, initialState);
 
-  // Screen position where the press started, used to tell a click apart from a
-  // window drag so dragging the bubble doesn't spuriously expand it.
-  const pressOrigin = useRef<Point | null>(null);
+  // The collapsed dot and the panel mark are both window-drag handles and click
+  // targets; this shared hook tells a click apart from a drag so dragging the
+  // window doesn't spuriously expand/collapse it.
+  const dotHandlers = useClickVsDrag(() => dispatch("expand"));
+  const markHandlers = useClickVsDrag(() => dispatch("collapse"));
 
   // The collapsed bubble has its own tiny size; every other ("panel") view —
   // expanded, settings, and any future view — shares one window size. We only
@@ -88,20 +90,6 @@ export function Bubble({
   }, [state]);
 
   if (state === "collapsed") {
-    const onMouseDown = (event: React.MouseEvent) => {
-      pressOrigin.current = { x: event.screenX, y: event.screenY };
-    };
-
-    const onClick = (event: React.MouseEvent) => {
-      const origin = pressOrigin.current;
-      pressOrigin.current = null;
-      // A click that ended far from where it began was a window drag — ignore it.
-      if (origin && wasDragged(origin, { x: event.screenX, y: event.screenY })) {
-        return;
-      }
-      dispatch("expand");
-    };
-
     return (
       <div className="bubble bubble--collapsed">
         <button
@@ -109,8 +97,8 @@ export function Bubble({
           className="bubble__dot"
           aria-label="Open side-pilot"
           data-tauri-drag-region
-          onMouseDown={onMouseDown}
-          onClick={onClick}
+          onMouseDown={dotHandlers.onMouseDown}
+          onClick={dotHandlers.onClick}
         >
           <img className="bubble__icon" src={appIcon} alt="" draggable={false} />
         </button>
@@ -120,25 +108,9 @@ export function Bubble({
 
   const inSettings = state === "settings";
 
-  const onPanelMarkMouseDown = (event: React.MouseEvent) => {
-    pressOrigin.current = { x: event.screenX, y: event.screenY };
-  };
-
-  const onPanelMarkClick = (event: React.MouseEvent) => {
-    const origin = pressOrigin.current;
-    pressOrigin.current = null;
-    if (origin && wasDragged(origin, { x: event.screenX, y: event.screenY })) {
-      return;
-    }
-    dispatch("collapse");
-  };
-
   return (
     <div className={`bubble ${inSettings ? "bubble--settings" : "bubble--expanded"}`}>
-      <section
-        className="panel"
-        data-testid={inSettings ? "settings" : "panel"}
-      >
+      <section className="panel" data-testid={inSettings ? "settings" : "panel"}>
         <header className="panel__header" data-tauri-drag-region>
           <div className="panel__identity">
             <button
@@ -147,8 +119,8 @@ export function Bubble({
               aria-label="Minimize"
               title="Minimize"
               data-tauri-drag-region
-              onMouseDown={onPanelMarkMouseDown}
-              onClick={onPanelMarkClick}
+              onMouseDown={markHandlers.onMouseDown}
+              onClick={markHandlers.onClick}
             >
               <img
                 className="panel__mark-icon"
@@ -205,9 +177,7 @@ export function Bubble({
         {inSettings ? (
           <div className="panel__body settings">
             {/* Section rail and panes arrive in SP-031; this is the shell. */}
-            <p className="settings__placeholder">
-              Settings sections arrive next.
-            </p>
+            <p className="settings__placeholder">Settings sections arrive next.</p>
           </div>
         ) : (
           <ChatPanel api={chatApi} />

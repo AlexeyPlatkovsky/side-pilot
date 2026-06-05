@@ -10,7 +10,8 @@
 //! database so storage logic is verified without touching the filesystem.
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::str::FromStr;
+use std::sync::{Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection, OptionalExtension};
@@ -19,7 +20,9 @@ use uuid::Uuid;
 use super::error::StorageError;
 use super::model::{Message, NewMessage, Sender, Session};
 
-/// Current schema version, applied via `PRAGMA user_version`.
+const CURRENT_SCHEMA_VERSION: i64 = 1;
+
+/// Schema for version 1, applied through `PRAGMA user_version` migrations.
 const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS sessions (
     id               TEXT PRIMARY KEY,
@@ -62,16 +65,17 @@ impl Store {
 
     fn from_connection(conn: Connection) -> Result<Self, StorageError> {
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
-        conn.execute_batch(SCHEMA)?;
+        migrate_schema(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, Connection> {
-        // The mutex is only poisoned if a prior holder panicked mid-query;
-        // recovering the guard is safe because every operation is atomic.
-        self.conn.lock().unwrap_or_else(|e| e.into_inner())
+    fn lock(&self) -> Result<MutexGuard<'_, Connection>, StorageError> {
+        self.conn.lock().map_err(|_| StorageError::StorageUnavailable {
+            detail: "connection mutex poisoned by a panic during a prior storage operation"
+                .to_string(),
+        })
     }
 
     /// Create a new session and return it.
@@ -84,7 +88,7 @@ impl Store {
             updated_at: now,
             codex_session_id: None,
         };
-        let conn = self.lock();
+        let conn = self.lock()?;
         conn.execute(
             "INSERT INTO sessions (id, title, created_at, updated_at, codex_session_id)
              VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -103,7 +107,7 @@ impl Store {
     /// fresh id. Bumps the session's `updated_at`. Fails with `NotFound` if the
     /// session does not exist.
     pub fn append_message(&self, input: NewMessage) -> Result<Message, StorageError> {
-        let conn = self.lock();
+        let conn = self.lock()?;
         let exists: bool = conn
             .query_row(
                 "SELECT 1 FROM sessions WHERE id = ?1",
@@ -158,7 +162,7 @@ impl Store {
 
     /// Read a session's messages in send order (ascending `seq`).
     pub fn read_history(&self, session_id: &str) -> Result<Vec<Message>, StorageError> {
-        let conn = self.lock();
+        let conn = self.lock()?;
         let mut stmt = conn.prepare(
             "SELECT id, session_id, seq, sender, assistant_id, content, raw_json, created_at
              FROM messages WHERE session_id = ?1 ORDER BY seq ASC",
@@ -173,7 +177,7 @@ impl Store {
 
     /// List all sessions, most recently updated first.
     pub fn list_sessions(&self) -> Result<Vec<Session>, StorageError> {
-        let conn = self.lock();
+        let conn = self.lock()?;
         let mut stmt = conn.prepare(
             "SELECT id, title, created_at, updated_at, codex_session_id
              FROM sessions ORDER BY updated_at DESC, id ASC",
@@ -195,7 +199,7 @@ impl Store {
         session_id: &str,
         title: Option<String>,
     ) -> Result<Session, StorageError> {
-        let conn = self.lock();
+        let conn = self.lock()?;
         let changed = conn.execute(
             "UPDATE sessions SET title = ?1 WHERE id = ?2",
             params![title, session_id],
@@ -211,7 +215,7 @@ impl Store {
     /// Delete a session and all of its messages (cascade). Fails with
     /// `NotFound` if the session does not exist.
     pub fn delete_session(&self, session_id: &str) -> Result<(), StorageError> {
-        let conn = self.lock();
+        let conn = self.lock()?;
         let changed = conn.execute(
             "DELETE FROM sessions WHERE id = ?1",
             params![session_id],
@@ -231,7 +235,7 @@ impl Store {
     /// rename, SP-049) it must not reorder the latest-message-ordered rail.
     /// Fails with `NotFound` if the session does not exist.
     pub fn clear_session(&self, session_id: &str) -> Result<Session, StorageError> {
-        let conn = self.lock();
+        let conn = self.lock()?;
         let exists: bool = conn
             .query_row(
                 "SELECT 1 FROM sessions WHERE id = ?1",
@@ -262,7 +266,7 @@ impl Store {
         session_id: &str,
         codex_session_id: &str,
     ) -> Result<(), StorageError> {
-        let conn = self.lock();
+        let conn = self.lock()?;
         let changed = conn.execute(
             "UPDATE sessions SET codex_session_id = ?1, updated_at = ?2 WHERE id = ?3",
             params![codex_session_id, now_millis(), session_id],
@@ -303,11 +307,11 @@ fn row_to_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Session> {
 
 fn row_to_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
     let sender_text: String = row.get(3)?;
-    let sender = Sender::from_str(&sender_text).ok_or_else(|| {
+    let sender = Sender::from_str(&sender_text).map_err(|err| {
         rusqlite::Error::FromSqlConversionFailure(
             3,
             rusqlite::types::Type::Text,
-            format!("unknown sender: {sender_text}").into(),
+            err.into(),
         )
     })?;
     Ok(Message {
@@ -322,11 +326,37 @@ fn row_to_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
     })
 }
 
+fn migrate_schema(conn: &Connection) -> Result<(), StorageError> {
+    let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
+    if version > CURRENT_SCHEMA_VERSION {
+        return Err(StorageError::UnsupportedSchemaVersion {
+            found: version,
+            supported: CURRENT_SCHEMA_VERSION,
+        });
+    }
+
+    if version == 0 {
+        conn.execute_batch(SCHEMA)?;
+        conn.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
+    }
+
+    Ok(())
+}
+
 fn now_millis() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    millis_since_epoch(SystemTime::now())
+}
+
+/// Milliseconds from the Unix epoch to `time`.
+///
+/// A pre-epoch instant means the host clock is broken or set to an impossible
+/// value; silently collapsing that to `0` (the old behavior) corrupts the
+/// `created_at`/`updated_at` ordering semantics the store relies on. We fail
+/// loudly instead so the bug surfaces rather than poisoning history.
+fn millis_since_epoch(time: SystemTime) -> i64 {
+    time.duration_since(UNIX_EPOCH)
+        .expect("system clock is before the Unix epoch")
+        .as_millis() as i64
 }
 
 #[cfg(test)]
@@ -351,6 +381,11 @@ mod tests {
             content: content.to_string(),
             raw_json: Some("{\"type\":\"turn.completed\"}".to_string()),
         }
+    }
+
+    fn schema_version(conn: &Connection) -> i64 {
+        conn.query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap()
     }
 
     #[test]
@@ -553,5 +588,101 @@ mod tests {
         assert_eq!(history[0].content, "persist me");
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn new_database_is_initialized_with_current_schema_version() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert_eq!(schema_version(&conn), 0);
+
+        let store = Store::from_connection(conn).unwrap();
+        let conn = store.lock().unwrap();
+
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn version_zero_database_migrates_existing_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at, codex_session_id)
+             VALUES ('session-existing', 'Existing', 10, 20, 'codex-native')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages
+               (id, session_id, seq, sender, assistant_id, content, raw_json, created_at)
+             VALUES ('message-existing', 'session-existing', 1, 'assistant', 'codex', 'hi', '{}', 30)",
+            [],
+        )
+        .unwrap();
+        assert_eq!(schema_version(&conn), 0);
+
+        let store = Store::from_connection(conn).unwrap();
+
+        let sessions = store.list_sessions().unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, "session-existing");
+        assert_eq!(sessions[0].codex_session_id.as_deref(), Some("codex-native"));
+        let history = store.read_history("session-existing").unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].content, "hi");
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn future_schema_version_is_rejected() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION + 1)
+            .unwrap();
+
+        let err = match Store::from_connection(conn) {
+            Ok(_) => panic!("future schema should be rejected"),
+            Err(err) => err,
+        };
+
+        assert!(matches!(err, StorageError::UnsupportedSchemaVersion { .. }));
+    }
+
+    #[test]
+    fn millis_since_epoch_converts_a_known_time() {
+        let time = UNIX_EPOCH + std::time::Duration::from_millis(1_500);
+        assert_eq!(millis_since_epoch(time), 1_500);
+    }
+
+    #[test]
+    fn now_millis_is_positive_for_a_normal_clock() {
+        // A real clock is well past the Unix epoch; the helper must not
+        // silently collapse to 0 the way the old `unwrap_or(0)` did.
+        assert!(now_millis() > 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "system clock is before the Unix epoch")]
+    fn millis_since_epoch_panics_before_the_epoch() {
+        let before = UNIX_EPOCH - std::time::Duration::from_millis(1);
+        let _ = millis_since_epoch(before);
+    }
+
+    #[test]
+    fn poisoned_connection_mutex_returns_storage_unavailable() {
+        let store = Store::in_memory().unwrap();
+        std::thread::scope(|scope| {
+            let store_ref = &store;
+            let result = scope
+                .spawn(move || {
+                    let _guard = store_ref.conn.lock().unwrap();
+                    panic!("poison test");
+                })
+                .join();
+            assert!(result.is_err());
+        });
+
+        let err = store.list_sessions().unwrap_err();
+
+        assert!(matches!(err, StorageError::StorageUnavailable { .. }));
     }
 }

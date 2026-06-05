@@ -36,10 +36,7 @@ export const EXPANDED_SIZE: WindowSize = { width: 380, height: 520 };
  */
 export const SETTINGS_SIZE: WindowSize = EXPANDED_SIZE;
 
-export function bubbleReducer(
-  state: BubbleState,
-  action: BubbleAction,
-): BubbleState {
+export function bubbleReducer(state: BubbleState, action: BubbleAction): BubbleState {
   switch (action) {
     case "expand":
       return "expanded";

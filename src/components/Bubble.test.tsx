@@ -6,9 +6,7 @@ import { Bubble } from "./Bubble";
 describe("Bubble", () => {
   it("renders the compact bubble by default, with no panel", () => {
     render(<Bubble resizeWindow={vi.fn()} />);
-    expect(
-      screen.getByRole("button", { name: /open side-pilot/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open side-pilot/i })).toBeInTheDocument();
     expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
   });
 
@@ -52,9 +50,7 @@ describe("Bubble", () => {
     await user.click(screen.getByRole("button", { name: /collapse/i }));
 
     expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /open side-pilot/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open side-pilot/i })).toBeInTheDocument();
   });
 
   it("renders the warm companion panel identity", async () => {
@@ -85,9 +81,7 @@ describe("Bubble", () => {
     await user.click(screen.getByRole("button", { name: /minimize/i }));
 
     expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /open side-pilot/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open side-pilot/i })).toBeInTheDocument();
   });
 
   it("does NOT minimize when the header identity icon is dragged", () => {
@@ -107,6 +101,17 @@ describe("Bubble", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("minimizes to the bubble when the panel mark is clicked in place", () => {
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
+    const mark = screen.getByRole("button", { name: /minimize/i });
+
+    fireEvent.mouseDown(mark, { screenX: 12, screenY: 12 });
+    fireEvent.click(mark, { screenX: 12, screenY: 12 });
+
+    expect(screen.getByRole("button", { name: /open side-pilot/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("panel")).not.toBeInTheDocument();
+  });
+
   it("places the settings (gear) control to the left of the close control", async () => {
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
 
@@ -117,8 +122,7 @@ describe("Bubble", () => {
 
     // The gear precedes close in document order (it sits to its left).
     expect(
-      settings.compareDocumentPosition(close) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      settings.compareDocumentPosition(close) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
 
@@ -152,9 +156,7 @@ describe("Bubble", () => {
     await user.click(screen.getByRole("button", { name: /collapse/i }));
 
     expect(screen.queryByTestId("settings")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /open side-pilot/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open side-pilot/i })).toBeInTheDocument();
   });
 
   it("moves focus to the Back control when settings opens", async () => {
@@ -172,9 +174,7 @@ describe("Bubble", () => {
 
     await user.click(screen.getByRole("button", { name: /back/i }));
 
-    expect(
-      screen.getByRole("button", { name: /open settings/i }),
-    ).toHaveFocus();
+    expect(screen.getByRole("button", { name: /open settings/i })).toHaveFocus();
     await screen.findByLabelText("Ask side-pilot");
   });
 
@@ -231,9 +231,7 @@ describe("Bubble", () => {
 
     const minimize = screen.getByRole("button", { name: /minimize/i });
     expect(minimize).toHaveAttribute("data-tauri-drag-region");
-    expect(minimize.querySelector("img")).toHaveAttribute(
-      "data-tauri-drag-region",
-    );
+    expect(minimize.querySelector("img")).toHaveAttribute("data-tauri-drag-region");
     expect(
       screen.getByRole("heading", { name: /side-pilot companion/i }),
     ).toHaveAttribute("data-tauri-drag-region");

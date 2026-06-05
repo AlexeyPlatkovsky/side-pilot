@@ -42,6 +42,13 @@ Front-end tests:
 npm run test
 ```
 
+Front-end linting and formatting:
+
+```bash
+npm run lint
+npm run format:check
+```
+
 Rust core tests:
 
 ```bash
@@ -54,6 +61,21 @@ If `cargo nextest` is missing:
 cargo install cargo-nextest
 ```
 
+Typed IPC bindings (Rust → TypeScript). The structs that cross the Tauri IPC
+boundary (`adapters::contract`, `storage::model`) derive `ts-rs::TS` and export
+TypeScript types into `src/chat/generated/`. Regenerate them after changing any
+of those structs:
+
+```bash
+npm run gen:bindings
+```
+
+The committed bindings are the single source of truth for the front-end wire
+types; CI runs this and fails on any drift (`git diff --exit-code
+src/chat/generated`), so a Rust field change without a regenerated binding is
+caught automatically. The files are auto-generated — do not edit them by hand
+(they are excluded from Prettier/ESLint).
+
 WebKit end-to-end tests (runtime UI validation):
 
 ```bash
@@ -62,7 +84,16 @@ npm run test:e2e
 
 This runs the React UI in Playwright's **WebKit** engine — the closest approximation to the WKWebView the Tauri app renders in — to catch the runtime-only UI bugs that Vitest + jsdom and Chromium previews cannot (WebKit rendering, layout sizing, scroll/pin, auto-grow, drag-region DOM contracts). It is the automated backbone of the `AGENTS.md` "Runtime UI validation" quality gate. First-time setup downloads the engine: `npx playwright install webkit`.
 
-Scope: WebKit *engine* correctness, not a native OS window — true OS-level window dragging (vs. drag-region markup) stays a manual check in the real Tauri window (`npm run tauri dev`).
+Scope: WebKit _engine_ correctness, not a native OS window — true OS-level window dragging (vs. drag-region markup) stays a manual check in the real Tauri window (`npm run tauri dev`).
+
+Strict Rust linting:
+
+```bash
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+```
+
+The same lint, format, build, test, WebKit, nextest, and clippy checks run in
+`.github/workflows/ci.yml` for pull requests and pushes to `main`.
 
 ## Build
 
@@ -89,7 +120,7 @@ npm run tauri build
 - `src/components/ChatPanel.tsx` - expanded-panel chat UI: a collapsible history
   rail toggle + active-chat toolbar (title + pencil rename + Clear), transcript
   with per-message 24h timestamps and safe Markdown rendering (`react-markdown`
-  + `remark-gfm`), blocking "thinking" state, the prompt composer, and the
+  with `remark-gfm`), blocking "thinking" state, the prompt composer, and the
   Clear-chat confirm dialog; assistant links are intercepted and opened in the
   OS default browser (via `open_external`) so the WebView never navigates away
   from the app; the `useChat` hook owns the session list, active session,
@@ -103,7 +134,9 @@ npm run tauri build
 - `src/components/Dialog.tsx` - shared modal chrome (focus trap, Escape-to-close,
   focus restore) used by the rename/delete/clear dialogs
 - `src/chat/api.ts` - typed front-end seam over the Tauri chat commands
-  (`run_adapter` + the session/message store); injectable for tests
+  (`run_adapter` + the session/message store); injectable for tests. The wire
+  types come from `src/chat/generated/` (ts-rs output; see `npm run gen:bindings`)
+  so the request/result/session/message shapes cannot drift from the Rust structs
 - `src/chat/history.ts` - pure rail/transcript helpers: title generation and
   validation (1–40 chars, letters/digits/spaces/basic punctuation, no special
   symbols; same rule for generated and user-entered titles), relative-time
@@ -132,6 +165,7 @@ npm run tauri build
   friendly assistant variant
 - `src/assets/app-icon_3.png` - single source for the app mark: the UI imports
   it for the collapsed bubble and panel header, and the bundled app/Dock icons
-  in `src-tauri/icons/` are generated from it via `npm run tauri -- icon
-  src/assets/app-icon_3.png` (macOS/Windows outputs only; remove any generated
-  `ios/`/`android/` folders per the platform scope)
+  in `src-tauri/icons/` are generated from it with the Tauri icon command
+  (`npm run tauri -- icon src/assets/app-icon_3.png`). Keep macOS/Windows
+  outputs only; remove any generated `ios/`/`android/` folders per the platform
+  scope

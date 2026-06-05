@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
 pub mod binary;
+pub mod cache;
 pub mod codex;
 pub mod contract;
 pub mod environment;
@@ -43,8 +44,9 @@ pub trait CliAdapter: Send + Sync {
 }
 
 /// Identifies which local CLI an adapter drives.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
 pub enum AssistantId {
     Codex,
     Claude,

@@ -56,11 +56,7 @@ export function ChatHistory({
 
   return (
     <aside id="chat-history-rail" className="chat-rail" aria-label="Chat history">
-      <button
-        type="button"
-        className="chat-rail__new"
-        onClick={onNewChat}
-      >
+      <button type="button" className="chat-rail__new" onClick={onNewChat}>
         New chat
       </button>
       <ul className="chat-rail__list">
@@ -199,7 +195,12 @@ function RowMenu({ id, onClose, onRename, onDelete }: RowMenuProps) {
 
   return (
     <div ref={ref} id={id} className="chat-row__options" role="menu">
-      <button type="button" role="menuitem" className="chat-row__option" onClick={onRename}>
+      <button
+        type="button"
+        role="menuitem"
+        className="chat-row__option"
+        onClick={onRename}
+      >
         Rename
       </button>
       <button
@@ -226,8 +227,7 @@ function DeleteDialog({ title, onCancel, onConfirm }: DeleteDialogProps) {
     <Dialog label="Delete chat" onClose={onCancel}>
       <div className="dialog__body">
         <p className="dialog__message">
-          Delete this chat and all messages? “{title}” and its history can’t be
-          recovered.
+          Delete this chat and all messages? “{title}” and its history can’t be recovered.
         </p>
         <div className="dialog__actions">
           <button type="button" className="dialog__button" onClick={onCancel}>

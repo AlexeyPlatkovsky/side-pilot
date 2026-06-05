@@ -38,6 +38,11 @@ uuid = { version = "1", features = ["v4"] }
 # Open validated external links (assistant Markdown) in the OS default browser
 # instead of navigating the app's WebView.
 open = "5"
+# Generate TypeScript types from the Rust IPC structs so the front-end contract
+# (src/chat/generated/) cannot silently drift from `adapters::contract` /
+# `storage::model` (SP-065). `serde-compat` makes the export honor the same
+# `#[serde(rename_all = ...)]`/`default` attributes used over the wire.
+ts-rs = { version = "10", features = ["serde-compat"] }
 
 [dev-dependencies]
 # Trait-based mocking so adapter unit tests never spawn a real CLI (testing-pro: references/rust.md).

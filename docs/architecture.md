@@ -46,7 +46,7 @@ side-pilot/
 │       ├── mod.rs                # Re-exports
 │       ├── model.rs              # Session, Message, NewMessage, Sender types
 │       ├── store.rs              # SQLite store (rusqlite) — CRUD for sessions/messages
-│       └── error.rs              # StorageError taxonomy (NotFound, Query)
+│       └── error.rs              # StorageError taxonomy (typed IPC failures)
 │
 ├── docs/
 │   ├── idea.md                   # Primary design specification (features, scope, intent)
@@ -194,6 +194,10 @@ Binary resolution is cached per assistant. On Unix/macOS it uses `/bin/zsh -lc '
 
 Single `rusqlite::Connection` behind a `Mutex`, managed as Tauri state:
 
+The store uses `PRAGMA user_version` with `CURRENT_SCHEMA_VERSION = 1`. Version
+0 databases are migrated by creating the current schema and indexes without
+dropping existing data; databases with a future schema version fail explicitly.
+
 **Schema:**
 ```sql
 sessions (
@@ -224,6 +228,8 @@ CREATE INDEX idx_messages_session_seq ON messages (session_id, seq);
 - `list_sessions`: `ORDER BY updated_at DESC, id ASC`
 - `append_message`: auto-assigns `seq` as `MAX(seq) + 1`
 - `update_codex_session_id`: saves the native Codex resume id and bumps `updated_at`
+- storage failures cross IPC as `StorageError` variants: `notFound`, `query`,
+  `storageUnavailable`, or `unsupportedSchemaVersion`
 
 ### Links Safety (`src-tauri/src/links.rs`)
 

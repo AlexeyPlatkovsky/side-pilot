@@ -152,6 +152,28 @@ All spacing/radius/color/type go through the tokens above; the only literals are
 
 ---
 
+## Stylesheet organization
+
+All styles live in a single file, [`src/styles.css`](../src/styles.css), organized
+into four banner-delimited sections (a matching index sits at the top of the file):
+
+| Section | Covers |
+|---|---|
+| §1 Design tokens | the `:root` palette, spacing, radius, type, and icon tokens above |
+| §2 App shell | transparent window, collapsed bubble, expanded panel + header |
+| §3 Transcript | messages, meta line, assistant Markdown, thinking, error banner |
+| §4 History rail, toolbar & dialogs | rail, row status, options menu, modal dialogs |
+
+**Why one file (SP-069):** the app has no CSS preprocessor and rule order is
+load-bearing for the cascade. Splitting into `@import`-ed partials would add a
+brittle load-order dependency and risk silent cascade drift for no runtime
+benefit at the current ~950-line size. Strong in-file sectioning keeps the file
+navigable without that risk. Revisit a split only if the file outgrows
+comfortable navigation *and* a bundling strategy can guarantee identical rule
+order (e.g. a single entry that imports partials in the section order above).
+
+---
+
 ## Changing the system
 
 1. Edit the token value in [`src/styles.css`](../src/styles.css) `:root`.

@@ -7,11 +7,15 @@
 //! carried; `codex_session_id` records the native Codex session for resume
 //! (§6).
 
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// Who authored a message.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
 pub enum Sender {
     User,
     Assistant,
@@ -25,35 +29,44 @@ impl Sender {
             Sender::Assistant => "assistant",
         }
     }
+}
+
+impl FromStr for Sender {
+    type Err = String;
 
     /// Parse the stored column value back into a [`Sender`].
-    pub fn from_str(value: &str) -> Option<Self> {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
-            "user" => Some(Sender::User),
-            "assistant" => Some(Sender::Assistant),
-            _ => None,
+            "user" => Ok(Sender::User),
+            "assistant" => Ok(Sender::Assistant),
+            _ => Err(format!("unknown sender: {value}")),
         }
     }
 }
 
 /// One local conversation. The local id is the display/history source of
 /// truth; `codex_session_id` is the optional native CLI session for resume.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
 pub struct Session {
     pub id: String,
     pub title: Option<String>,
+    #[ts(type = "number")]
     pub created_at: i64,
+    #[ts(type = "number")]
     pub updated_at: i64,
     pub codex_session_id: Option<String>,
 }
 
 /// One persisted message within a session, ordered by `seq`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
 pub struct Message {
     pub id: String,
     pub session_id: String,
+    #[ts(type = "number")]
     pub seq: i64,
     pub sender: Sender,
     /// Which assistant produced an assistant message (`codex` for the MVP).
@@ -62,19 +75,23 @@ pub struct Message {
     pub content: String,
     /// Raw routing metadata / structured CLI output retained for inspection.
     pub raw_json: Option<String>,
+    #[ts(type = "number")]
     pub created_at: i64,
 }
 
 /// Input for appending a message; the store assigns `id`, `seq`, and timestamp.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
 pub struct NewMessage {
     pub session_id: String,
     pub sender: Sender,
     #[serde(default)]
+    #[ts(optional)]
     pub assistant_id: Option<String>,
     pub content: String,
     #[serde(default)]
+    #[ts(optional)]
     pub raw_json: Option<String>,
 }
 
@@ -85,9 +102,9 @@ mod tests {
     #[test]
     fn sender_round_trips_through_str() {
         for sender in [Sender::User, Sender::Assistant] {
-            assert_eq!(Sender::from_str(sender.as_str()), Some(sender));
+            assert_eq!(sender.as_str().parse::<Sender>(), Ok(sender));
         }
-        assert_eq!(Sender::from_str("bogus"), None);
+        assert!("bogus".parse::<Sender>().is_err());
     }
 
     #[test]

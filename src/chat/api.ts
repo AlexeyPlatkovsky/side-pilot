@@ -14,54 +14,41 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Sender } from "../state/chat";
 
-/** Mirrors `adapters::AdapterRequest` (only the fields the MVP UI sends). */
-export interface AdapterRequest {
-  assistant: string;
-  prompt: string;
-  /** Model id passed to the CLI (`-m`). */
-  model?: string;
-  /** Reasoning effort passed to the CLI (`-c model_reasoning_effort=...`). */
-  reasoningEffort?: string;
-  resumeSessionId?: string;
-  runId?: string;
-}
+// IPC types generated from the Rust contract by ts-rs (SP-065). These files in
+// `./generated/` are the single source of truth for the wire shape: regenerate
+// with `npm run gen:bindings` after changing `adapters::contract` or
+// `storage::model`. CI fails if the committed bindings drift from the structs.
+import type { AdapterRequest as RustAdapterRequest } from "./generated/AdapterRequest";
+import type { AdapterResult as RustAdapterResult } from "./generated/AdapterResult";
+import type { Session as RustSession } from "./generated/Session";
+import type { Message as RustMessage } from "./generated/Message";
+import type { NewMessage as RustNewMessage } from "./generated/NewMessage";
 
-/** Mirrors `adapters::AdapterResult`. */
-export interface AdapterResult {
-  assistantText: string;
-  rawJson: string;
-  nativeSessionId?: string | null;
-}
+/**
+ * The request the UI sends to `run_adapter`. Projected from the Rust
+ * `AdapterRequest` so renaming/removing one of these fields stops compiling
+ * here. The omitted fields (`workingDirectory`, `permissionMode`, `timeoutMs`)
+ * fall back to the backend's serde defaults.
+ */
+export type AdapterRequest = Pick<
+  RustAdapterRequest,
+  "assistant" | "prompt" | "model" | "reasoningEffort" | "resumeSessionId" | "runId"
+>;
 
-/** Mirrors `storage::model::Session`. */
-export interface PersistedSession {
-  id: string;
-  title: string | null;
-  createdAt: number;
-  updatedAt: number;
-  codexSessionId: string | null;
-}
+/**
+ * The fields of `adapters::AdapterResult` the UI reads. Projected from the
+ * generated type (the backend also reports `usage`, which the UI ignores) so a
+ * renamed/removed field stops compiling here.
+ */
+export type AdapterResult = Pick<
+  RustAdapterResult,
+  "assistantText" | "rawJson" | "nativeSessionId"
+>;
 
-/** Mirrors `storage::model::Message`. */
-export interface PersistedMessage {
-  id: string;
-  sessionId: string;
-  seq: number;
-  sender: Sender;
-  assistantId: string | null;
-  content: string;
-  rawJson: string | null;
-  createdAt: number;
-}
-
-/** Mirrors `storage::model::NewMessage`. */
-export interface NewMessage {
-  sessionId: string;
-  sender: Sender;
-  assistantId?: string;
-  content: string;
-  rawJson?: string;
-}
+/** Re-exported straight from the Rust-derived bindings (single source of truth). */
+export type PersistedSession = RustSession;
+export type PersistedMessage = RustMessage;
+export type NewMessage = RustNewMessage;
 
 export interface ChatApi {
   runAdapter(request: AdapterRequest): Promise<AdapterResult>;
@@ -75,10 +62,7 @@ export interface ChatApi {
   deleteSession(sessionId: string): Promise<void>;
   /** Clear a session's messages and native resume id, keeping the chat (SP-051). */
   clearSession(sessionId: string): Promise<PersistedSession>;
-  updateCodexSessionId(
-    sessionId: string,
-    codexSessionId: string,
-  ): Promise<void>;
+  updateCodexSessionId(sessionId: string, codexSessionId: string): Promise<void>;
   /**
    * Open an assistant-provided link in the OS default browser. The Rust side
    * validates the scheme (http/https/mailto only); the app's WebView never
@@ -94,8 +78,7 @@ export const tauriChatApi: ChatApi = {
   appendMessage: (message) => invoke("append_message", { message }),
   readHistory: (sessionId) => invoke("read_history", { sessionId }),
   listSessions: () => invoke("list_sessions"),
-  renameSession: (sessionId, title) =>
-    invoke("rename_session", { sessionId, title }),
+  renameSession: (sessionId, title) => invoke("rename_session", { sessionId, title }),
   deleteSession: (sessionId) => invoke("delete_session", { sessionId }),
   clearSession: (sessionId) => invoke("clear_session", { sessionId }),
   updateCodexSessionId: (sessionId, codexSessionId) =>
@@ -109,8 +92,7 @@ export const tauriChatApi: ChatApi = {
  * chat panel does not attempt to `invoke`.
  */
 export const inertChatApi: ChatApi = {
-  runAdapter: () =>
-    Promise.reject(new Error("chat backend unavailable")),
+  runAdapter: () => Promise.reject(new Error("chat backend unavailable")),
   createSession: () =>
     Promise.resolve({
       id: "inert-session",
@@ -188,15 +170,17 @@ export function describeError(err: unknown): string {
       case "cancelled":
         return "The request was cancelled.";
       case "nonZeroExit":
-        return `GPT exited with an error${
-          tagged.stderr ? `: ${tagged.stderr}` : ""
-        }.`;
+        return `GPT exited with an error${tagged.stderr ? `: ${tagged.stderr}` : ""}.`;
       case "outputParseFailure":
         return "GPT returned output that could not be read.";
       case "notFound":
         return "That conversation could not be found in local history.";
       case "query":
         return "Local history is unavailable right now.";
+      case "storageUnavailable":
+        return "Local history is unavailable right now.";
+      case "unsupportedSchemaVersion":
+        return "Local history was created by a newer app version.";
       default:
         return `Something went wrong (${tagged.kind}).`;
     }
