@@ -63,6 +63,24 @@ test("each chat restores its own selected provider", async ({ page }) => {
   await page.screenshot({ path: "e2e/.artifacts/ai-switcher-per-chat.png" });
 });
 
+test("a background provider error is visible when its unread chat is reopened", async ({
+  page,
+}) => {
+  await page.goto("/e2e/seeded.html?initial=collapsed&route=error");
+  await page.getByRole("button", { name: "Open side-pilot" }).click();
+  await page.getByRole("button", { name: /choose ai provider/i }).click();
+  await page.getByRole("menuitemradio", { name: "Gemini" }).click();
+  await page.getByLabel("Ask side-pilot").fill("check this");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await page.getByRole("button", { name: "Show chat history" }).click();
+  await page.getByRole("button", { name: "Fix login bug", exact: true }).click();
+  await page.getByRole("button", { name: /Refactor auth module, unread answer/ }).click();
+
+  await expect(page.getByRole("alert")).toContainText("Gemini is not authenticated");
+  await page.screenshot({ path: "e2e/.artifacts/provider-error-restored.png" });
+});
+
 test("All mode renders three labeled provider slots that load then resolve", async ({
   page,
 }) => {

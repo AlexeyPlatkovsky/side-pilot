@@ -8,7 +8,8 @@ import type { Message } from "./Message";
  */
 export type ProviderRunOutcome = { provider: AssistantId, 
 /**
- * The persisted assistant message on success.
+ * The persisted assistant history row: a reply on success or a
+ * display-only inline error card on failure.
  */
 message?: Message, 
 /**

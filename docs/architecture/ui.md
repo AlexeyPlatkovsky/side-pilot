@@ -49,11 +49,11 @@ User types prompt → onSubmit() in ChatPanel (with the active route)
         # Tauri IPC → run_route: persists prompt, computes each provider's
         # unsent diff (transcript replay, §6), dispatches single or All
         # (concurrently), persists each reply, records message_provider_sends
-  → map outcomes → reply messages (success) or inline error cards (failure)
+  → map persisted outcomes → reply messages (success) or inline error cards (failure)
   → dispatch({ type: "routeSettled" })  # swap pending slots for results, status → idle
 ```
 
-The submit path routes through `run_route` (SP-016), so conversation context is carried by app-owned transcript replay rather than native session resume; the client no longer calls `appendMessage`/`updateCodexSessionId` itself. Per-provider failures arrive inside the outcomes as inline error cards (not a banner); the error banner remains only for a whole-call (storage) failure on the catch path. Late replies (user switched chats mid-flight) land in the originating session's unread set, not the active transcript.
+The submit path routes through `run_route` (SP-016), so conversation context is carried by app-owned transcript replay rather than native session resume; the client no longer calls `appendMessage`/`updateCodexSessionId` itself. Per-provider failures are persisted as display-only message rows and arrive inside the outcomes as inline error cards (not a banner), so switching away and reopening the chat restores them from history. The error banner remains only for a whole-call (storage) failure on the catch path. Late outcomes (success or failure) in a background chat mark it unread until the user opens it.
 
 ### Source Files
 

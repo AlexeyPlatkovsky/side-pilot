@@ -13,4 +13,4 @@ assistantId: string | null, content: string,
 /**
  * Raw routing metadata / structured CLI output retained for inspection.
  */
-rawJson: string | null, createdAt: number, };
+rawJson: string | null, isError: boolean, createdAt: number, };

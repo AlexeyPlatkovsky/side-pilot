@@ -13,7 +13,7 @@ The React front-end never calls Tauri `invoke` directly outside the API bridge. 
 | Command | Route | Purpose |
 |---|---|---|
 | `run_adapter` | `commands::run_adapter` | Route prompt to a single CLI adapter |
-| `run_route` | `commands::run_route` | Multi-provider route (single or `All`); persists prompt + responses, records provider sends (SP-016) |
+| `run_route` | `commands::run_route` | Multi-provider route (single or `All`); persists prompt + successful responses + display-only failure rows, records provider sends (SP-016) |
 | `cancel_adapter_run` | `commands::cancel_adapter_run` | Cancel in-flight subprocess |
 | `create_session` | `commands::create_session` | New local session |
 | `append_message` | `commands::append_message` | Persist a message |

@@ -65,7 +65,8 @@ fn default_timeout_ms() -> u64 {
 #[ts(export, export_to = "../../src/chat/generated/")]
 pub struct ProviderRunOutcome {
     pub provider: AssistantId,
-    /// The persisted assistant message on success.
+    /// The persisted assistant history row: a reply on success or a
+    /// display-only inline error card on failure.
     #[ts(optional)]
     pub message: Option<Message>,
     /// The typed adapter error on failure (the slot failed; siblings are
@@ -122,6 +123,34 @@ fn format_turn(message: &Message) -> String {
                 .map(AssistantId::display_name)
                 .unwrap_or("Assistant");
             format!("[{label}]: {content}", content = message.content)
+        }
+    }
+}
+
+fn provider_error_message(provider: AssistantId, error: &AdapterError) -> String {
+    let name = match provider {
+        AssistantId::Codex => "GPT",
+        AssistantId::Claude => "Claude",
+        AssistantId::Gemini => "Gemini",
+    };
+    match error {
+        AdapterError::BinaryNotFound => {
+            format!("{name} isn't available — its CLI wasn't found on your PATH.")
+        }
+        AdapterError::NotAuthenticated => {
+            format!("{name} is not authenticated. Sign in to its CLI and try again.")
+        }
+        AdapterError::TimedOut => format!("{name} timed out before responding."),
+        AdapterError::Cancelled => format!("The {name} request was cancelled."),
+        AdapterError::NonZeroExit { stderr, .. } => {
+            if stderr.is_empty() {
+                format!("{name} exited with an error.")
+            } else {
+                format!("{name} exited with an error: {stderr}.")
+            }
+        }
+        AdapterError::OutputParseFailure { .. } => {
+            format!("{name} returned output that could not be read.")
         }
     }
 }
@@ -221,11 +250,19 @@ pub async fn execute_route(
                 });
             }
             Err(error) => {
-                // Failed slot: no message, no sends — the diff stays unsent so a
-                // retry re-delivers it.
+                // Failed slots are display history, but never provider context:
+                // the store excludes error rows from transcript replay while
+                // leaving the original diff unsent so a retry re-delivers it.
+                let message = store.append_error_message(NewMessage {
+                    session_id: request.session_id.clone(),
+                    sender: Sender::Assistant,
+                    assistant_id: Some(prep.provider.as_str().to_string()),
+                    content: provider_error_message(prep.provider, &error),
+                    raw_json: serde_json::to_string(&error).ok(),
+                })?;
                 outcomes.push(ProviderRunOutcome {
                     provider: prep.provider,
-                    message: None,
+                    message: Some(message),
                     error: Some(error),
                 });
             }
@@ -258,6 +295,7 @@ mod tests {
             assistant_id: assistant_id.map(str::to_string),
             content: content.to_string(),
             raw_json: None,
+            is_error: false,
             created_at: seq,
         }
     }
@@ -626,7 +664,7 @@ mod tests {
             .iter()
             .find(|o| o.provider == AssistantId::Gemini)
             .unwrap();
-        assert!(gemini.message.is_none());
+        assert!(gemini.message.as_ref().unwrap().is_error);
         assert!(gemini.error.is_some(), "gemini slot carries an error");
 
         // Codex and Claude still succeeded.
@@ -641,6 +679,68 @@ mod tests {
         assert_eq!(sends_count(&store, &result.user_message.id, "codex"), 1);
         assert_eq!(sends_count(&store, &result.user_message.id, "claude"), 1);
         assert_eq!(sends_count(&store, &result.user_message.id, "gemini"), 0);
+    }
+
+    #[tokio::test]
+    async fn failed_slot_persists_display_history_but_is_not_replayed() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let registry = registry_with(vec![(
+            AssistantId::Gemini,
+            Err(AdapterError::NotAuthenticated),
+        )]);
+
+        execute_route(
+            &store,
+            &registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Gemini,
+                },
+                prompt: "first try".to_string(),
+                active_providers: vec![],
+                model: None,
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let history = store.read_history(&session.id).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[1].assistant_id.as_deref(), Some("gemini"));
+        assert!(history[1].is_error);
+        assert_eq!(
+            history[1].content,
+            "Gemini is not authenticated. Sign in to its CLI and try again."
+        );
+
+        let retry_registry = registry_with(vec![(AssistantId::Gemini, ok_result("recovered"))]);
+        let result = execute_route(
+            &store,
+            &retry_registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Gemini,
+                },
+                prompt: "retry".to_string(),
+                active_providers: vec![],
+                model: None,
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.outcomes[0].message.as_ref().unwrap().raw_json.as_deref(),
+            Some("first try\n\nretry"),
+            "the persisted error card must not be replayed to Gemini"
+        );
     }
 
     // ---- execute_route: per-provider timeout carried from request ----------

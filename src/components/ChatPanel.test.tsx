@@ -37,6 +37,7 @@ function persisted(
     seq: over.seq ?? 1,
     assistantId: over.assistantId ?? (over.sender === "assistant" ? "codex" : null),
     rawJson: over.rawJson ?? null,
+    isError: over.isError ?? false,
     createdAt: 1,
     ...over,
   };
@@ -579,6 +580,58 @@ describe("ChatPanel", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /One, unread answer/ })).toBeNull(),
     );
+  });
+
+  it("restores a background provider error when the unread chat is reopened", async () => {
+    const user = userEvent.setup();
+    let resolveRoute!: (r: RouteRunResult) => void;
+    const routePromise = new Promise<RouteRunResult>((resolve) => {
+      resolveRoute = resolve;
+    });
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const persistedError = persisted({
+      id: "error-gemini",
+      sessionId: "s1",
+      sender: "assistant",
+      assistantId: "gemini",
+      content: "Gemini is not authenticated. Sign in to its CLI and try again.",
+      seq: 2,
+      isError: true,
+    });
+    let errorPersisted = false;
+    const api = makeApi({
+      sessions,
+      runRoute: vi.fn(() => routePromise),
+      readHistory: vi.fn((id: string) =>
+        Promise.resolve(id === "s1" && errorPersisted ? [persistedError] : []),
+      ),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await send(user, "ask one");
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    errorPersisted = true;
+    resolveRoute({
+      userMessage: persisted({ sender: "user", content: "ask one" }),
+      outcomes: [
+        {
+          provider: "gemini",
+          message: persistedError,
+          error: { kind: "notAuthenticated" },
+        },
+      ],
+    });
+
+    await user.click(await screen.findByRole("button", { name: /One, unread answer/ }));
+
+    const errorCard = await screen.findByRole("alert");
+    expect(errorCard).toHaveTextContent(/Gemini is not authenticated/i);
+    expect(errorCard.closest(".message")).toHaveAttribute("data-provider", "gemini");
   });
 
   it("keeps the composer compact before and during one-line input", async () => {

@@ -132,6 +132,7 @@ export const inertChatApi: ChatApi = {
       assistantId: message.assistantId ?? null,
       content: message.content,
       rawJson: message.rawJson ?? null,
+      isError: false,
       createdAt: 0,
     }),
   readHistory: () => Promise.resolve([]),
@@ -164,6 +165,7 @@ export function toChatMessage(row: PersistedMessage): {
   assistantId?: string;
   content: string;
   createdAt: number;
+  error?: boolean;
 } {
   return {
     id: row.id,
@@ -171,6 +173,7 @@ export function toChatMessage(row: PersistedMessage): {
     assistantId: row.assistantId ?? undefined,
     content: row.content,
     createdAt: row.createdAt,
+    error: row.isError || undefined,
   };
 }
 

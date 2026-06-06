@@ -20,7 +20,7 @@ use uuid::Uuid;
 use super::error::StorageError;
 use super::model::{Message, NewMessage, Sender, Session};
 
-const CURRENT_SCHEMA_VERSION: i64 = 2;
+const CURRENT_SCHEMA_VERSION: i64 = 3;
 
 /// Schema for version 1, applied through `PRAGMA user_version` migrations.
 const SCHEMA: &str = "
@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS message_provider_sends (
 );
 CREATE INDEX IF NOT EXISTS idx_provider_sends_provider
     ON message_provider_sends (provider, message_id);
+";
+
+/// Schema added in version 3: persisted display-only provider failure rows.
+const SCHEMA_V3: &str = "
+ALTER TABLE messages ADD COLUMN is_error INTEGER NOT NULL DEFAULT 0;
 ";
 
 /// Local SQLite store for chat sessions and messages.
@@ -130,6 +135,20 @@ impl Store {
     /// fresh id. Bumps the session's `updated_at`. Fails with `NotFound` if the
     /// session does not exist.
     pub fn append_message(&self, input: NewMessage) -> Result<Message, StorageError> {
+        self.append_message_with_error(input, false)
+    }
+
+    /// Append a display-only provider failure. Routing uses this for failed
+    /// slots; the row remains visible in history but is excluded from replay.
+    pub fn append_error_message(&self, input: NewMessage) -> Result<Message, StorageError> {
+        self.append_message_with_error(input, true)
+    }
+
+    fn append_message_with_error(
+        &self,
+        input: NewMessage,
+        is_error: bool,
+    ) -> Result<Message, StorageError> {
         let conn = self.lock()?;
         let exists: bool = conn
             .query_row(
@@ -159,12 +178,13 @@ impl Store {
             assistant_id: input.assistant_id,
             content: input.content,
             raw_json: input.raw_json,
+            is_error,
             created_at: now,
         };
         conn.execute(
             "INSERT INTO messages
-               (id, session_id, seq, sender, assistant_id, content, raw_json, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+               (id, session_id, seq, sender, assistant_id, content, raw_json, is_error, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 message.id,
                 message.session_id,
@@ -173,6 +193,7 @@ impl Store {
                 message.assistant_id,
                 message.content,
                 message.raw_json,
+                message.is_error,
                 message.created_at
             ],
         )?;
@@ -187,7 +208,7 @@ impl Store {
     pub fn read_history(&self, session_id: &str) -> Result<Vec<Message>, StorageError> {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, seq, sender, assistant_id, content, raw_json, created_at
+            "SELECT id, session_id, seq, sender, assistant_id, content, raw_json, is_error, created_at
              FROM messages WHERE session_id = ?1 ORDER BY seq ASC",
         )?;
         let rows = stmt.query_map(params![session_id], row_to_message)?;
@@ -332,9 +353,10 @@ impl Store {
     ) -> Result<Vec<Message>, StorageError> {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, seq, sender, assistant_id, content, raw_json, created_at
+            "SELECT id, session_id, seq, sender, assistant_id, content, raw_json, is_error, created_at
              FROM messages m
              WHERE m.session_id = ?1
+               AND m.is_error = 0
                AND NOT EXISTS (
                    SELECT 1 FROM message_provider_sends s
                    WHERE s.message_id = m.id AND s.provider = ?2
@@ -392,7 +414,8 @@ fn row_to_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
         assistant_id: row.get(4)?,
         content: row.get(5)?,
         raw_json: row.get(6)?,
-        created_at: row.get(7)?,
+        is_error: row.get(7)?,
+        created_at: row.get(8)?,
     })
 }
 
@@ -412,8 +435,26 @@ fn migrate_schema(conn: &Connection) -> Result<(), StorageError> {
     if version < 2 {
         conn.execute_batch(SCHEMA_V2)?;
     }
-    if version < CURRENT_SCHEMA_VERSION {
-        conn.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
+    if version < 3 {
+        let has_error_column: bool = conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_table_info('messages') WHERE name = 'is_error'
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_error_column {
+            // Recover databases interrupted by the previous non-atomic v3
+            // migration after the column was added but before its version bump.
+            conn.pragma_update(None, "user_version", 3)?;
+        } else {
+            conn.execute_batch(&format!(
+                "BEGIN IMMEDIATE;
+                 {SCHEMA_V3}
+                 PRAGMA user_version = 3;
+                 COMMIT;"
+            ))?;
+        }
     }
 
     Ok(())
@@ -456,6 +497,16 @@ mod tests {
             assistant_id: Some("codex".to_string()),
             content: content.to_string(),
             raw_json: Some("{\"type\":\"turn.completed\"}".to_string()),
+        }
+    }
+
+    fn error_msg(session_id: &str, content: &str) -> NewMessage {
+        NewMessage {
+            session_id: session_id.to_string(),
+            sender: Sender::Assistant,
+            assistant_id: Some("gemini".to_string()),
+            content: content.to_string(),
+            raw_json: Some(r#"{"kind":"notAuthenticated"}"#.to_string()),
         }
     }
 
@@ -749,6 +800,49 @@ mod tests {
     }
 
     #[test]
+    fn version_two_database_migrates_error_flag_preserving_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at, codex_session_id)
+             VALUES ('s1', 'Existing', 10, 20, NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages
+               (id, session_id, seq, sender, assistant_id, content, raw_json, created_at)
+             VALUES ('m1', 's1', 1, 'assistant', 'codex', 'hi', '{}', 30)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        let history = store.read_history("s1").unwrap();
+        assert_eq!(history.len(), 1);
+        assert!(!history[0].is_error);
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn interrupted_version_three_migration_can_be_retried() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.execute_batch(SCHEMA_V3).unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
     fn unsent_messages_returns_all_when_nothing_marked() {
         let store = Store::in_memory().unwrap();
         let session = store.create_session(None).unwrap();
@@ -756,6 +850,21 @@ mod tests {
         store.append_message(user_msg(&session.id, "two")).unwrap();
 
         let unsent = store.unsent_messages(&session.id, "codex").unwrap();
+        let contents: Vec<&str> = unsent.iter().map(|m| m.content.as_str()).collect();
+        assert_eq!(contents, vec!["one", "two"]);
+    }
+
+    #[test]
+    fn unsent_messages_excludes_display_only_error_rows() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        store.append_message(user_msg(&session.id, "one")).unwrap();
+        store
+            .append_error_message(error_msg(&session.id, "Gemini failed"))
+            .unwrap();
+        store.append_message(user_msg(&session.id, "two")).unwrap();
+
+        let unsent = store.unsent_messages(&session.id, "gemini").unwrap();
         let contents: Vec<&str> = unsent.iter().map(|m| m.content.as_str()).collect();
         assert_eq!(contents, vec!["one", "two"]);
     }

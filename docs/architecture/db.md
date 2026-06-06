@@ -8,10 +8,10 @@ See `docs/architecture/README.md` for the source tree overview and file routing 
 
 Single `rusqlite::Connection` behind a `Mutex`, managed as Tauri state:
 
-The store uses `PRAGMA user_version` with `CURRENT_SCHEMA_VERSION = 2`. Migrations
+The store uses `PRAGMA user_version` with `CURRENT_SCHEMA_VERSION = 3`. Migrations
 are applied stepwise and additively (version 0 → base schema; version 1 → the
-`message_provider_sends` table) without dropping existing data; databases with a
-future schema version fail explicitly.
+`message_provider_sends` table; version 2 → the display-only message error flag)
+without dropping existing data; databases with a future schema version fail explicitly.
 
 ### Schema
 
@@ -32,6 +32,7 @@ messages (
   assistant_id TEXT,
   content      TEXT NOT NULL,
   raw_json     TEXT,
+  is_error     INTEGER NOT NULL DEFAULT 0,
   created_at   INTEGER NOT NULL,
   UNIQUE (session_id, seq)
 );
@@ -57,6 +58,7 @@ CREATE INDEX idx_provider_sends_provider ON message_provider_sends (provider, me
 |---|---|
 | `create_session` | Inserts row with generated UUID, optional title |
 | `append_message` | Auto-assigns `seq` as `MAX(seq) + 1` per session; bumps session `updated_at` |
+| `append_error_message` | Persists a provider failure for display/history with `is_error = 1`; Rust routing-only, not exposed as an IPC command |
 | `read_history` | Reads messages `ORDER BY seq ASC` for a session |
 | `list_sessions` | `ORDER BY updated_at DESC, id ASC` |
 | `rename_session` | Updates title; `updated_at` unchanged (rename is not a message) |
@@ -64,7 +66,7 @@ CREATE INDEX idx_provider_sends_provider ON message_provider_sends (provider, me
 | `clear_session` | Deletes messages + nulls `codex_session_id`; preserves session, `updated_at` unchanged |
 | `update_codex_session_id` | Saves native CLI resume id; bumps `updated_at` |
 | `mark_message_sent` | Records `(message_id, provider)` in `message_provider_sends`; idempotent (`INSERT OR IGNORE`) |
-| `unsent_messages` | Per-provider diff: messages in a session with no send row for `provider`, ordered by `seq` |
+| `unsent_messages` | Per-provider diff: non-error messages in a session with no send row for `provider`, ordered by `seq`; display-only errors are never replayed |
 
 ### Storage Errors
 
@@ -76,8 +78,8 @@ Storage failures cross IPC as `StorageError` variants:
 
 ### Schema Versioning
 
-- `CURRENT_SCHEMA_VERSION = 2`
-- Stepwise migration: version < 1 applies the base schema; version < 2 adds `message_provider_sends`
+- `CURRENT_SCHEMA_VERSION = 3`
+- Stepwise migration: version < 1 applies the base schema; version < 2 adds `message_provider_sends`; version < 3 atomically adds `messages.is_error` and advances the schema version, while safely completing databases left in the prior interrupted-v3 state
 - Each step is `CREATE TABLE IF NOT EXISTS` + indexes; existing v0/v1 databases upgrade in place
 - Version > current: rejected with `UnsupportedSchemaVersion`
 - Migration is additive only — no data loss on upgrade

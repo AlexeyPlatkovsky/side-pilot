@@ -19,6 +19,7 @@ import "./styles.css";
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const t0 = Date.now();
+const fixtureParams = new URLSearchParams(window.location.search);
 
 const sessions: PersistedSession[] = [
   {
@@ -47,6 +48,7 @@ const messages: Record<string, PersistedMessage[]> = {
       assistantId: null,
       content: "How do I add passkey login?",
       rawJson: null,
+      isError: false,
       createdAt: t0 - 5 * MINUTE,
     },
     {
@@ -58,6 +60,7 @@ const messages: Record<string, PersistedMessage[]> = {
       content:
         "Use the WebAuthn API: register a credential, then verify the assertion on sign-in. See the [WebAuthn guide](https://example.com/webauthn) for details.",
       rawJson: "{}",
+      isError: false,
       createdAt: t0 - 4 * MINUTE,
     },
   ],
@@ -91,6 +94,7 @@ const api: ChatApi = {
       assistantId: m.assistantId ?? null,
       content: m.content,
       rawJson: m.rawJson ?? null,
+      isError: false,
       createdAt: Date.now(),
     };
     list.push(row);
@@ -125,12 +129,32 @@ const api: ChatApi = {
           assistantId: null,
           content: request.prompt,
           rawJson: null,
+          isError: false,
           createdAt: Date.now(),
         };
         list.push(userMessage);
         const targets =
           request.route.kind === "all" ? request.activeProviders : [request.route.provider];
         const outcomes = targets.map((provider) => {
+          if (fixtureParams.get("route") === "error") {
+            const row: PersistedMessage = {
+              id: `m${nextSeq++}`,
+              sessionId: request.sessionId,
+              seq: list.length + 1,
+              sender: "assistant",
+              assistantId: provider,
+              content: `${provider === "gemini" ? "Gemini" : provider} is not authenticated. Sign in to its CLI and try again.`,
+              rawJson: '{"kind":"notAuthenticated"}',
+              isError: true,
+              createdAt: Date.now(),
+            };
+            list.push(row);
+            return {
+              provider,
+              message: row,
+              error: { kind: "notAuthenticated" as const },
+            };
+          }
           const row: PersistedMessage = {
             id: `m${nextSeq++}`,
             sessionId: request.sessionId,
@@ -139,6 +163,7 @@ const api: ChatApi = {
             assistantId: provider,
             content: `A short **${provider}** reply for the runtime fixture.`,
             rawJson: "{}",
+            isError: false,
             createdAt: Date.now(),
           };
           list.push(row);
@@ -175,7 +200,7 @@ const api: ChatApi = {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <Bubble
     initialState={
-      new URLSearchParams(window.location.search).get("initial") === "collapsed"
+      fixtureParams.get("initial") === "collapsed"
         ? "collapsed"
         : "expanded"
     }

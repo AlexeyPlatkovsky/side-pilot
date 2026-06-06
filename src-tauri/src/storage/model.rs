@@ -75,6 +75,8 @@ pub struct Message {
     pub content: String,
     /// Raw routing metadata / structured CLI output retained for inspection.
     pub raw_json: Option<String>,
+    // Display-only provider failure; excluded from transcript replay.
+    pub is_error: bool,
     #[ts(type = "number")]
     pub created_at: i64,
 }
@@ -117,12 +119,14 @@ mod tests {
             assistant_id: Some("codex".to_string()),
             content: "pong".to_string(),
             raw_json: None,
+            is_error: false,
             created_at: 42,
         };
         let json = serde_json::to_value(&message).unwrap();
         assert_eq!(json["sessionId"], "s1");
         assert_eq!(json["assistantId"], "codex");
         assert_eq!(json["sender"], "assistant");
+        assert_eq!(json["isError"], false);
         assert_eq!(json["createdAt"], 42);
     }
 
