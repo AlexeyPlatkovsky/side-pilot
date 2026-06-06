@@ -27,7 +27,8 @@ Before asking any questions:
 
 1. Run `bd list --json` to find related Beads items. If the work extends an existing item, load its full detail with `bd show <id>`.
 2. Read any existing `.feature` files under `docs/` relevant to the topic.
-3. State what was found: "Found related item SP-NNN: <title>" or "No related items found."
+3. If the requested work touches or depends on existing UI, IPC, Rust core, or database behavior, read `docs/architecture/README.md` and then only the focused architecture sub-file(s) named by its routing table.
+4. State what was found: "Found related item SP-NNN: <title>" or "No related items found." Also state which architecture docs were checked, or "Architecture docs skipped: <reason>."
 
 This context informs the Q&A — do not re-ask what is already explicit in an existing item.
 

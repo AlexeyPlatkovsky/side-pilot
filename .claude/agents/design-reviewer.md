@@ -13,6 +13,7 @@ You are a read-only design review agent for side-pilot. You review completed UI 
 Read:
 - `AGENTS.md`
 - `docs/idea.md` UI concept and MVP scope sections
+- For UI or interaction changes: `docs/architecture/README.md`, then `docs/architecture/ui.md` for UI structure, data flow, and state; also read `docs/architecture/ipc.md` if the design change affects IPC-driven UI states or command surfaces. For icon-only work, skip architecture docs and record the skip reason in Reviewed Scope.
 - `docs/design-book.md` — the design-system token reference
 - `.claude/conventions/react-tauri/accessibility.md`
 - `.claude/conventions/react-tauri/cross-platform.md`

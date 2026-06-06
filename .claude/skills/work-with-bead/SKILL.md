@@ -129,14 +129,14 @@ Features must include:
 - required child task breakdown
 - dependencies on other features or tasks
 - validation expectations
-- BDD scenario coverage for feature-level workflows in `docs/<feature-id>/<feature-id>.feature` (same convention as tasks)
+- BDD scenario coverage for feature-level workflows in `docs/features/<feature-id>-<feature-name>/<feature-id>-<feature-name>.feature` (feature file uses the feature slug for both directory and filename)
 
 Tasks must include:
 
 - concrete implementation objective
 - parent feature or epic to read first when context would otherwise be duplicated
 - target files, modules, commands, or interfaces when known
-- acceptance — Definition of Done checklist in `--acceptance`, BDD scenarios in `docs/<feature-id>/<task-id>.feature`
+- acceptance — Definition of Done checklist in `--acceptance`, BDD scenarios in `docs/features/<feature-id>-<feature-name>/<task-id>-<task-name>.feature`; set `--spec-id` to the BDD file path so the link is visible in the Beads item (use `--spec-id` on `bd create` when creating the task, or `bd update` when the file is created after the task already exists)
 - test or manual validation expectations
 - dependencies on other tasks
 - documentation updates needed, or an explicit statement that none are expected
@@ -153,14 +153,15 @@ Use Beads fields for detail instead of hiding requirements in the title:
 
 Tasks with behavioral expectations that can be expressed as concrete Given/When/Then steps must include BDD scenario specifications as separate Gherkin files. Tasks without behavioral change — pure refactors, performance tuning, DB migrations, or similar — may skip scenario files.
 
-Feature-level BDD coverage is required unless all child task scenarios collectively cover every feature workflow.
+Feature-level BDD coverage is required unless all child task scenarios collectively cover every feature workflow. Create or update the feature-level scenario file when the feature is created or when child task scenarios no longer collectively cover every feature workflow.
 
-- File path: `docs/<feature-id>/<task-id>.feature` for tasks with a parent feature; use `docs/tasks/<task-id>.feature` for standalone tasks that have no parent feature
+- File path: `docs/features/<feature-id>-<feature-name>/<task-id>-<task-name>.feature` for tasks with a parent feature; use `docs/features/tasks/<task-id>-<task-name>.feature` for standalone tasks that have no parent feature. Standalone tasks must always use the literal `docs/features/tasks/` folder, not a task-specific subfolder. For tasks whose direct parent is an epic (no intervening feature), treat the epic as the feature: `docs/features/<epic-id>-<epic-name>/<task-id>-<task-name>.feature`.
+- `<feature-name>` and `<task-name>` are the slug only — `SP-NNN` is a fixed prefix and is not counted in the word limit. The slug is 2–4 words from the title, hyphen-separated; omit standard English stop words (articles, prepositions, conjunctions — e.g. the, a, an, of, with, for, in, to, and, or, by, on, at, from, as) and the item-type word (task, feature, epic). Use lowercase for all slug words; preserve conventional casing for initialisms and acronyms (e.g. AI, UI, CLI, HTTP). If the title yields fewer than 2 words after filtering, use all available words. If the title is a single word, use that word as the slug. Examples: `SP-015-AI-switcher`, `SP-016-implement-route-planner`.
 - Format: Standard Gherkin (`Feature:` / `Scenario:` / `Given` / `When` / `Then` / `And` / `But`)
 - Each scenario covers one behavioral case: happy path, error state, edge case, or permission denial
 - Scenario files are the authoritative behavior specification for implementation and testing — not a prose supplement to `--acceptance`, but the structured specification itself
 
-Example structure for `docs/SP-015/SP-016.feature`:
+Example structure for `docs/features/SP-015-AI-switcher/SP-016-implement-route-planner.feature`:
 
 ```gherkin
 Feature: Multi-tool transcript replay and routing
@@ -182,6 +183,7 @@ Feature: Multi-tool transcript replay and routing
 
 Rules:
 
+- Set `--spec-id <path>` on the Beads item to the scenario file path when the file is created, so the link is visible in the Beads item; update `--spec-id` via `bd update` whenever the scenario file path changes (e.g. on rename or rescope).
 - Create or update the scenario file whenever the task's acceptance criteria or behavioral expectations change.
 - Keep the DoD checklist in `--acceptance` focused on verifiable outcomes. The detail lives in the scenario file.
 - When implementing, the scenario file is the primary specification an AI agent or developer reads first after the Beads item.
@@ -191,7 +193,7 @@ Rules:
 - Claim or move an item to in-progress before starting non-trivial implementation work tied to that item.
 - Add comments or notes when important decisions, blockers, or scope changes appear during execution.
 - Update dependency edges when sequencing changes.
-- Close an item only after its acceptance criteria and required validation are satisfied.
+- Close an item only after its acceptance criteria and required validation are satisfied. Before closing a task that has a scenario file, verify that `--spec-id` is set to the correct path.
 - If implementation reveals that a Beads item is too broad, split it into compliant children and preserve dependencies.
 
 ## Output Contract

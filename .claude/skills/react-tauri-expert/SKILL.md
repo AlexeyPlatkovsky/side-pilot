@@ -25,6 +25,11 @@ description: Reviews, improves, and implements React + TypeScript + Tauri v2 cod
 
 ## Task Workflow
 
+Before review, improvement, or implementation:
+- Read `docs/architecture/README.md` first when the task touches or depends on existing UI, IPC, Rust core, adapters, links, storage, sessions, or messages.
+- Then read only the focused architecture sub-file(s) for the touched surface (`ui.md`, `ipc.md`, `rust.md`, or `db.md` under `docs/architecture/`).
+- If architecture docs are not relevant, record the skip reason in the output artifact's References Loaded column.
+
 ### Review existing code
 - Read the code under review and identify which topics apply.
 - Run the Topic Router below for each relevant topic.

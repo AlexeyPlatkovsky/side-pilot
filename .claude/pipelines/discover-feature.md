@@ -15,7 +15,9 @@ Drive requirements discovery through a structured Q&A loop with the user, verify
 - Bug investigation where root cause is unknown → use `triage-bug` pipeline
 - Work that already has a complete, user-approved spec with populated Beads acceptance criteria → route directly to `implement-feature`
 - Pure design decisions with no behavioral change → use `brainstorm` skill
-- Post-approval spec expansion on a previously approved item → restart with a new `discover-feature` run for the addendum, then link it to the existing item
+- Post-approval spec expansion on a previously approved item → restart with a new `discover-feature` run for the addendum, then set the existing item as parent or dependency in the new Beads item per `work-with-bead` conventions
+
+Re-scoping a previously approved Beads item (spec is bloated, incomplete, or poorly defined) is a valid entry point for this pipeline. Step 4 delegates Beads item handling to `work-with-bead`; if the needed update path is unsupported, that skill must report the blocker instead of guessing.
 
 ## Preconditions
 

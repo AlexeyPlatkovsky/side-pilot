@@ -98,6 +98,7 @@ Multi-tool target app (three CLI adapters built into the product); single AI ass
 | Source | Purpose |
 |---|---|
 | `docs/idea.md` | Primary design specification — single source of truth for features, MVP scope, and architecture intent |
+| `docs/architecture/README.md` | Implemented architecture index — read first, then only the focused UI, IPC, Rust core, or database sub-file needed for the task |
 | `src-tauri/src/main.rs` | Tauri/Rust core entry point (planned — Tauri scaffold not yet created) |
 | `src/App.tsx` | React UI root (planned — Tauri scaffold not yet created) |
 

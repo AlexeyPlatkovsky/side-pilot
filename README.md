@@ -111,7 +111,9 @@ npm run tauri build
 
 ## Useful Files
 
-- `docs/idea.md` - product and architecture specification
+- `docs/idea.md` - product specification and architecture intent
+- `docs/architecture/README.md` - implemented architecture reference and routing
+  index for UI, IPC, Rust core, and database details
 - `docs/design-book.md` - design system reference: the spacing, radius, color,
   icon, and type tokens defined in `src/styles.css` `:root` (change values there,
   not in component rules)

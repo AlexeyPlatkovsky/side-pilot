@@ -63,6 +63,8 @@ Make at most three reproduction attempts. If not reproduced after three runs, re
 
 Identify the specific code location and mechanism causing the bug. Use `Read` and `Bash` (grep, cargo check, test output) to locate the defect.
 
+If the bug involves existing UI flow, IPC routing, Rust core process/adapters, or storage behavior, read `docs/architecture/README.md` and then only the focused architecture sub-file(s) for the suspected layer(s) before concluding root cause. If root-cause evidence crosses layers, load the additional focused architecture sub-file(s) for those layers. Skip architecture docs when the bug is isolated to tests, copy, or unrelated tooling, and record the skip reason in the rationale if relevant.
+
 Record:
 - **Location:** file path and line range (or `unknown` if not locatable)
 - **Mechanism:** one-to-three-sentence explanation of why the bug occurs

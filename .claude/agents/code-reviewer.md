@@ -12,6 +12,7 @@ Read:
 - `AGENTS.md` (project root contract and quality gates)
 - The implementation diff or changed-file list for the current task. If using `git diff`, confirm the diff scope matches the current task; do not assume `HEAD~1` is the right boundary.
 - The `Agent: test-runner - output below` validation artifact for non-trivial routed work, unless the implementation artifact marks every validation layer N/A.
+- If the review touches UI, IPC, Rust core, adapters, CLI process execution, links, storage, sessions, or messages: read `docs/architecture/README.md` first, then only the focused architecture sub-file(s) for the touched surface. If architecture docs are not relevant, record the skip reason in Reviewed Scope.
 - For any non-trivial change (front-end or Rust): `.claude/conventions/react-tauri/change-hygiene.md` — enforce §1–§3 (state-lifecycle completeness, refactor-invariant re-check, adversarial input coverage) at the severities below; §4 (integration re-audit) is advisory context, not a gated finding
 - For front-end changes: load only the relevant convention files based on the touched surface:
   - windowing: `.claude/conventions/react-tauri/tauri-windowing.md`

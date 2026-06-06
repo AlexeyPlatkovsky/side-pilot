@@ -25,8 +25,12 @@ Do not use when:
 
 1. Confirm the manager's routing plan is present in the conversation.
 2. Load `docs/idea.md` for the relevant feature's design intent (stack, MVP scope, contract).
-3. Confirm open design decisions are resolved. If any remain, stop and report the unresolved decision as a blocker.
-4. Load the relevant convention files from `.claude/conventions/react-tauri/` for the touched surface: windowing, IPC/permissions, state, accessibility, performance, or cross-platform.
+3. Follow the architecture documentation decision in the manager artifact:
+   - If required, load `docs/architecture/README.md` and only the focused architecture sub-file(s) named by the manager.
+   - If skipped, do not load architecture docs unless newly discovered implementation scope makes the skip unsafe; in that case, stop and report that the manager routing needs an updated architecture-doc decision.
+   - If the manager artifact lacks an architecture documentation decision, stop and report the missing decision as a blocker.
+4. Confirm open design decisions are resolved. If any remain, stop and report the unresolved decision as a blocker.
+5. Load the relevant convention files from `.claude/conventions/react-tauri/` for the touched surface: windowing, IPC/permissions, state, accessibility, performance, or cross-platform.
    - Also load `desktop-platform-scope.md` when changing app icons, bundle assets, dev ports, window dimensions, or UI design variants.
 
 ## Implementation Steps (TDD: Red → Green → Refactor)
