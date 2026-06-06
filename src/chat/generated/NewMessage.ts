@@ -4,4 +4,4 @@ import type { Sender } from "./Sender";
 /**
  * Input for appending a message; the store assigns `id`, `seq`, and timestamp.
  */
-export type NewMessage = { sessionId: string, sender: Sender, assistantId?: string, content: string, rawJson?: string, };
+export type NewMessage = { sessionId: string, sender: Sender, assistantId?: string, model?: string, reasoningEffort?: string, content: string, rawJson?: string, };

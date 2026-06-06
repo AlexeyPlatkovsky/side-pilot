@@ -22,6 +22,9 @@ export interface ChatMessage {
   sender: Sender;
   /** Which assistant produced an assistant message (`codex` for the MVP). */
   assistantId?: string;
+  /** Exact provider configuration snapshotted for this reply. */
+  model?: string;
+  reasoningEffort?: string;
   /** Message text; assistant content is rendered as Markdown. */
   content: string;
   /** Creation time (ms epoch): DB `created_at`, or `Date.now()` for optimistic rows. */

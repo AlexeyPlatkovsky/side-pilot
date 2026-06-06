@@ -47,6 +47,9 @@ open = "5"
 # `#[serde(rename_all = ...)]`/`default` attributes used over the wire.
 ts-rs = { version = "10", features = ["serde-compat"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
+
 [dev-dependencies]
 # Trait-based mocking so adapter unit tests never spawn a real CLI (testing-pro: references/rust.md).
 mockall = "0.13"

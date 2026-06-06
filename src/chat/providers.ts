@@ -5,15 +5,14 @@
  * them. The active selection reuses the Rust-derived `Route` type (single
  * provider or `All`) so the UI cannot drift from the `run_route` contract.
  *
- * UI brand note: Codex is shown as **GPT** (never "Codex") per `chat/config.ts`;
- * Claude and Gemini use their own names. The model/effort badge ("GPT-5.5-medium")
- * still applies to the Codex/GPT slot via {@link messageLabel}.
+ * UI brand note: Codex is shown as **GPT** (never "Codex"); Claude and Gemini
+ * use their own names. Settled messages use their persisted model/effort
+ * snapshot via {@link messageLabel}.
  */
 
 import type { AssistantId } from "./generated/AssistantId";
 import type { AdapterError } from "./generated/AdapterError";
 import type { Route } from "./generated/Route";
-import { assistantModelLabel } from "./config";
 
 /** The active routing selection — single provider or every active provider. */
 export type ActiveRoute = Route;
@@ -47,7 +46,9 @@ export const DEFAULT_ROUTE: ActiveRoute = { kind: "single", provider: "codex" };
 
 /** Look up a provider's presentation, falling back for unknown ids. */
 export function providerInfo(id: AssistantId): ProviderInfo {
-  return PROVIDERS.find((p) => p.id === id) ?? { id, label: id, glyph: "?", accent: "gpt" };
+  return (
+    PROVIDERS.find((p) => p.id === id) ?? { id, label: id, glyph: "?", accent: "gpt" }
+  );
 }
 
 /** The user-facing label for a route ("All" or the single provider's name). */
@@ -67,11 +68,15 @@ export function routeTargets(route: ActiveRoute): AssistantId[] {
 }
 
 /**
- * The transcript label for an assistant/provider message. The GPT slot keeps the
- * model+effort badge ("GPT-5.5-medium"); other providers show their plain name.
+ * The transcript label for an assistant/provider message. Settled provider
+ * replies use their exact snapshotted model and reasoning effort.
  */
-export function messageLabel(assistantId: string | undefined): string {
-  if (assistantId === "codex") return assistantModelLabel;
+export function messageLabel(
+  assistantId: string | undefined,
+  model: string | undefined,
+  reasoningEffort: string | undefined,
+): string {
+  if (model) return `${model}-${reasoningEffort || "none"}`;
   if (!assistantId) return "Assistant";
   return providerInfo(assistantId as AssistantId).label;
 }
@@ -114,13 +119,16 @@ function isStructuredDumpLine(line: string): boolean {
     line.startsWith("}") ||
     line.startsWith('"') ||
     line.startsWith("'") ||
-    /^[\[\],]+$/.test(line)
+    /^[[\],]+$/.test(line)
   ) {
     return true;
   }
   const colon = line.indexOf(":");
   if (colon < 0) return false;
-  const key = line.slice(0, colon).trim().replace(/^["']|["']$/g, "");
+  const key = line
+    .slice(0, colon)
+    .trim()
+    .replace(/^["']|["']$/g, "");
   return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(key);
 }
 
@@ -164,7 +172,10 @@ export function describeCliExit(name: string, stderr: string | undefined): strin
  * card (SP-017). Unlike `describeError`, this names the actual provider instead
  * of always saying "GPT".
  */
-export function describeProviderError(error: AdapterError, provider: AssistantId): string {
+export function describeProviderError(
+  error: AdapterError,
+  provider: AssistantId,
+): string {
   const name = providerInfo(provider).label;
   switch (error.kind) {
     case "binaryNotFound":

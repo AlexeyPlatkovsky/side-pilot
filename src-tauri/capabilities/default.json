@@ -14,6 +14,8 @@
     "allow-app-version",
     "allow-run-adapter",
     "allow-run-route",
+    "allow-get-provider-preferences",
+    "allow-update-provider-preferences",
     "allow-cancel-adapter-run",
     "allow-create-session",
     "allow-append-message",

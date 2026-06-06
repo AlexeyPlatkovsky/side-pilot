@@ -9,7 +9,9 @@ const SINGLE_CODEX: ActiveRoute = { kind: "single", provider: "codex" };
 describe("AiSwitcher", () => {
   it("shows the active provider and keeps the picker closed by default", () => {
     render(<AiSwitcher route={SINGLE_CODEX} disabled={false} onSelect={() => {}} />);
-    const toggle = screen.getByRole("button", { name: /choose ai provider \(current: GPT\)/i });
+    const toggle = screen.getByRole("button", {
+      name: /choose ai provider \(current: GPT\)/i,
+    });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("menu")).toBeNull();
   });

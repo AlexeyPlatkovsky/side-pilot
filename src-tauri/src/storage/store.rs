@@ -20,7 +20,7 @@ use uuid::Uuid;
 use super::error::StorageError;
 use super::model::{Message, NewMessage, Sender, Session};
 
-const CURRENT_SCHEMA_VERSION: i64 = 3;
+const CURRENT_SCHEMA_VERSION: i64 = 4;
 
 /// Schema for version 1, applied through `PRAGMA user_version` migrations.
 const SCHEMA: &str = "
@@ -93,10 +93,12 @@ impl Store {
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, Connection>, StorageError> {
-        self.conn.lock().map_err(|_| StorageError::StorageUnavailable {
-            detail: "connection mutex poisoned by a panic during a prior storage operation"
-                .to_string(),
-        })
+        self.conn
+            .lock()
+            .map_err(|_| StorageError::StorageUnavailable {
+                detail: "connection mutex poisoned by a panic during a prior storage operation"
+                    .to_string(),
+            })
     }
 
     /// Test-only access to the underlying connection so sibling modules (e.g.
@@ -176,6 +178,8 @@ impl Store {
             seq: next_seq,
             sender: input.sender,
             assistant_id: input.assistant_id,
+            model: input.model,
+            reasoning_effort: input.reasoning_effort,
             content: input.content,
             raw_json: input.raw_json,
             is_error,
@@ -183,14 +187,16 @@ impl Store {
         };
         conn.execute(
             "INSERT INTO messages
-               (id, session_id, seq, sender, assistant_id, content, raw_json, is_error, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+               (id, session_id, seq, sender, assistant_id, model, reasoning_effort, content, raw_json, is_error, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 message.id,
                 message.session_id,
                 message.seq,
                 message.sender.as_str(),
                 message.assistant_id,
+                message.model,
+                message.reasoning_effort,
                 message.content,
                 message.raw_json,
                 message.is_error,
@@ -208,7 +214,7 @@ impl Store {
     pub fn read_history(&self, session_id: &str) -> Result<Vec<Message>, StorageError> {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, seq, sender, assistant_id, content, raw_json, is_error, created_at
+            "SELECT id, session_id, seq, sender, assistant_id, model, reasoning_effort, content, raw_json, is_error, created_at
              FROM messages WHERE session_id = ?1 ORDER BY seq ASC",
         )?;
         let rows = stmt.query_map(params![session_id], row_to_message)?;
@@ -260,10 +266,7 @@ impl Store {
     /// `NotFound` if the session does not exist.
     pub fn delete_session(&self, session_id: &str) -> Result<(), StorageError> {
         let conn = self.lock()?;
-        let changed = conn.execute(
-            "DELETE FROM sessions WHERE id = ?1",
-            params![session_id],
-        )?;
+        let changed = conn.execute("DELETE FROM sessions WHERE id = ?1", params![session_id])?;
         if changed == 0 {
             return Err(StorageError::NotFound {
                 entity: format!("session {session_id}"),
@@ -326,11 +329,7 @@ impl Store {
     /// Mark `message_id` as having been sent to `provider` (SP-016). Idempotent:
     /// a repeated mark for the same (message, provider) pair does not create a
     /// duplicate row, so re-sends never double-count.
-    pub fn mark_message_sent(
-        &self,
-        message_id: &str,
-        provider: &str,
-    ) -> Result<(), StorageError> {
+    pub fn mark_message_sent(&self, message_id: &str, provider: &str) -> Result<(), StorageError> {
         let conn = self.lock()?;
         // INSERT OR IGNORE keeps the (message_id, provider) primary key unique,
         // so a repeated mark is a harmless no-op rather than a duplicate row.
@@ -353,7 +352,7 @@ impl Store {
     ) -> Result<Vec<Message>, StorageError> {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, seq, sender, assistant_id, content, raw_json, is_error, created_at
+            "SELECT id, session_id, seq, sender, assistant_id, model, reasoning_effort, content, raw_json, is_error, created_at
              FROM messages m
              WHERE m.session_id = ?1
                AND m.is_error = 0
@@ -400,11 +399,7 @@ fn row_to_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Session> {
 fn row_to_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
     let sender_text: String = row.get(3)?;
     let sender = Sender::from_str(&sender_text).map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(
-            3,
-            rusqlite::types::Type::Text,
-            err.into(),
-        )
+        rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, err.into())
     })?;
     Ok(Message {
         id: row.get(0)?,
@@ -412,10 +407,12 @@ fn row_to_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
         seq: row.get(2)?,
         sender,
         assistant_id: row.get(4)?,
-        content: row.get(5)?,
-        raw_json: row.get(6)?,
-        is_error: row.get(7)?,
-        created_at: row.get(8)?,
+        model: row.get(5)?,
+        reasoning_effort: row.get(6)?,
+        content: row.get(7)?,
+        raw_json: row.get(8)?,
+        is_error: row.get(9)?,
+        created_at: row.get(10)?,
     })
 }
 
@@ -456,6 +453,31 @@ fn migrate_schema(conn: &Connection) -> Result<(), StorageError> {
             ))?;
         }
     }
+    if version < 4 {
+        let has_model: bool = conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_table_info('messages') WHERE name = 'model'
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        let has_reasoning: bool = conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_table_info('messages') WHERE name = 'reasoning_effort'
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        let mut migration = String::from("BEGIN IMMEDIATE;\n");
+        if !has_model {
+            migration.push_str("ALTER TABLE messages ADD COLUMN model TEXT;\n");
+        }
+        if !has_reasoning {
+            migration.push_str("ALTER TABLE messages ADD COLUMN reasoning_effort TEXT;\n");
+        }
+        migration.push_str("PRAGMA user_version = 4;\nCOMMIT;");
+        conn.execute_batch(&migration)?;
+    }
 
     Ok(())
 }
@@ -485,6 +507,8 @@ mod tests {
             session_id: session_id.to_string(),
             sender: Sender::User,
             assistant_id: None,
+            model: None,
+            reasoning_effort: None,
             content: content.to_string(),
             raw_json: None,
         }
@@ -495,6 +519,8 @@ mod tests {
             session_id: session_id.to_string(),
             sender: Sender::Assistant,
             assistant_id: Some("codex".to_string()),
+            model: Some("gpt-5.5".to_string()),
+            reasoning_effort: Some("low".to_string()),
             content: content.to_string(),
             raw_json: Some("{\"type\":\"turn.completed\"}".to_string()),
         }
@@ -505,6 +531,8 @@ mod tests {
             session_id: session_id.to_string(),
             sender: Sender::Assistant,
             assistant_id: Some("gemini".to_string()),
+            model: Some("gemini-3-flash-preview".to_string()),
+            reasoning_effort: Some("none".to_string()),
             content: content.to_string(),
             raw_json: Some(r#"{"kind":"notAuthenticated"}"#.to_string()),
         }
@@ -518,7 +546,9 @@ mod tests {
     #[test]
     fn create_session_persists_a_retrievable_session() {
         let store = Store::in_memory().unwrap();
-        let session = store.create_session(Some("First chat".to_string())).unwrap();
+        let session = store
+            .create_session(Some("First chat".to_string()))
+            .unwrap();
 
         assert!(!session.id.is_empty());
         assert_eq!(session.title.as_deref(), Some("First chat"));
@@ -533,7 +563,9 @@ mod tests {
         let store = Store::in_memory().unwrap();
         let session = store.create_session(None).unwrap();
 
-        let first = store.append_message(user_msg(&session.id, "hello")).unwrap();
+        let first = store
+            .append_message(user_msg(&session.id, "hello"))
+            .unwrap();
         let second = store
             .append_message(assistant_msg(&session.id, "hi back"))
             .unwrap();
@@ -549,13 +581,20 @@ mod tests {
         let store = Store::in_memory().unwrap();
         let session = store.create_session(None).unwrap();
         store.append_message(user_msg(&session.id, "one")).unwrap();
-        store.append_message(assistant_msg(&session.id, "two")).unwrap();
-        store.append_message(user_msg(&session.id, "three")).unwrap();
+        store
+            .append_message(assistant_msg(&session.id, "two"))
+            .unwrap();
+        store
+            .append_message(user_msg(&session.id, "three"))
+            .unwrap();
 
         let history = store.read_history(&session.id).unwrap();
         let contents: Vec<&str> = history.iter().map(|m| m.content.as_str()).collect();
         assert_eq!(contents, vec!["one", "two", "three"]);
-        assert_eq!(history.iter().map(|m| m.seq).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(
+            history.iter().map(|m| m.seq).collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
     }
 
     #[test]
@@ -596,9 +635,7 @@ mod tests {
     #[test]
     fn update_codex_session_id_for_unknown_session_is_not_found() {
         let store = Store::in_memory().unwrap();
-        let err = store
-            .update_codex_session_id("missing", "x")
-            .unwrap_err();
+        let err = store.update_codex_session_id("missing", "x").unwrap_err();
         assert!(matches!(err, StorageError::NotFound { .. }));
     }
 
@@ -637,12 +674,18 @@ mod tests {
         let keep = store.create_session(Some("keep".to_string())).unwrap();
         let drop = store.create_session(Some("drop".to_string())).unwrap();
         store.append_message(user_msg(&drop.id, "one")).unwrap();
-        store.append_message(assistant_msg(&drop.id, "two")).unwrap();
+        store
+            .append_message(assistant_msg(&drop.id, "two"))
+            .unwrap();
 
         store.delete_session(&drop.id).unwrap();
 
-        let remaining: Vec<String> =
-            store.list_sessions().unwrap().into_iter().map(|s| s.id).collect();
+        let remaining: Vec<String> = store
+            .list_sessions()
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id)
+            .collect();
         assert_eq!(remaining, vec![keep.id]);
         // Messages of the deleted session are gone (cascade), so re-reading is empty.
         assert!(store.read_history(&drop.id).unwrap().is_empty());
@@ -660,7 +703,9 @@ mod tests {
         let store = Store::in_memory().unwrap();
         let session = store.create_session(Some("chat".to_string())).unwrap();
         store.append_message(user_msg(&session.id, "one")).unwrap();
-        store.append_message(assistant_msg(&session.id, "two")).unwrap();
+        store
+            .append_message(assistant_msg(&session.id, "two"))
+            .unwrap();
         store
             .update_codex_session_id(&session.id, "thread-stale")
             .unwrap();
@@ -684,7 +729,9 @@ mod tests {
         assert_eq!(reloaded.codex_session_id, None);
         assert_eq!(reloaded.updated_at, before.updated_at);
         // Next appended message restarts the sequence at 1.
-        let next = store.append_message(user_msg(&session.id, "fresh")).unwrap();
+        let next = store
+            .append_message(user_msg(&session.id, "fresh"))
+            .unwrap();
         assert_eq!(next.seq, 1);
     }
 
@@ -704,7 +751,9 @@ mod tests {
         let session_id = {
             let store = Store::open(&db_path).unwrap();
             let session = store.create_session(None).unwrap();
-            store.append_message(user_msg(&session.id, "persist me")).unwrap();
+            store
+                .append_message(user_msg(&session.id, "persist me"))
+                .unwrap();
             session.id
         };
 
@@ -752,7 +801,10 @@ mod tests {
         let sessions = store.list_sessions().unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].id, "session-existing");
-        assert_eq!(sessions[0].codex_session_id.as_deref(), Some("codex-native"));
+        assert_eq!(
+            sessions[0].codex_session_id.as_deref(),
+            Some("codex-native")
+        );
         let history = store.read_history("session-existing").unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content, "hi");
@@ -843,6 +895,32 @@ mod tests {
     }
 
     #[test]
+    fn interrupted_version_four_migration_can_be_retried() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.execute_batch(SCHEMA_V3).unwrap();
+        conn.execute("ALTER TABLE messages ADD COLUMN model TEXT", [])
+            .unwrap();
+        conn.pragma_update(None, "user_version", 3).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+        let has_reasoning: bool = conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM pragma_table_info('messages') WHERE name = 'reasoning_effort'
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(has_reasoning);
+    }
+
+    #[test]
     fn unsent_messages_returns_all_when_nothing_marked() {
         let store = Store::in_memory().unwrap();
         let session = store.create_session(None).unwrap();
@@ -880,7 +958,11 @@ mod tests {
 
         let unsent = store.unsent_messages(&session.id, "codex").unwrap();
         let contents: Vec<&str> = unsent.iter().map(|m| m.content.as_str()).collect();
-        assert_eq!(contents, vec!["two"], "the marked message is no longer in the diff");
+        assert_eq!(
+            contents,
+            vec!["two"],
+            "the marked message is no longer in the diff"
+        );
     }
 
     #[test]
@@ -892,8 +974,14 @@ mod tests {
         store.mark_message_sent(&msg.id, "codex").unwrap();
 
         // Sent to codex, but claude has not seen it yet.
-        assert!(store.unsent_messages(&session.id, "codex").unwrap().is_empty());
-        assert_eq!(store.unsent_messages(&session.id, "claude").unwrap().len(), 1);
+        assert!(store
+            .unsent_messages(&session.id, "codex")
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            store.unsent_messages(&session.id, "claude").unwrap().len(),
+            1
+        );
     }
 
     #[test]

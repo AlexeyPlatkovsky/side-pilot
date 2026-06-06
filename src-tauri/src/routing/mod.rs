@@ -18,9 +18,8 @@ use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 
 use crate::adapters::contract::DEFAULT_TIMEOUT_MS;
-use crate::adapters::{
-    AdapterError, AdapterRegistry, AdapterRequest, AssistantId, PermissionMode,
-};
+use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AssistantId, PermissionMode};
+use crate::preferences::{ProviderPreference, ProviderPreferences};
 use crate::storage::{Message, NewMessage, Sender, StorageError, Store};
 
 /// Which provider(s) a prompt is routed to.
@@ -45,11 +44,6 @@ pub struct RouteRequest {
     /// Providers considered active for an `All` route, in display order.
     #[serde(default)]
     pub active_providers: Vec<AssistantId>,
-    /// Optional Codex model override. Claude and Gemini use their CLI defaults
-    /// because this shared route currently has no per-provider model settings.
-    #[serde(default)]
-    #[ts(optional)]
-    pub model: Option<String>,
     /// Per-provider timeout in milliseconds (SP-009 contract).
     #[serde(default = "default_timeout_ms")]
     #[ts(type = "number")]
@@ -162,7 +156,7 @@ fn extract_named_error(stderr: &str) -> Option<String> {
         }
     }
     let detail = detail.split_whitespace().collect::<Vec<_>>().join(" ");
-    (!detail.is_empty()).then(|| detail)
+    (!detail.is_empty()).then_some(detail)
 }
 
 fn is_structured_dump_line(line: &str) -> bool {
@@ -201,14 +195,13 @@ fn summarize_cli_stderr(stderr: &str) -> Option<String> {
     trimmed
         .lines()
         .map(strip_log_prefixes)
-        .filter(|line| {
-            !line.is_empty()
-                && !line.starts_with("at ")
-                && !line.starts_with("Full report available at:")
-                && !(line.starts_with("Error when talking to ") && line.ends_with(" API"))
-                && !is_structured_dump_line(line)
+        .rfind(|line| {
+            !(line.is_empty()
+                || line.starts_with("at ")
+                || line.starts_with("Full report available at:")
+                || (line.starts_with("Error when talking to ") && line.ends_with(" API"))
+                || is_structured_dump_line(line))
         })
-        .next_back()
         .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
         .map(|detail| truncate_error_detail(&detail))
 }
@@ -250,6 +243,7 @@ fn provider_error_message(provider: AssistantId, error: &AdapterError) -> String
 /// consistent pre-send state so concurrent `All` runs do not race the store.
 struct Prepared {
     provider: AssistantId,
+    preference: ProviderPreference,
     diff_ids: Vec<String>,
     request: AdapterRequest,
     cancel: CancellationToken,
@@ -262,9 +256,10 @@ struct Prepared {
 /// failing provider never cancels its siblings and never records a send. The
 /// outer `Result` error is reserved for storage failures (e.g. the session does
 /// not exist).
-pub async fn execute_route(
+pub async fn execute_route_with_preferences(
     store: &Store,
     registry: &AdapterRegistry,
+    preferences: &ProviderPreferences,
     request: RouteRequest,
     mut make_cancel: impl FnMut(AssistantId) -> CancellationToken,
 ) -> Result<RouteRunResult, StorageError> {
@@ -275,6 +270,8 @@ pub async fn execute_route(
         assistant_id: None,
         content: request.prompt.clone(),
         raw_json: None,
+        model: None,
+        reasoning_effort: None,
     })?;
 
     // 2. Resolve target providers for this route.
@@ -284,22 +281,24 @@ pub async fn execute_route(
     //    so concurrent runs observe a consistent pre-send transcript.
     let mut prepared: Vec<Prepared> = Vec::with_capacity(targets.len());
     for provider in targets {
+        let preference = preferences.for_provider(provider).clone();
         let diff = store.unsent_messages(&request.session_id, provider.as_str())?;
         let diff_ids = diff.iter().map(|m| m.id.clone()).collect();
         let prompt = compose_prompt(&diff);
         prepared.push(Prepared {
             provider,
+            preference: preference.clone(),
             diff_ids,
             request: AdapterRequest {
                 assistant: provider,
                 prompt,
                 working_directory: None,
-                model: if provider == AssistantId::Codex {
-                    request.model.clone()
-                } else {
+                model: Some(preference.model.clone()),
+                reasoning_effort: if provider == AssistantId::Gemini {
                     None
+                } else {
+                    preference.reasoning_argument()
                 },
-                reasoning_effort: None,
                 permission_mode: PermissionMode::ReadOnly,
                 timeout_ms: request.timeout_ms,
                 resume_session_id: None,
@@ -329,6 +328,8 @@ pub async fn execute_route(
                     session_id: request.session_id.clone(),
                     sender: Sender::Assistant,
                     assistant_id: Some(prep.provider.as_str().to_string()),
+                    model: Some(prep.preference.model.clone()),
+                    reasoning_effort: Some(prep.preference.reasoning.clone()),
                     content: adapter_result.assistant_text,
                     raw_json: Some(adapter_result.raw_json),
                 })?;
@@ -352,6 +353,8 @@ pub async fn execute_route(
                     session_id: request.session_id.clone(),
                     sender: Sender::Assistant,
                     assistant_id: Some(prep.provider.as_str().to_string()),
+                    model: Some(prep.preference.model.clone()),
+                    reasoning_effort: Some(prep.preference.reasoning.clone()),
                     content: provider_error_message(prep.provider, &error),
                     raw_json: serde_json::to_string(&error).ok(),
                 })?;
@@ -368,6 +371,23 @@ pub async fn execute_route(
         user_message,
         outcomes,
     })
+}
+
+#[cfg(test)]
+pub async fn execute_route(
+    store: &Store,
+    registry: &AdapterRegistry,
+    request: RouteRequest,
+    make_cancel: impl FnMut(AssistantId) -> CancellationToken,
+) -> Result<RouteRunResult, StorageError> {
+    execute_route_with_preferences(
+        store,
+        registry,
+        &ProviderPreferences::default(),
+        request,
+        make_cancel,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -388,6 +408,8 @@ mod tests {
             seq,
             sender,
             assistant_id: assistant_id.map(str::to_string),
+            model: None,
+            reasoning_effort: None,
             content: content.to_string(),
             raw_json: None,
             is_error: false,
@@ -438,7 +460,11 @@ mod tests {
         ) -> Result<AdapterResult, AdapterError> {
             Ok(AdapterResult {
                 assistant_text: "ok".to_string(),
-                raw_json: req.model.unwrap_or_else(|| "default".to_string()),
+                raw_json: format!(
+                    "{}|{}",
+                    req.model.unwrap_or_else(|| "default".to_string()),
+                    req.reasoning_effort.unwrap_or_else(|| "none".to_string())
+                ),
                 native_session_id: None,
                 usage: None,
             })
@@ -469,7 +495,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn route_applies_the_codex_model_only_to_codex() {
+    async fn route_applies_fixed_provider_snapshot_and_persists_badges() {
         let store = Store::in_memory().unwrap();
         let session = store.create_session(None).unwrap();
         let mut registry = AdapterRegistry::new();
@@ -477,9 +503,11 @@ mod tests {
             registry.register(Arc::new(ModelEchoAdapter { id }));
         }
 
-        let result = execute_route(
+        let preferences = ProviderPreferences::default();
+        let result = execute_route_with_preferences(
             &store,
             &registry,
+            &preferences,
             RouteRequest {
                 session_id: session.id,
                 route: Route::All,
@@ -489,7 +517,6 @@ mod tests {
                     AssistantId::Claude,
                     AssistantId::Gemini,
                 ],
-                model: Some("gpt-5.5".to_string()),
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -510,9 +537,25 @@ mod tests {
                 .as_deref()
                 .unwrap()
         };
-        assert_eq!(raw_json(AssistantId::Codex), "gpt-5.5");
-        assert_eq!(raw_json(AssistantId::Claude), "default");
-        assert_eq!(raw_json(AssistantId::Gemini), "default");
+        assert_eq!(raw_json(AssistantId::Codex), "gpt-5.5|low");
+        assert_eq!(raw_json(AssistantId::Claude), "haiku|low");
+        assert_eq!(raw_json(AssistantId::Gemini), "gemini-3-flash-preview|none");
+        for provider in [AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini] {
+            let message = result
+                .outcomes
+                .iter()
+                .find(|outcome| outcome.provider == provider)
+                .unwrap()
+                .message
+                .as_ref()
+                .unwrap();
+            let preference = preferences.for_provider(provider);
+            assert_eq!(message.model.as_deref(), Some(preference.model.as_str()));
+            assert_eq!(
+                message.reasoning_effort.as_deref(),
+                Some(preference.reasoning.as_str())
+            );
+        }
     }
 
     #[test]
@@ -731,7 +774,6 @@ mod tests {
                 },
                 prompt: "ping".to_string(),
                 active_providers: vec![],
-                model: None,
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -742,10 +784,7 @@ mod tests {
         assert_eq!(result.outcomes.len(), 1);
         let outcome = &result.outcomes[0];
         assert_eq!(outcome.provider, AssistantId::Codex);
-        assert_eq!(
-            outcome.message.as_ref().unwrap().content,
-            "pong"
-        );
+        assert_eq!(outcome.message.as_ref().unwrap().content, "pong");
         // The user prompt was sent to codex with no prior context.
         assert_eq!(result.user_message.content, "ping");
         assert_eq!(sends_count(&store, &result.user_message.id, "codex"), 1);
@@ -770,7 +809,6 @@ mod tests {
                 },
                 prompt: "hello".to_string(),
                 active_providers: vec![],
-                model: None,
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -779,8 +817,7 @@ mod tests {
         .unwrap();
 
         // Switch to Claude with a new prompt.
-        let claude_registry =
-            registry_with(vec![(AssistantId::Claude, ok_result("claude reply"))]);
+        let claude_registry = registry_with(vec![(AssistantId::Claude, ok_result("claude reply"))]);
         let result = execute_route(
             &store,
             &claude_registry,
@@ -791,7 +828,6 @@ mod tests {
                 },
                 prompt: "and you?".to_string(),
                 active_providers: vec![],
-                model: None,
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -800,7 +836,12 @@ mod tests {
         .unwrap();
 
         // Claude received the full prior transcript with Codex's turn labeled.
-        let received = result.outcomes[0].message.as_ref().unwrap().raw_json.clone();
+        let received = result.outcomes[0]
+            .message
+            .as_ref()
+            .unwrap()
+            .raw_json
+            .clone();
         assert_eq!(
             received.as_deref(),
             Some("hello\n\n[Codex]: codex says hi\n\nand you?")
@@ -809,7 +850,12 @@ mod tests {
         let history = store.read_history(&session.id).unwrap();
         // history: hello(user), codex says hi(assistant), and you?(user), claude reply(assistant)
         for m in &history[..3] {
-            assert_eq!(sends_count(&store, &m.id, "claude"), 1, "msg {} sent to claude", m.seq);
+            assert_eq!(
+                sends_count(&store, &m.id, "claude"),
+                1,
+                "msg {} sent to claude",
+                m.seq
+            );
         }
     }
 
@@ -832,7 +878,6 @@ mod tests {
                     },
                     prompt: prompt.to_string(),
                     active_providers: vec![],
-                    model: None,
                     timeout_ms: 1000,
                 },
                 no_cancel,
@@ -852,7 +897,6 @@ mod tests {
                 },
                 prompt: "three".to_string(),
                 active_providers: vec![],
-                model: None,
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -860,7 +904,12 @@ mod tests {
         .await
         .unwrap();
 
-        let received = result.outcomes[0].message.as_ref().unwrap().raw_json.clone();
+        let received = result.outcomes[0]
+            .message
+            .as_ref()
+            .unwrap()
+            .raw_json
+            .clone();
         assert_eq!(received.as_deref(), Some("three"));
     }
 
@@ -888,7 +937,6 @@ mod tests {
                     AssistantId::Claude,
                     AssistantId::Gemini,
                 ],
-                model: None,
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -896,8 +944,7 @@ mod tests {
         .await
         .unwrap();
 
-        let providers: Vec<AssistantId> =
-            result.outcomes.iter().map(|o| o.provider).collect();
+        let providers: Vec<AssistantId> = result.outcomes.iter().map(|o| o.provider).collect();
         assert_eq!(
             providers,
             vec![AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini]
@@ -920,10 +967,13 @@ mod tests {
         let registry = registry_with(vec![
             (AssistantId::Codex, ok_result("c")),
             (AssistantId::Claude, ok_result("l")),
-            (AssistantId::Gemini, Err(AdapterError::NonZeroExit {
-                code: Some(1),
-                stderr: "boom".to_string(),
-            })),
+            (
+                AssistantId::Gemini,
+                Err(AdapterError::NonZeroExit {
+                    code: Some(1),
+                    stderr: "boom".to_string(),
+                }),
+            ),
         ]);
 
         let result = execute_route(
@@ -938,7 +988,6 @@ mod tests {
                     AssistantId::Claude,
                     AssistantId::Gemini,
                 ],
-                model: None,
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -987,7 +1036,6 @@ mod tests {
                 },
                 prompt: "first try".to_string(),
                 active_providers: vec![],
-                model: None,
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -1015,7 +1063,6 @@ mod tests {
                 },
                 prompt: "retry".to_string(),
                 active_providers: vec![],
-                model: None,
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -1024,7 +1071,12 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            result.outcomes[0].message.as_ref().unwrap().raw_json.as_deref(),
+            result.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
             Some("first try\n\nretry"),
             "the persisted error card must not be replayed to Gemini"
         );
@@ -1049,7 +1101,6 @@ mod tests {
                 route: Route::All,
                 prompt: "hi".to_string(),
                 active_providers: vec![AssistantId::Codex, AssistantId::Claude],
-                model: None,
                 timeout_ms: 1000,
             },
             no_cancel,
@@ -1067,7 +1118,10 @@ mod tests {
             .iter()
             .find(|o| o.provider == AssistantId::Claude)
             .unwrap();
-        assert!(codex.message.is_some(), "codex unaffected by claude timeout");
+        assert!(
+            codex.message.is_some(),
+            "codex unaffected by claude timeout"
+        );
         assert_eq!(claude.error, Some(AdapterError::TimedOut));
     }
 }

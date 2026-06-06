@@ -4,13 +4,4 @@ import type { Sender } from "./Sender";
 /**
  * One persisted message within a session, ordered by `seq`.
  */
-export type Message = { id: string, sessionId: string, seq: number, sender: Sender, 
-/**
- * Which assistant produced an assistant message (`codex` for the MVP).
- * `None` for user messages.
- */
-assistantId: string | null, content: string, 
-/**
- * Raw routing metadata / structured CLI output retained for inspection.
- */
-rawJson: string | null, isError: boolean, createdAt: number, };
+export type Message = { id: string, sessionId: string, seq: number, sender: Sender, assistantId: string | null, model: string | null, reasoningEffort: string | null, content: string, rawJson: string | null, isError: boolean, createdAt: number, };

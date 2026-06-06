@@ -25,7 +25,6 @@ import {
 } from "../chat/history";
 import { useChatStatus } from "../chat/useChatStatus";
 import { useSessionList } from "../chat/useSessionList";
-import { ASSISTANT_MODEL } from "../chat/config";
 import {
   ALL_PROVIDER_IDS,
   DEFAULT_ROUTE,
@@ -177,7 +176,6 @@ export function useChat(api: ChatApi) {
           route,
           prompt: trimmed,
           activeProviders: ALL_PROVIDER_IDS as AssistantId[],
-          model: ASSISTANT_MODEL.id,
         });
         // This turn is no longer in flight.
         clearPending(originId);
@@ -338,9 +336,8 @@ export interface ChatPanelProps {
  * blocking ("thinking") slots, inline error cards for failed provider slots
  * (plus a residual error banner for infrastructure/storage failures from the
  * catch path), the prompt composer, and the AI switcher beside Send for choosing
- * a single provider or All. Each assistant reply is labeled by provider — the
- * GPT slot keeps the model+effort badge ("GPT-5.5-medium"); user messages are
- * unlabeled.
+ * a single provider or All. Each settled assistant reply keeps its persisted
+ * model+effort badge; user messages are unlabeled.
  */
 export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
   const {
@@ -417,10 +414,14 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
   // Drop retained UI state after a chat is deleted.
   useEffect(() => {
     const sessionIds = new Set(sessions.map((session) => session.id));
-    if (Object.keys(routesBySession).every((sessionId) => sessionIds.has(sessionId))) return;
+    if (Object.keys(routesBySession).every((sessionId) => sessionIds.has(sessionId)))
+      return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRoutesBySession(
       Object.fromEntries(
-        Object.entries(routesBySession).filter(([sessionId]) => sessionIds.has(sessionId)),
+        Object.entries(routesBySession).filter(([sessionId]) =>
+          sessionIds.has(sessionId),
+        ),
       ),
     );
   }, [routesBySession, sessions]);
@@ -548,7 +549,11 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
                 </article>
               );
             }
-            const label = messageLabel(message.assistantId);
+            const label = messageLabel(
+              message.assistantId,
+              message.model,
+              message.reasoningEffort,
+            );
             // A per-provider slot still awaiting its reply (SP-017).
             if (message.pending) {
               return (

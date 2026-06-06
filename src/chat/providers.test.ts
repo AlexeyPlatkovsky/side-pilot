@@ -10,7 +10,6 @@ import {
   routeTargets,
   routesEqual,
 } from "./providers";
-import { assistantModelLabel } from "./config";
 
 describe("providers", () => {
   it("defaults to a single GPT (Codex) route", () => {
@@ -35,23 +34,35 @@ describe("providers", () => {
   it("compares routes by target", () => {
     expect(routesEqual({ kind: "all" }, { kind: "all" })).toBe(true);
     expect(
-      routesEqual({ kind: "single", provider: "codex" }, { kind: "single", provider: "codex" }),
+      routesEqual(
+        { kind: "single", provider: "codex" },
+        { kind: "single", provider: "codex" },
+      ),
     ).toBe(true);
     expect(
-      routesEqual({ kind: "single", provider: "codex" }, { kind: "single", provider: "claude" }),
+      routesEqual(
+        { kind: "single", provider: "codex" },
+        { kind: "single", provider: "claude" },
+      ),
     ).toBe(false);
-    expect(routesEqual({ kind: "all" }, { kind: "single", provider: "codex" })).toBe(false);
+    expect(routesEqual({ kind: "all" }, { kind: "single", provider: "codex" })).toBe(
+      false,
+    );
   });
 
-  it("keeps the model/effort badge for GPT but plain names for others", () => {
-    expect(messageLabel("codex")).toBe(assistantModelLabel);
-    expect(messageLabel("claude")).toBe("Claude");
-    expect(messageLabel("gemini")).toBe("Gemini");
-    expect(messageLabel(undefined)).toBe("Assistant");
+  it("uses snapshotted model and reasoning for every provider badge", () => {
+    expect(messageLabel("codex", "gpt-5.5", "low")).toBe("gpt-5.5-low");
+    expect(messageLabel("claude", "haiku", "low")).toBe("haiku-low");
+    expect(messageLabel("gemini", "gemini-3-flash-preview", "none")).toBe(
+      "gemini-3-flash-preview-none",
+    );
+    expect(messageLabel(undefined, undefined, undefined)).toBe("Assistant");
   });
 
   it("names the failing provider in error-card text", () => {
-    expect(describeProviderError({ kind: "timedOut" }, "claude")).toMatch(/Claude timed out/i);
+    expect(describeProviderError({ kind: "timedOut" }, "claude")).toMatch(
+      /Claude timed out/i,
+    );
     expect(describeProviderError({ kind: "notAuthenticated" }, "gemini")).toMatch(
       /Gemini is not authenticated/i,
     );
@@ -72,9 +83,9 @@ describe("providers", () => {
       '{ "session_id": "secret", "error": { "type": "Error", "message": "Requested entity was not found." } }',
     ].join("\n");
 
-    expect(describeProviderError({ kind: "nonZeroExit", code: 404, stderr }, "gemini")).toBe(
-      "Gemini exited with an error: Requested entity was not found.",
-    );
+    expect(
+      describeProviderError({ kind: "nonZeroExit", code: 404, stderr }, "gemini"),
+    ).toBe("Gemini exited with an error: Requested entity was not found.");
   });
 
   it("caps over-length CLI stderr in the visible error card", () => {

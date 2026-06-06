@@ -46,10 +46,20 @@ Gemini has two verified divergences from the `docs/idea.md` §1 contract table
 `stats.models.<name>.tokens`); token usage is summed across models onto the
 shared `Usage` shape (`candidates` → output tokens, `thoughts` → reasoning).
 
-The shared `run_route` request currently carries the configured Codex model
-only. Routing applies that override to Codex and leaves the model unset for
-Claude and Gemini, allowing those CLIs to select their own valid defaults.
-Per-provider model selection is deferred with the model-selector UI.
+Provider model/reasoning configuration is global and owned by the Rust
+`PreferencesStore` in `src-tauri/src/preferences.rs`. At startup it loads
+`preferences.json` from the app-data directory into memory. Missing or malformed
+files use the Rust defaults (`gpt-5.5`/`low`, `haiku`/`low`,
+`gemini-3-flash-preview`/`none`); valid partial files preserve valid providers
+and independently default missing or invalid providers. Each route snapshots
+all targeted provider preferences before dispatch. Codex and Claude receive
+the configured model and any non-empty reasoning value except exact `none`;
+Gemini receives its configured model and never receives reasoning.
+
+`get_provider_preferences` and `update_provider_preferences` are the future
+Settings seam. Updates validate models, atomically replace the app-data file,
+and refresh the in-memory snapshot immediately. Manual file edits require an
+app restart.
 
 Each adapter constructs a `CommandSpec` (program, args, cwd, env, timeout, cancel token) and hands it to the injected `CommandRunner`. The runner uses `tokio::process::Command` with:
 - **Process group isolation**: Unix `process_group(0)` / Windows `CREATE_NEW_PROCESS_GROUP`
@@ -84,7 +94,11 @@ Binary resolution is cached per assistant. On Unix/macOS it uses `/bin/zsh -lc '
 
 ## App Bootstrap (`src-tauri/src/lib.rs`)
 
-`run()` builds the Tauri app, creates the per-user app data directory, opens `side-pilot.db` there, manages both `Store` and `AppState`, and registers the IPC commands. The Tauri window itself is configured in `src-tauri/tauri.conf.json` as a 64x64 frameless, transparent, always-on-top, resizable window with no taskbar entry.
+`run()` builds the Tauri app, creates the per-user app data directory, opens
+`side-pilot.db` and `preferences.json` there, manages `Store`,
+`PreferencesStore`, and `AppState`, and registers the IPC commands. The Tauri
+window itself is configured in `src-tauri/tauri.conf.json` as a 64x64 frameless,
+transparent, always-on-top, resizable window with no taskbar entry.
 
 ## Links Safety (`src-tauri/src/links.rs`)
 

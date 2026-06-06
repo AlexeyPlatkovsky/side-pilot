@@ -86,9 +86,8 @@ impl ClaudeAdapter {
     /// including on resume — so the conservative default cannot be lost across
     /// turns. Model selection applies on fresh runs only; a resumed session
     /// (`-r <id>`) inherits the model of its originating session (§6). Reasoning
-    /// effort is a Codex-specific flag and has no Claude equivalent, so it is
-    /// ignored here. The prompt is the final positional argument; Claude's
-    /// `-p/--print` is a boolean flag.
+    /// effort is passed through using Claude's `--effort` option. The prompt is
+    /// the final positional argument; Claude's `-p/--print` is a boolean flag.
     fn build_args(req: &AdapterRequest) -> Vec<String> {
         let mut args: Vec<String> = vec![
             "-p".to_string(),
@@ -107,6 +106,10 @@ impl ClaudeAdapter {
         } else if let Some(model) = &req.model {
             args.push("--model".to_string());
             args.push(model.clone());
+        }
+        if let Some(effort) = &req.reasoning_effort {
+            args.push("--effort".to_string());
+            args.push(effort.clone());
         }
 
         args.push(req.prompt.clone());
@@ -229,9 +232,10 @@ impl From<ClaudeUsage> for Usage {
 /// taxonomy rather than being surfaced as assistant text.
 fn parse_claude_output(stdout: &str) -> Result<ParsedClaude, AdapterError> {
     let value = parse_json_lenient(stdout)?;
-    let result_obj = find_result_object(&value).ok_or_else(|| AdapterError::OutputParseFailure {
-        detail: "no result event in claude output".to_string(),
-    })?;
+    let result_obj =
+        find_result_object(&value).ok_or_else(|| AdapterError::OutputParseFailure {
+            detail: "no result event in claude output".to_string(),
+        })?;
 
     if result_obj.get("is_error").and_then(Value::as_bool) == Some(true) {
         let detail = result_obj
@@ -362,9 +366,25 @@ mod tests {
         let mut req = request("hi");
         req.model = Some("claude-opus-4-8".to_string());
         let args = ClaudeAdapter::build_args(&req);
-        let model_pos = args.iter().position(|a| a == "--model").expect("has --model");
+        let model_pos = args
+            .iter()
+            .position(|a| a == "--model")
+            .expect("has --model");
         assert_eq!(args[model_pos + 1], "claude-opus-4-8");
         // Prompt remains the final positional argument.
+        assert_eq!(args.last().map(String::as_str), Some("hi"));
+    }
+
+    #[test]
+    fn build_args_includes_arbitrary_reasoning_effort_when_present() {
+        let mut req = request("hi");
+        req.reasoning_effort = Some("custom-effort".to_string());
+        let args = ClaudeAdapter::build_args(&req);
+        let effort_pos = args
+            .iter()
+            .position(|a| a == "--effort")
+            .expect("has --effort");
+        assert_eq!(args[effort_pos + 1], "custom-effort");
         assert_eq!(args.last().map(String::as_str), Some("hi"));
     }
 

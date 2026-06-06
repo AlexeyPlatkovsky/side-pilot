@@ -45,11 +45,11 @@ App
 User types prompt → onSubmit() in ChatPanel (with the active route)
   → dispatch({ type: "routeSubmit" })  # optimistic user message + one pending slot per target provider, status → pending
   → generateTitle() + api.renameSession()  # name an untitled chat from its first prompt
-  → api.runRoute({ sessionId, route, prompt, activeProviders, model })
+  → api.runRoute({ sessionId, route, prompt, activeProviders })
         # Tauri IPC → run_route: persists prompt, computes each provider's
         # unsent diff (transcript replay, §6), dispatches single or All
-        # (concurrently), applies the configured model only to Codex, persists
-        # each reply, records message_provider_sends
+        # (concurrently), snapshots each provider's global model/reasoning,
+        # persists each reply, records message_provider_sends
   → map persisted outcomes → reply messages (success) or inline error cards (failure)
   → dispatch({ type: "routeSettled" })  # swap pending slots for results, status → idle
 ```
@@ -71,7 +71,7 @@ The submit path routes through `run_route` (SP-016), so conversation context is 
 | `src/components/Dialog.tsx` | Accessible modal dialog (focus trap, Escape) |
 | `src/components/RenameDialog.tsx` | Chat rename form inside Dialog |
 | `src/chat/api.ts` | `ChatApi` interface + Tauri IPC bridge (`tauriChatApi`) |
-| `src/chat/config.ts` | Assistant model configuration (id, label, effort) |
+| `src/chat/providers.ts` | Provider presentation and persisted model/reasoning badge labels |
 | `src/chat/history.ts` | Title generation, relative time, sorting, selection |
 | `src/state/bubbleState.ts` | Bubble visual state machine |
 | `src/state/chat.ts` | Chat transcript reducer (loaded/submit/success/error) |

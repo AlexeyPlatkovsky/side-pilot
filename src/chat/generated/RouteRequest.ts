@@ -11,11 +11,6 @@ export type RouteRequest = { sessionId: string, route: Route, prompt: string,
  */
 activeProviders: Array<AssistantId>, 
 /**
- * Optional Codex model override. Claude and Gemini use their CLI defaults
- * because this shared route currently has no per-provider model settings.
- */
-model?: string, 
-/**
  * Per-provider timeout in milliseconds (SP-009 contract).
  */
 timeoutMs: number, };

@@ -13,7 +13,8 @@ use tauri::State;
 use tokio_util::sync::CancellationToken;
 
 use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult, AssistantId};
-use crate::routing::{execute_route, RouteRequest, RouteRunResult};
+use crate::preferences::{PreferencesError, PreferencesStore, ProviderPreferences};
+use crate::routing::{execute_route_with_preferences, RouteRequest, RouteRunResult};
 use crate::storage::{Message, NewMessage, Session, StorageError, Store};
 
 pub struct AppState {
@@ -102,8 +103,10 @@ pub fn app_version() -> String {
 #[tauri::command]
 pub async fn run_adapter(
     state: State<'_, AppState>,
-    request: AdapterRequest,
+    preferences: State<'_, PreferencesStore>,
+    mut request: AdapterRequest,
 ) -> Result<AdapterResult, AdapterError> {
+    preferences.snapshot().apply_to_request(&mut request);
     run_adapter_with_state(&state, request).await
 }
 
@@ -116,10 +119,7 @@ async fn run_adapter_with_state(
         .clone()
         .unwrap_or_else(|| state.next_run_id());
     let cancel = state.register_run(run_id.clone());
-    let _active_run = ActiveRunGuard {
-        state,
-        run_id,
-    };
+    let _active_run = ActiveRunGuard { state, run_id };
     let result = state.registry.run(request, cancel).await;
     result
 }
@@ -135,14 +135,16 @@ async fn run_adapter_with_state(
 pub async fn run_route(
     state: State<'_, AppState>,
     store: State<'_, Store>,
+    preferences: State<'_, PreferencesStore>,
     request: RouteRequest,
 ) -> Result<RouteRunResult, StorageError> {
-    run_route_with_state(&state, &store, request).await
+    run_route_with_state(&state, &store, &preferences, request).await
 }
 
 async fn run_route_with_state(
     state: &AppState,
     store: &Store,
+    preferences: &PreferencesStore,
     request: RouteRequest,
 ) -> Result<RouteRunResult, StorageError> {
     // Register one cancellation token per provider slot so `cancel_adapter_run`
@@ -157,13 +159,30 @@ async fn run_route_with_state(
             registered.push(run_id.clone());
             state.register_run(run_id)
         };
-        execute_route(store, &state.registry, request, make_cancel).await
+        let snapshot = preferences.snapshot();
+        execute_route_with_preferences(store, &state.registry, &snapshot, request, make_cancel)
+            .await
     };
 
     for run_id in registered {
         state.finish_run(&run_id);
     }
     result
+}
+
+/// Return the in-memory provider preference snapshot.
+#[tauri::command]
+pub fn get_provider_preferences(preferences: State<'_, PreferencesStore>) -> ProviderPreferences {
+    preferences.snapshot()
+}
+
+/// Validate, atomically persist, and immediately activate provider preferences.
+#[tauri::command]
+pub fn update_provider_preferences(
+    preferences: State<'_, PreferencesStore>,
+    value: ProviderPreferences,
+) -> Result<ProviderPreferences, PreferencesError> {
+    preferences.update(value)
 }
 
 /// Cancel an in-flight adapter run. Returns whether an active run was found.
@@ -184,19 +203,28 @@ pub async fn cancel_adapter_run(
 
 /// Create a new local chat session.
 #[tauri::command]
-pub fn create_session(store: State<'_, Store>, title: Option<String>) -> Result<Session, StorageError> {
+pub fn create_session(
+    store: State<'_, Store>,
+    title: Option<String>,
+) -> Result<Session, StorageError> {
     store.create_session(title)
 }
 
 /// Append a message to a session, returning the persisted row.
 #[tauri::command]
-pub fn append_message(store: State<'_, Store>, message: NewMessage) -> Result<Message, StorageError> {
+pub fn append_message(
+    store: State<'_, Store>,
+    message: NewMessage,
+) -> Result<Message, StorageError> {
     store.append_message(message)
 }
 
 /// Read a session's messages in send order.
 #[tauri::command]
-pub fn read_history(store: State<'_, Store>, session_id: String) -> Result<Vec<Message>, StorageError> {
+pub fn read_history(
+    store: State<'_, Store>,
+    session_id: String,
+) -> Result<Vec<Message>, StorageError> {
     store.read_history(&session_id)
 }
 
@@ -380,11 +408,16 @@ mod tests {
             }),
         }));
         let store = Store::in_memory().unwrap();
+        let preferences = PreferencesStore::open(
+            std::env::temp_dir().join("side-pilot-command-test-preferences.json"),
+        )
+        .unwrap();
         let session = store.create_session(None).unwrap();
 
         let result = run_route_with_state(
             &state,
             &store,
+            &preferences,
             RouteRequest {
                 session_id: session.id.clone(),
                 route: crate::routing::Route::Single {
@@ -392,7 +425,6 @@ mod tests {
                 },
                 prompt: "ping".to_string(),
                 active_providers: vec![],
-                model: None,
                 timeout_ms: 1000,
             },
         )
@@ -401,10 +433,7 @@ mod tests {
 
         assert_eq!(result.user_message.content, "ping");
         assert_eq!(result.outcomes.len(), 1);
-        assert_eq!(
-            result.outcomes[0].message.as_ref().unwrap().content,
-            "pong"
-        );
+        assert_eq!(result.outcomes[0].message.as_ref().unwrap().content, "pong");
         // Per-provider run tokens were released once the route resolved.
         assert_eq!(state.active_run_count(), 0);
     }
@@ -413,9 +442,10 @@ mod tests {
     async fn run_adapter_removes_active_run_when_future_is_dropped() {
         let state = Arc::new(state_with(Arc::new(PendingAdapter)));
         let task_state = Arc::clone(&state);
-        let handle = tokio::spawn(async move {
-            run_adapter_with_state(&task_state, request("run-drop")).await
-        });
+        let handle =
+            tokio::spawn(
+                async move { run_adapter_with_state(&task_state, request("run-drop")).await },
+            );
         loop {
             if state.active_run_count() == 1 {
                 break;

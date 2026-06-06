@@ -3,6 +3,9 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "app_version",
             "run_adapter",
+            "run_route",
+            "get_provider_preferences",
+            "update_provider_preferences",
             "cancel_adapter_run",
             "create_session",
             "append_message",

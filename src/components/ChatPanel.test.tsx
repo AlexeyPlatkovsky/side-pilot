@@ -18,7 +18,6 @@ import type {
 } from "../chat/api";
 import type { AssistantId } from "../chat/generated/AssistantId";
 import type { AdapterError } from "../chat/generated/AdapterError";
-import { ASSISTANT_MODEL, assistantModelLabel } from "../chat/config";
 
 const SESSION: PersistedSession = {
   id: "s1",
@@ -36,6 +35,8 @@ function persisted(
     sessionId: "s1",
     seq: over.seq ?? 1,
     assistantId: over.assistantId ?? (over.sender === "assistant" ? "codex" : null),
+    model: over.model ?? (over.sender === "assistant" ? "gpt-5.5" : null),
+    reasoningEffort: over.reasoningEffort ?? (over.sender === "assistant" ? "low" : null),
     rawJson: over.rawJson ?? null,
     isError: over.isError ?? false,
     createdAt: 1,
@@ -95,6 +96,8 @@ function makeApi(
       vi.fn((req: RouteRequest) =>
         Promise.resolve(routeResult(req.prompt, [{ provider: "codex", content: "ok" }])),
       ),
+    getProviderPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
+    updateProviderPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
     renameSession: vi.fn((sessionId, title) =>
       Promise.resolve({ ...SESSION, id: sessionId, title }),
     ),
@@ -172,9 +175,7 @@ describe("ChatPanel", () => {
 
     resolveRun(routeResult("slow one", [{ provider: "codex", content: "done" }]));
 
-    await waitFor(() =>
-      expect(screen.queryByTestId("thinking")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByTestId("thinking")).not.toBeInTheDocument());
   });
 
   it("shows an inline error card for a failed provider slot and re-enables Send", async () => {
@@ -279,7 +280,7 @@ describe("ChatPanel", () => {
     const message = (await screen.findByText("hi from gpt")).closest(
       ".message",
     ) as HTMLElement;
-    expect(within(message).getByText(assistantModelLabel)).toBeInTheDocument();
+    expect(within(message).getByText("gpt-5.5-low")).toBeInTheDocument();
     expect(within(message).queryByText(/codex/i)).not.toBeInTheDocument();
   });
 
@@ -296,7 +297,7 @@ describe("ChatPanel", () => {
     expect(message.querySelector(".message__label")).toBeNull();
   });
 
-  it("routes the configured model to run_route for the active provider", async () => {
+  it("lets the backend apply the fixed provider configuration", async () => {
     const user = userEvent.setup();
     const api = makeApi();
     render(<ChatPanel api={api} />);
@@ -307,7 +308,6 @@ describe("ChatPanel", () => {
     await waitFor(() =>
       expect(api.runRoute).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: ASSISTANT_MODEL.id,
           route: { kind: "single", provider: "codex" },
         }),
       ),
@@ -660,7 +660,11 @@ describe("ChatPanel", () => {
       expect(input).toHaveStyle({ height: "32px" });
     } finally {
       if (scrollHeight) {
-        Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", scrollHeight);
+        Object.defineProperty(
+          HTMLTextAreaElement.prototype,
+          "scrollHeight",
+          scrollHeight,
+        );
       } else {
         Reflect.deleteProperty(HTMLTextAreaElement.prototype, "scrollHeight");
       }
@@ -699,7 +703,11 @@ describe("ChatPanel", () => {
       expect(input).toHaveStyle({ height: "32px" });
     } finally {
       if (scrollHeight) {
-        Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", scrollHeight);
+        Object.defineProperty(
+          HTMLTextAreaElement.prototype,
+          "scrollHeight",
+          scrollHeight,
+        );
       } else {
         Reflect.deleteProperty(HTMLTextAreaElement.prototype, "scrollHeight");
       }

@@ -85,10 +85,12 @@ test("a background provider error is visible when its unread chat is reopened", 
   await page.screenshot({ path: "e2e/.artifacts/provider-error-restored.png" });
 });
 
-test("All mode renders three labeled provider slots that load then resolve", async ({
+test("All mode renders three fixed provider configuration badges after resolving", async ({
   page,
 }) => {
-  await gotoSeeded(page);
+  await page.goto("/e2e/seeded.html?initial=collapsed");
+  await page.getByRole("button", { name: "Open side-pilot" }).click();
+  await expect(page.getByTestId("panel")).toBeVisible();
 
   // Select the All route.
   await page.getByRole("button", { name: /choose ai provider/i }).click();
@@ -109,12 +111,15 @@ test("All mode renders three labeled provider slots that load then resolve", asy
   // had one assistant message, so three new replies bring the total to four.
   await expect(page.locator(".message--assistant")).toHaveCount(4, { timeout: 6000 });
   await expect(page.getByTestId("thinking")).toHaveCount(0);
-  await expect(page.locator(".message__label", { hasText: "Claude" })).toBeVisible();
-  await expect(page.locator(".message__label", { hasText: "Gemini" })).toBeVisible();
-  // The switcher re-enables once every slot has resolved.
+  await expect(page.locator(".message__label", { hasText: "gpt-5.5-low" })).toHaveCount(
+    2,
+  );
+  await expect(page.locator(".message__label", { hasText: "haiku-low" })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /choose ai provider/i }),
-  ).toBeEnabled();
+    page.locator(".message__label", { hasText: "gemini-3-flash-preview-none" }),
+  ).toBeVisible();
+  // The switcher re-enables once every slot has resolved.
+  await expect(page.getByRole("button", { name: /choose ai provider/i })).toBeEnabled();
 
   await page.screenshot({ path: "e2e/.artifacts/ai-switcher-all-resolved.png" });
 });

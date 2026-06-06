@@ -35,7 +35,6 @@ side-pilot/
 │   │   └── RenameDialog.tsx      # Chat rename form inside Dialog
 │   ├── chat/
 │   │   ├── api.ts                # ChatApi interface + Tauri IPC bridge (tauriChatApi)
-│   │   ├── config.ts             # Assistant model configuration (id, label, effort)
 │   │   ├── providers.ts          # Provider registry, ActiveRoute, route + label/error helpers
 │   │   └── history.ts            # Title generation, relative time, sorting, selection
 │   ├── state/
@@ -48,7 +47,7 @@ side-pilot/
 ├── src-tauri/src/                # Rust/Tauri core
 │   ├── main.rs                   # Binary entry point → side_pilot_lib::run()
 │   ├── lib.rs                    # Tauri builder: commands, store, invoke handler
-│   ├── commands.rs               # 12 IPC command handlers (typed seam)
+│   ├── commands.rs               # IPC command handlers (typed seam)
 │   ├── links.rs                  # External URL validation (http/https/mailto only)
 │   ├── adapters/
 │   │   ├── mod.rs                # CliAdapter trait, AssistantId enum

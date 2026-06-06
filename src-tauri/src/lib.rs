@@ -11,9 +11,11 @@ use tauri::Manager;
 pub mod adapters;
 pub mod commands;
 pub mod links;
+pub mod preferences;
 pub mod routing;
 pub mod storage;
 
+use preferences::PreferencesStore;
 use storage::Store;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -26,13 +28,18 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let store = Store::open(data_dir.join("side-pilot.db"))?;
+            let preferences = PreferencesStore::open(data_dir.join("preferences.json"))
+                .map_err(std::io::Error::other)?;
             app.manage(store);
+            app.manage(preferences);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_version,
             commands::run_adapter,
             commands::run_route,
+            commands::get_provider_preferences,
+            commands::update_provider_preferences,
             commands::cancel_adapter_run,
             commands::create_session,
             commands::append_message,

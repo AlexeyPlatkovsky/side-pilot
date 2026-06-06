@@ -20,6 +20,11 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const t0 = Date.now();
 const fixtureParams = new URLSearchParams(window.location.search);
+const providerPreference = {
+  codex: { model: "gpt-5.5", reasoningEffort: "low" },
+  claude: { model: "haiku", reasoningEffort: "low" },
+  gemini: { model: "gemini-3-flash-preview", reasoningEffort: "none" },
+} as const;
 
 const sessions: PersistedSession[] = [
   {
@@ -46,6 +51,8 @@ const messages: Record<string, PersistedMessage[]> = {
       seq: 1,
       sender: "user",
       assistantId: null,
+      model: null,
+      reasoningEffort: null,
       content: "How do I add passkey login?",
       rawJson: null,
       isError: false,
@@ -57,6 +64,8 @@ const messages: Record<string, PersistedMessage[]> = {
       seq: 2,
       sender: "assistant",
       assistantId: "codex",
+      model: providerPreference.codex.model,
+      reasoningEffort: providerPreference.codex.reasoningEffort,
       content:
         "Use the WebAuthn API: register a credential, then verify the assertion on sign-in. See the [WebAuthn guide](https://example.com/webauthn) for details.",
       rawJson: "{}",
@@ -70,6 +79,13 @@ const messages: Record<string, PersistedMessage[]> = {
 let nextSeq = 100;
 
 const api: ChatApi = {
+  getProviderPreferences: () =>
+    Promise.resolve({
+      codex: { model: "gpt-5.5", reasoning: "low" },
+      claude: { model: "haiku", reasoning: "low" },
+      gemini: { model: "gemini-3-flash-preview", reasoning: "none" },
+    }),
+  updateProviderPreferences: (value) => Promise.resolve(value),
   listSessions: () => Promise.resolve(sessions.map((s) => ({ ...s }))),
   createSession: (title = null) => {
     const created: PersistedSession = {
@@ -92,6 +108,8 @@ const api: ChatApi = {
       seq: list.length + 1,
       sender: m.sender,
       assistantId: m.assistantId ?? null,
+      model: m.model ?? null,
+      reasoningEffort: m.reasoningEffort ?? null,
       content: m.content,
       rawJson: m.rawJson ?? null,
       isError: false,
@@ -127,6 +145,8 @@ const api: ChatApi = {
           seq: list.length + 1,
           sender: "user",
           assistantId: null,
+          model: null,
+          reasoningEffort: null,
           content: request.prompt,
           rawJson: null,
           isError: false,
@@ -134,7 +154,9 @@ const api: ChatApi = {
         };
         list.push(userMessage);
         const targets =
-          request.route.kind === "all" ? request.activeProviders : [request.route.provider];
+          request.route.kind === "all"
+            ? request.activeProviders
+            : [request.route.provider];
         const outcomes = targets.map((provider) => {
           if (fixtureParams.get("route") === "error") {
             const row: PersistedMessage = {
@@ -143,6 +165,8 @@ const api: ChatApi = {
               seq: list.length + 1,
               sender: "assistant",
               assistantId: provider,
+              model: providerPreference[provider].model,
+              reasoningEffort: providerPreference[provider].reasoningEffort,
               content: `${provider === "gemini" ? "Gemini" : provider} exited with an error: Requested entity was not found.`,
               rawJson:
                 '{"kind":"nonZeroExit","code":404,"stderr":"Full report available at: /tmp/gemini-error.json\\nModelNotFoundError: Requested entity was not found.\\n at classifyGoogleError (chunk.js:1)"}',
@@ -167,6 +191,8 @@ const api: ChatApi = {
             seq: list.length + 1,
             sender: "assistant",
             assistantId: provider,
+            model: providerPreference[provider].model,
+            reasoningEffort: providerPreference[provider].reasoningEffort,
             content: `A short **${provider}** reply for the runtime fixture.`,
             rawJson: "{}",
             isError: false,
@@ -205,11 +231,7 @@ const api: ChatApi = {
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <Bubble
-    initialState={
-      fixtureParams.get("initial") === "collapsed"
-        ? "collapsed"
-        : "expanded"
-    }
+    initialState={fixtureParams.get("initial") === "collapsed" ? "collapsed" : "expanded"}
     resizeWindow={() => {}}
     chatApi={api}
   />,

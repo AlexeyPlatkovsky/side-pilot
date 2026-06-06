@@ -26,6 +26,7 @@ import type { Message as RustMessage } from "./generated/Message";
 import type { NewMessage as RustNewMessage } from "./generated/NewMessage";
 import type { RouteRequest as RustRouteRequest } from "./generated/RouteRequest";
 import type { RouteRunResult as RustRouteRunResult } from "./generated/RouteRunResult";
+import type { ProviderPreferences } from "./generated/ProviderPreferences";
 
 /**
  * The request the UI sends to `run_adapter`. Projected from the Rust
@@ -55,13 +56,13 @@ export type NewMessage = RustNewMessage;
 
 /**
  * The request the UI sends to `run_route` (SP-016/SP-017). The UI supplies the
- * route, prompt, active providers, and the configured Codex model; Claude and
- * Gemini use their CLI defaults. `timeoutMs` falls back to the backend's serde
- * default when omitted.
+ * route, prompt, and active providers. The backend snapshots the fixed global
+ * provider preferences. `timeoutMs` falls back to the backend's serde default
+ * when omitted.
  */
 export type RouteRequest = Pick<
   RustRouteRequest,
-  "sessionId" | "route" | "prompt" | "activeProviders" | "model"
+  "sessionId" | "route" | "prompt" | "activeProviders"
 >;
 export type RouteRunResult = RustRouteRunResult;
 
@@ -74,6 +75,8 @@ export interface ChatApi {
    * rejection.
    */
   runRoute(request: RouteRequest): Promise<RouteRunResult>;
+  getProviderPreferences(): Promise<ProviderPreferences>;
+  updateProviderPreferences(value: ProviderPreferences): Promise<ProviderPreferences>;
   createSession(title?: string | null): Promise<PersistedSession>;
   appendMessage(message: NewMessage): Promise<PersistedMessage>;
   readHistory(sessionId: string): Promise<PersistedMessage[]>;
@@ -97,6 +100,8 @@ export interface ChatApi {
 export const tauriChatApi: ChatApi = {
   runAdapter: (request) => invoke("run_adapter", { request }),
   runRoute: (request) => invoke("run_route", { request }),
+  getProviderPreferences: () => invoke("get_provider_preferences"),
+  updateProviderPreferences: (value) => invoke("update_provider_preferences", { value }),
   createSession: (title = null) => invoke("create_session", { title }),
   appendMessage: (message) => invoke("append_message", { message }),
   readHistory: (sessionId) => invoke("read_history", { sessionId }),
@@ -117,6 +122,8 @@ export const tauriChatApi: ChatApi = {
 export const inertChatApi: ChatApi = {
   runAdapter: () => Promise.reject(new Error("chat backend unavailable")),
   runRoute: () => Promise.reject(new Error("chat backend unavailable")),
+  getProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
+  updateProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   createSession: () =>
     Promise.resolve({
       id: "inert-session",
@@ -132,6 +139,8 @@ export const inertChatApi: ChatApi = {
       seq: 0,
       sender: message.sender,
       assistantId: message.assistantId ?? null,
+      model: message.model ?? null,
+      reasoningEffort: message.reasoningEffort ?? null,
       content: message.content,
       rawJson: message.rawJson ?? null,
       isError: false,
@@ -165,6 +174,8 @@ export function toChatMessage(row: PersistedMessage): {
   id: string;
   sender: Sender;
   assistantId?: string;
+  model?: string;
+  reasoningEffort?: string;
   content: string;
   createdAt: number;
   error?: boolean;
@@ -173,6 +184,8 @@ export function toChatMessage(row: PersistedMessage): {
     id: row.id,
     sender: row.sender,
     assistantId: row.assistantId ?? undefined,
+    model: row.model ?? undefined,
+    reasoningEffort: row.reasoningEffort ?? undefined,
     content: row.content,
     createdAt: row.createdAt,
     error: row.isError || undefined,

@@ -27,7 +27,11 @@ export function ProviderGlyph({ provider }: { provider: AssistantId }) {
 /** The `All` route glyph — a 2×2 grid suggesting every provider at once. */
 export function AllGlyph() {
   return (
-    <span className="provider-icon provider-icon--all" aria-hidden="true" data-provider="all">
+    <span
+      className="provider-icon provider-icon--all"
+      aria-hidden="true"
+      data-provider="all"
+    >
       <span className="provider-icon__grid">
         <i />
         <i />
@@ -40,5 +44,9 @@ export function AllGlyph() {
 
 /** The icon for whichever route is active (drives the switcher button face). */
 export function RouteIcon({ route }: { route: ActiveRoute }) {
-  return route.kind === "all" ? <AllGlyph /> : <ProviderGlyph provider={route.provider} />;
+  return route.kind === "all" ? (
+    <AllGlyph />
+  ) : (
+    <ProviderGlyph provider={route.provider} />
+  );
 }

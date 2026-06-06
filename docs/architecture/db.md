@@ -8,7 +8,7 @@ See `docs/architecture/README.md` for the source tree overview and file routing 
 
 Single `rusqlite::Connection` behind a `Mutex`, managed as Tauri state:
 
-The store uses `PRAGMA user_version` with `CURRENT_SCHEMA_VERSION = 3`. Migrations
+The store uses `PRAGMA user_version` with `CURRENT_SCHEMA_VERSION = 4`. Migrations
 are applied stepwise and additively (version 0 → base schema; version 1 → the
 `message_provider_sends` table; version 2 → the display-only message error flag)
 without dropping existing data; databases with a future schema version fail explicitly.
@@ -30,6 +30,8 @@ messages (
   seq          INTEGER NOT NULL,
   sender       TEXT NOT NULL,
   assistant_id TEXT,
+  model        TEXT,
+  reasoning_effort TEXT,
   content      TEXT NOT NULL,
   raw_json     TEXT,
   is_error     INTEGER NOT NULL DEFAULT 0,
@@ -78,8 +80,8 @@ Storage failures cross IPC as `StorageError` variants:
 
 ### Schema Versioning
 
-- `CURRENT_SCHEMA_VERSION = 3`
-- Stepwise migration: version < 1 applies the base schema; version < 2 adds `message_provider_sends`; version < 3 atomically adds `messages.is_error` and advances the schema version, while safely completing databases left in the prior interrupted-v3 state
+- `CURRENT_SCHEMA_VERSION = 4`
+- Stepwise migration: version < 1 applies the base schema; version < 2 adds `message_provider_sends`; version < 3 atomically adds `messages.is_error`; version < 4 adds the snapshotted `model` and `reasoning_effort` reply metadata
 - Each step is `CREATE TABLE IF NOT EXISTS` + indexes; existing v0/v1 databases upgrade in place
 - Version > current: rejected with `UnsupportedSchemaVersion`
 - Migration is additive only — no data loss on upgrade
