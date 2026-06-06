@@ -29,6 +29,9 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "process", "time",
 async-trait = "0.1"
 # CancellationToken backs the per-adapter cancellation hook (CLI Invocation Contract §7).
 tokio-util = "0.7"
+# join_all drives concurrent multi-provider dispatch for the All route (SP-016),
+# so a partial failure in one provider does not cancel the others.
+futures = "0.3"
 libc = "0.2"
 # Local SQLite store for chat sessions/messages (SP-007). `bundled` compiles
 # SQLite in-tree so there is no system dependency on macOS or Windows.

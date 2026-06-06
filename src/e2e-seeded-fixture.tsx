@@ -12,6 +12,7 @@ import type {
   NewMessage,
   PersistedMessage,
   PersistedSession,
+  RouteRunResult,
 } from "./chat/api";
 import "./styles.css";
 
@@ -109,6 +110,43 @@ const api: ChatApi = {
         600,
       ),
     ),
+  // Mirrors run_route: persists the prompt + one reply per target provider after
+  // a short delay so the switcher's per-provider slots and (in All mode) the
+  // multi-slot layout can be exercised in the WebKit harness.
+  runRoute: (request) =>
+    new Promise<RouteRunResult>((resolve) =>
+      setTimeout(() => {
+        const list = (messages[request.sessionId] ??= []);
+        const userMessage: PersistedMessage = {
+          id: `m${nextSeq++}`,
+          sessionId: request.sessionId,
+          seq: list.length + 1,
+          sender: "user",
+          assistantId: null,
+          content: request.prompt,
+          rawJson: null,
+          createdAt: Date.now(),
+        };
+        list.push(userMessage);
+        const targets =
+          request.route.kind === "all" ? request.activeProviders : [request.route.provider];
+        const outcomes = targets.map((provider) => {
+          const row: PersistedMessage = {
+            id: `m${nextSeq++}`,
+            sessionId: request.sessionId,
+            seq: list.length + 1,
+            sender: "assistant",
+            assistantId: provider,
+            content: `A short **${provider}** reply for the runtime fixture.`,
+            rawJson: "{}",
+            createdAt: Date.now(),
+          };
+          list.push(row);
+          return { provider, message: row };
+        });
+        resolve({ userMessage, outcomes });
+      }, 600),
+    ),
   renameSession: (id, title) => {
     const s = sessions.find((x) => x.id === id)!;
     s.title = title;
@@ -135,5 +173,13 @@ const api: ChatApi = {
 };
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <Bubble initialState="expanded" resizeWindow={() => {}} chatApi={api} />,
+  <Bubble
+    initialState={
+      new URLSearchParams(window.location.search).get("initial") === "collapsed"
+        ? "collapsed"
+        : "expanded"
+    }
+    resizeWindow={() => {}}
+    chatApi={api}
+  />,
 );

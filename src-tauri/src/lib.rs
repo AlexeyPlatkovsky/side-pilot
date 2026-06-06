@@ -11,6 +11,7 @@ use tauri::Manager;
 pub mod adapters;
 pub mod commands;
 pub mod links;
+pub mod routing;
 pub mod storage;
 
 use storage::Store;
@@ -31,6 +32,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_version,
             commands::run_adapter,
+            commands::run_route,
             commands::cancel_adapter_run,
             commands::create_session,
             commands::append_message,

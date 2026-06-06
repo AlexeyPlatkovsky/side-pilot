@@ -20,7 +20,7 @@ use uuid::Uuid;
 use super::error::StorageError;
 use super::model::{Message, NewMessage, Sender, Session};
 
-const CURRENT_SCHEMA_VERSION: i64 = 1;
+const CURRENT_SCHEMA_VERSION: i64 = 2;
 
 /// Schema for version 1, applied through `PRAGMA user_version` migrations.
 const SCHEMA: &str = "
@@ -43,6 +43,22 @@ CREATE TABLE IF NOT EXISTS messages (
     UNIQUE (session_id, seq)
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages (session_id, seq);
+";
+
+/// Schema added in version 2 (SP-016): the `message_provider_sends` junction
+/// table tracks which providers have already received each message, so a
+/// per-provider send includes only the messages that provider has not yet seen
+/// (`docs/idea.md` §6, app-owned transcript replay). Rows cascade-delete with
+/// their message.
+const SCHEMA_V2: &str = "
+CREATE TABLE IF NOT EXISTS message_provider_sends (
+    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    provider   TEXT NOT NULL,
+    sent_at    INTEGER NOT NULL,
+    PRIMARY KEY (message_id, provider)
+);
+CREATE INDEX IF NOT EXISTS idx_provider_sends_provider
+    ON message_provider_sends (provider, message_id);
 ";
 
 /// Local SQLite store for chat sessions and messages.
@@ -76,6 +92,13 @@ impl Store {
             detail: "connection mutex poisoned by a panic during a prior storage operation"
                 .to_string(),
         })
+    }
+
+    /// Test-only access to the underlying connection so sibling modules (e.g.
+    /// `routing`) can assert against tables like `message_provider_sends`.
+    #[cfg(test)]
+    pub fn test_connection(&self) -> MutexGuard<'_, Connection> {
+        self.lock().expect("store connection lock")
     }
 
     /// Create a new session and return it.
@@ -278,6 +301,53 @@ impl Store {
         }
         Ok(())
     }
+
+    /// Mark `message_id` as having been sent to `provider` (SP-016). Idempotent:
+    /// a repeated mark for the same (message, provider) pair does not create a
+    /// duplicate row, so re-sends never double-count.
+    pub fn mark_message_sent(
+        &self,
+        message_id: &str,
+        provider: &str,
+    ) -> Result<(), StorageError> {
+        let conn = self.lock()?;
+        // INSERT OR IGNORE keeps the (message_id, provider) primary key unique,
+        // so a repeated mark is a harmless no-op rather than a duplicate row.
+        conn.execute(
+            "INSERT OR IGNORE INTO message_provider_sends (message_id, provider, sent_at)
+             VALUES (?1, ?2, ?3)",
+            params![message_id, provider, now_millis()],
+        )?;
+        Ok(())
+    }
+
+    /// Return the messages in `session_id` that have **not** yet been sent to
+    /// `provider`, ordered by `seq` (SP-016). This is the per-provider diff: the
+    /// transcript slice that provider has not seen and must receive on its next
+    /// invocation (`docs/idea.md` §6).
+    pub fn unsent_messages(
+        &self,
+        session_id: &str,
+        provider: &str,
+    ) -> Result<Vec<Message>, StorageError> {
+        let conn = self.lock()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, session_id, seq, sender, assistant_id, content, raw_json, created_at
+             FROM messages m
+             WHERE m.session_id = ?1
+               AND NOT EXISTS (
+                   SELECT 1 FROM message_provider_sends s
+                   WHERE s.message_id = m.id AND s.provider = ?2
+               )
+             ORDER BY m.seq ASC",
+        )?;
+        let rows = stmt.query_map(params![session_id, provider], row_to_message)?;
+        let mut messages = Vec::new();
+        for row in rows {
+            messages.push(row?);
+        }
+        Ok(messages)
+    }
 }
 
 /// Read a single session by id from an already-held connection. Used by the
@@ -335,8 +405,14 @@ fn migrate_schema(conn: &Connection) -> Result<(), StorageError> {
         });
     }
 
-    if version == 0 {
+    // Migrations are applied stepwise and additively — no data loss on upgrade.
+    if version < 1 {
         conn.execute_batch(SCHEMA)?;
+    }
+    if version < 2 {
+        conn.execute_batch(SCHEMA_V2)?;
+    }
+    if version < CURRENT_SCHEMA_VERSION {
         conn.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
     }
 
@@ -631,6 +707,122 @@ mod tests {
         assert_eq!(history[0].content, "hi");
         let conn = store.lock().unwrap();
         assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    // ---- message_provider_sends (SP-016) ------------------------------------
+
+    #[test]
+    fn fresh_database_has_provider_sends_table() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store.append_message(user_msg(&session.id, "hi")).unwrap();
+        // The table exists from the v2 migration, so a mark succeeds.
+        store.mark_message_sent(&msg.id, "codex").unwrap();
+    }
+
+    #[test]
+    fn version_one_database_migrates_to_v2_preserving_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at, codex_session_id)
+             VALUES ('s1', 'Existing', 10, 20, NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages
+               (id, session_id, seq, sender, assistant_id, content, raw_json, created_at)
+             VALUES ('m1', 's1', 1, 'user', NULL, 'hi', NULL, 30)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        // Data preserved and the new table is usable.
+        assert_eq!(store.read_history("s1").unwrap().len(), 1);
+        store.mark_message_sent("m1", "claude").unwrap();
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn unsent_messages_returns_all_when_nothing_marked() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        store.append_message(user_msg(&session.id, "one")).unwrap();
+        store.append_message(user_msg(&session.id, "two")).unwrap();
+
+        let unsent = store.unsent_messages(&session.id, "codex").unwrap();
+        let contents: Vec<&str> = unsent.iter().map(|m| m.content.as_str()).collect();
+        assert_eq!(contents, vec!["one", "two"]);
+    }
+
+    #[test]
+    fn marking_a_message_sent_excludes_it_from_that_providers_diff() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let first = store.append_message(user_msg(&session.id, "one")).unwrap();
+        store.append_message(user_msg(&session.id, "two")).unwrap();
+
+        store.mark_message_sent(&first.id, "codex").unwrap();
+
+        let unsent = store.unsent_messages(&session.id, "codex").unwrap();
+        let contents: Vec<&str> = unsent.iter().map(|m| m.content.as_str()).collect();
+        assert_eq!(contents, vec!["two"], "the marked message is no longer in the diff");
+    }
+
+    #[test]
+    fn unsent_messages_are_scoped_per_provider() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store.append_message(user_msg(&session.id, "one")).unwrap();
+
+        store.mark_message_sent(&msg.id, "codex").unwrap();
+
+        // Sent to codex, but claude has not seen it yet.
+        assert!(store.unsent_messages(&session.id, "codex").unwrap().is_empty());
+        assert_eq!(store.unsent_messages(&session.id, "claude").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn marking_the_same_message_twice_is_idempotent() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store.append_message(user_msg(&session.id, "one")).unwrap();
+
+        store.mark_message_sent(&msg.id, "claude").unwrap();
+        store.mark_message_sent(&msg.id, "claude").unwrap();
+
+        let conn = store.lock().unwrap();
+        let rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM message_provider_sends WHERE message_id = ?1 AND provider = ?2",
+                params![msg.id, "claude"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(rows, 1, "no duplicate send rows");
+    }
+
+    #[test]
+    fn provider_sends_cascade_when_session_is_deleted() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store.append_message(user_msg(&session.id, "one")).unwrap();
+        store.mark_message_sent(&msg.id, "codex").unwrap();
+
+        store.delete_session(&session.id).unwrap();
+
+        let conn = store.lock().unwrap();
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM message_provider_sends", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 0, "send rows cascade-delete with their message");
     }
 
     #[test]

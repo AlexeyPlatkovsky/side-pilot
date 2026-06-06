@@ -6,10 +6,12 @@
 //! camelCase variant names to match the front-end IPC conventions.
 
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// Shared failure taxonomy for all CLI adapters (CLI Invocation Contract §8).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
 pub enum AdapterError {
     /// The CLI executable could not be resolved to an absolute path (§2).
     BinaryNotFound,

@@ -17,6 +17,7 @@ use super::codex::CodexAdapter;
 use super::contract::{AdapterRequest, AdapterResult};
 use super::environment::SystemEnvironmentProvider;
 use super::error::AdapterError;
+use super::gemini::GeminiAdapter;
 use super::process::SystemCommandRunner;
 use super::{AssistantId, CliAdapter};
 
@@ -35,9 +36,9 @@ impl AdapterRegistry {
     }
 
     /// The production registry, backed by the real binary resolver, command
-    /// runner, and environment provider. Codex and Claude are registered; the
-    /// resolver and env provider cache per [`AssistantId`], so a single instance
-    /// is shared across adapters.
+    /// runner, and environment provider. Codex, Claude, and Gemini are all
+    /// registered; the resolver and env provider cache per [`AssistantId`], so a
+    /// single instance is shared across adapters.
     pub fn with_default_adapters() -> Self {
         let resolver = Arc::new(SystemBinaryResolver::new());
         let runner = Arc::new(SystemCommandRunner);
@@ -48,7 +49,12 @@ impl AdapterRegistry {
             runner.clone(),
             env_provider.clone(),
         )));
-        registry.register(Arc::new(ClaudeAdapter::new(resolver, runner, env_provider)));
+        registry.register(Arc::new(ClaudeAdapter::new(
+            resolver.clone(),
+            runner.clone(),
+            env_provider.clone(),
+        )));
+        registry.register(Arc::new(GeminiAdapter::new(resolver, runner, env_provider)));
         registry
     }
 
@@ -134,12 +140,11 @@ mod tests {
     }
 
     #[test]
-    fn default_registry_registers_codex_and_claude_but_not_gemini() {
+    fn default_registry_registers_all_three_assistants() {
         let registry = AdapterRegistry::with_default_adapters();
         assert!(registry.adapters.contains_key(&AssistantId::Codex));
         assert!(registry.adapters.contains_key(&AssistantId::Claude));
-        // Gemini lands in a later SP-011 child (SP-014).
-        assert!(!registry.adapters.contains_key(&AssistantId::Gemini));
+        assert!(registry.adapters.contains_key(&AssistantId::Gemini));
     }
 
     #[tokio::test]

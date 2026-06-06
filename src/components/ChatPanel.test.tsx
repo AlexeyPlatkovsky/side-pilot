@@ -10,11 +10,14 @@ import {
 import userEvent from "@testing-library/user-event";
 import { ChatPanel } from "./ChatPanel";
 import type {
-  AdapterResult,
   ChatApi,
   PersistedMessage,
   PersistedSession,
+  RouteRequest,
+  RouteRunResult,
 } from "../chat/api";
+import type { AssistantId } from "../chat/generated/AssistantId";
+import type { AdapterError } from "../chat/generated/AdapterError";
 import { ASSISTANT_MODEL, assistantModelLabel } from "../chat/config";
 
 const SESSION: PersistedSession = {
@@ -39,12 +42,38 @@ function persisted(
   };
 }
 
+interface OutcomeSpec {
+  provider: AssistantId;
+  content?: string;
+  error?: AdapterError;
+}
+
+/** Build a RouteRunResult from a compact outcome spec. */
+function routeResult(prompt: string, outcomes: OutcomeSpec[]): RouteRunResult {
+  return {
+    userMessage: persisted({ sender: "user", content: prompt, seq: 1 }),
+    outcomes: outcomes.map((o, i) => ({
+      provider: o.provider,
+      message: o.error
+        ? undefined
+        : persisted({
+            id: `a-${o.provider}`,
+            sender: "assistant",
+            assistantId: o.provider,
+            content: o.content ?? "ok",
+            seq: i + 2,
+          }),
+      error: o.error,
+    })),
+  };
+}
+
 /** Build a fake ChatApi with overridable behavior and spies. */
 function makeApi(
   opts: {
     history?: PersistedMessage[];
     sessions?: PersistedSession[];
-    runAdapter?: ChatApi["runAdapter"];
+    runRoute?: ChatApi["runRoute"];
     readHistory?: ChatApi["readHistory"];
   } = {},
 ): ChatApi {
@@ -57,14 +86,13 @@ function makeApi(
     appendMessage: vi.fn((m) =>
       Promise.resolve(persisted({ sender: m.sender, content: m.content })),
     ),
-    runAdapter:
-      opts.runAdapter ??
-      vi.fn(() =>
-        Promise.resolve<AdapterResult>({
-          assistantText: "ok",
-          rawJson: "{}",
-          nativeSessionId: null,
-        }),
+    runAdapter: vi.fn(() =>
+      Promise.resolve({ assistantText: "ok", rawJson: "{}", nativeSessionId: null }),
+    ),
+    runRoute:
+      opts.runRoute ??
+      vi.fn((req: RouteRequest) =>
+        Promise.resolve(routeResult(req.prompt, [{ provider: "codex", content: "ok" }])),
       ),
     renameSession: vi.fn((sessionId, title) =>
       Promise.resolve({ ...SESSION, id: sessionId, title }),
@@ -81,8 +109,12 @@ function makeApi(
 /** Wait until the mount effect has loaded the session (so submit is armed). */
 async function waitForReady(api: ChatApi) {
   await waitFor(() => expect(api.readHistory).toHaveBeenCalled());
-  // Flush the microtask that sets the active session before the loaded dispatch.
   await screen.findByLabelText("Ask side-pilot");
+}
+
+async function send(user: ReturnType<typeof userEvent.setup>, prompt: string) {
+  await user.type(screen.getByLabelText("Ask side-pilot"), prompt);
+  await user.click(screen.getByRole("button", { name: /^send/i }));
 }
 
 describe("ChatPanel", () => {
@@ -102,92 +134,130 @@ describe("ChatPanel", () => {
   it("shows the submitted user message immediately and renders the Markdown reply", async () => {
     const user = userEvent.setup();
     const api = makeApi({
-      runAdapter: vi.fn(() =>
-        Promise.resolve<AdapterResult>({
-          assistantText: "Here is **bold** advice",
-          rawJson: "{}",
-          nativeSessionId: "thread-1",
-        }),
+      runRoute: vi.fn((req: RouteRequest) =>
+        Promise.resolve(
+          routeResult(req.prompt, [
+            { provider: "codex", content: "Here is **bold** advice" },
+          ]),
+        ),
       ),
     });
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    await user.type(screen.getByLabelText("Ask side-pilot"), "what next?");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "what next?");
 
-    // User message appears right away.
     expect(screen.getByText("what next?")).toBeInTheDocument();
-    // Assistant Markdown is rendered (bold => <strong>).
     const strong = await screen.findByText("bold");
     expect(strong.tagName).toBe("STRONG");
-    // Native Codex session id is recorded for resume.
-    await waitFor(() =>
-      expect(api.updateCodexSessionId).toHaveBeenCalledWith("s1", "thread-1"),
-    );
+    await waitFor(() => expect(api.runRoute).toHaveBeenCalled());
   });
 
   it("shows a thinking indicator while the run is blocking", async () => {
     const user = userEvent.setup();
-    let resolveRun!: (r: AdapterResult) => void;
+    let resolveRun!: (r: RouteRunResult) => void;
     const api = makeApi({
-      runAdapter: vi.fn(
-        () =>
-          new Promise<AdapterResult>((resolve) => {
-            resolveRun = resolve;
-          }),
+      runRoute: vi.fn(
+        () => new Promise<RouteRunResult>((resolve) => (resolveRun = resolve)),
       ),
     });
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    await user.type(screen.getByLabelText("Ask side-pilot"), "slow one");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "slow one");
 
     expect(await screen.findByTestId("thinking")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^send/i })).toBeDisabled();
 
-    resolveRun({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
+    resolveRun(routeResult("slow one", [{ provider: "codex", content: "done" }]));
 
-    await waitFor(() => expect(screen.queryByTestId("thinking")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByTestId("thinking")).not.toBeInTheDocument(),
+    );
   });
 
-  it("surfaces an error without losing the user's message", async () => {
+  it("shows an inline error card for a failed provider slot and re-enables Send", async () => {
     const user = userEvent.setup();
     const api = makeApi({
-      runAdapter: vi.fn(() => Promise.reject({ kind: "notAuthenticated" })),
+      runRoute: vi.fn((req: RouteRequest) =>
+        Promise.resolve(
+          routeResult(req.prompt, [
+            { provider: "codex", error: { kind: "notAuthenticated" } },
+          ]),
+        ),
+      ),
     });
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    await user.type(screen.getByLabelText("Ask side-pilot"), "do a thing");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "do a thing");
 
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/not authenticated/i);
+    const card = await screen.findByTestId("provider-error");
+    expect(card).toHaveTextContent(/not authenticated/i);
     // The user's message survives the failure.
     expect(screen.getByText("do a thing")).toBeInTheDocument();
+    // The run is no longer in flight: the AI switcher re-enables once the slot
+    // resolves (Send itself is disabled only because the draft is now empty).
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /choose ai provider/i }),
+      ).not.toBeDisabled(),
+    );
+  });
+
+  it("All mode renders a labeled slot per provider; failures show inline cards", async () => {
+    const user = userEvent.setup();
+    const api = makeApi({
+      runRoute: vi.fn((req: RouteRequest) =>
+        Promise.resolve(
+          routeResult(req.prompt, [
+            { provider: "codex", content: "gpt reply" },
+            { provider: "claude", content: "claude reply" },
+            { provider: "gemini", error: { kind: "timedOut" } },
+          ]),
+        ),
+      ),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Switch the active route to All via the switcher.
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+
+    await send(user, "to all");
+
+    expect(await screen.findByText("gpt reply")).toBeInTheDocument();
+    expect(screen.getByText("claude reply")).toBeInTheDocument();
+    const errorCard = screen.getByTestId("provider-error");
+    expect(errorCard).toHaveAttribute("data-provider", "gemini");
+    expect(errorCard).toHaveTextContent(/timed out/i);
+    // run_route was asked for the All route with the three active providers.
+    expect(api.runRoute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        route: { kind: "all" },
+        activeProviders: ["codex", "claude", "gemini"],
+      }),
+    );
   });
 
   it("does not render raw HTML embedded in an assistant reply (XSS-safe)", async () => {
     const user = userEvent.setup();
     const api = makeApi({
-      runAdapter: vi.fn(() =>
-        Promise.resolve<AdapterResult>({
-          assistantText: "<img src=x onerror=alert(1)> safe text",
-          rawJson: "{}",
-          nativeSessionId: null,
-        }),
+      runRoute: vi.fn((req: RouteRequest) =>
+        Promise.resolve(
+          routeResult(req.prompt, [
+            { provider: "codex", content: "<img src=x onerror=alert(1)> safe text" },
+          ]),
+        ),
       ),
     });
     const { container } = render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    await user.type(screen.getByLabelText("Ask side-pilot"), "render this");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "render this");
 
     await screen.findByText(/safe text/);
-    // react-markdown does not pass raw HTML through, so no <img> is injected.
     expect(container.querySelector("img")).toBeNull();
   });
 
@@ -196,87 +266,7 @@ describe("ChatPanel", () => {
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    expect(screen.getByRole("button", { name: /send/i })).toBeDisabled();
-  });
-
-  it("keeps the composer compact before and during one-line input", async () => {
-    const user = userEvent.setup();
-    const scrollHeight = Object.getOwnPropertyDescriptor(
-      HTMLTextAreaElement.prototype,
-      "scrollHeight",
-    );
-    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
-      configurable: true,
-      get() {
-        return this.value ? 24 : 96;
-      },
-    });
-
-    try {
-      const api = makeApi();
-      render(<ChatPanel api={api} />);
-      await waitForReady(api);
-
-      const input = screen.getByLabelText("Ask side-pilot");
-      expect(input).toHaveStyle({ height: "32px" });
-
-      await user.type(input, "a");
-
-      expect(input).toHaveStyle({ height: "32px" });
-    } finally {
-      if (scrollHeight) {
-        Object.defineProperty(
-          HTMLTextAreaElement.prototype,
-          "scrollHeight",
-          scrollHeight,
-        );
-      } else {
-        Reflect.deleteProperty(HTMLTextAreaElement.prototype, "scrollHeight");
-      }
-    }
-  });
-
-  it("remeasures composer height when the app width changes", async () => {
-    const user = userEvent.setup();
-    let measuredScrollHeight = 32;
-    const scrollHeight = Object.getOwnPropertyDescriptor(
-      HTMLTextAreaElement.prototype,
-      "scrollHeight",
-    );
-    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
-      configurable: true,
-      get() {
-        return measuredScrollHeight;
-      },
-    });
-
-    try {
-      const api = makeApi();
-      render(<ChatPanel api={api} />);
-      await waitForReady(api);
-
-      const input = screen.getByLabelText("Ask side-pilot");
-      await user.type(input, "long text that fits one row while wide");
-      expect(input).toHaveStyle({ height: "32px" });
-
-      measuredScrollHeight = 56;
-      window.dispatchEvent(new Event("resize"));
-      expect(input).toHaveStyle({ height: "56px" });
-
-      measuredScrollHeight = 32;
-      window.dispatchEvent(new Event("resize"));
-      expect(input).toHaveStyle({ height: "32px" });
-    } finally {
-      if (scrollHeight) {
-        Object.defineProperty(
-          HTMLTextAreaElement.prototype,
-          "scrollHeight",
-          scrollHeight,
-        );
-      } else {
-        Reflect.deleteProperty(HTMLTextAreaElement.prototype, "scrollHeight");
-      }
-    }
+    expect(screen.getByRole("button", { name: /^send/i })).toBeDisabled();
   });
 
   it("badges assistant replies with the model and effort", async () => {
@@ -289,7 +279,6 @@ describe("ChatPanel", () => {
       ".message",
     ) as HTMLElement;
     expect(within(message).getByText(assistantModelLabel)).toBeInTheDocument();
-    // The brand badge is GPT, never "Codex".
     expect(within(message).queryByText(/codex/i)).not.toBeInTheDocument();
   });
 
@@ -306,20 +295,19 @@ describe("ChatPanel", () => {
     expect(message.querySelector(".message__label")).toBeNull();
   });
 
-  it("sends the configured model and reasoning effort to the adapter", async () => {
+  it("routes the configured model to run_route for the active provider", async () => {
     const user = userEvent.setup();
     const api = makeApi();
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    await user.type(screen.getByLabelText("Ask side-pilot"), "go");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "go");
 
     await waitFor(() =>
-      expect(api.runAdapter).toHaveBeenCalledWith(
+      expect(api.runRoute).toHaveBeenCalledWith(
         expect.objectContaining({
           model: ASSISTANT_MODEL.id,
-          reasoningEffort: ASSISTANT_MODEL.effort,
+          route: { kind: "single", provider: "codex" },
         }),
       ),
     );
@@ -332,14 +320,12 @@ describe("ChatPanel", () => {
     await waitForReady(api);
 
     await user.type(screen.getByLabelText("Ask side-pilot"), "keep me");
-    // Rail starts hidden; the toggle is always available.
     expect(screen.queryByRole("complementary", { name: "Chat history" })).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Show chat history" }));
     expect(
       screen.getByRole("complementary", { name: "Chat history" }),
     ).toBeInTheDocument();
-    // Opening the rail must not reset the draft.
     expect(screen.getByLabelText("Ask side-pilot")).toHaveValue("keep me");
 
     await user.click(screen.getByRole("button", { name: "Hide chat history" }));
@@ -349,12 +335,11 @@ describe("ChatPanel", () => {
 
   it("titles an untitled chat from its first prompt", async () => {
     const user = userEvent.setup();
-    const api = makeApi(); // SESSION.title is null
+    const api = makeApi();
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    await user.type(screen.getByLabelText("Ask side-pilot"), "Explain JS closures");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "Explain JS closures");
 
     await waitFor(() =>
       expect(api.renameSession).toHaveBeenCalledWith("s1", "Explain JS closures"),
@@ -387,11 +372,65 @@ describe("ChatPanel", () => {
     expect(api.readHistory).toHaveBeenCalledWith("s2");
   });
 
+  it("keeps the selected AI provider scoped to each chat", async () => {
+    const user = userEvent.setup();
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({ sessions });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    expect(
+      screen.getByRole("button", { name: /choose ai provider \(current: GPT\)/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: "Two" }));
+    expect(
+      screen.getByRole("button", { name: /choose ai provider \(current: GPT\)/i }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Gemini" }));
+    expect(
+      screen.getByRole("button", { name: /choose ai provider \(current: Gemini\)/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "One" }));
+    expect(
+      screen.getByRole("button", { name: /choose ai provider \(current: GPT\)/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Two" }));
+    expect(
+      screen.getByRole("button", { name: /choose ai provider \(current: Gemini\)/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("starts a newly created chat on the default GPT provider", async () => {
+    const user = userEvent.setup();
+    const api = makeApi();
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Gemini" }));
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: "New chat" }));
+
+    expect(
+      await screen.findByRole("button", {
+        name: /choose ai provider \(current: GPT\)/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("does not place a late reply into a chat the user switched to mid-request", async () => {
     const user = userEvent.setup();
-    let resolveAdapter!: (result: AdapterResult) => void;
-    const adapterPromise = new Promise<AdapterResult>((resolve) => {
-      resolveAdapter = resolve;
+    let resolveRoute!: (r: RouteRunResult) => void;
+    const routePromise = new Promise<RouteRunResult>((resolve) => {
+      resolveRoute = resolve;
     });
     const sessions: PersistedSession[] = [
       { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
@@ -399,7 +438,7 @@ describe("ChatPanel", () => {
     ];
     const api = makeApi({
       sessions,
-      runAdapter: vi.fn(() => adapterPromise),
+      runRoute: vi.fn(() => routePromise),
       readHistory: vi.fn((id: string) =>
         Promise.resolve(
           id === "s2"
@@ -411,22 +450,14 @@ describe("ChatPanel", () => {
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    // Submit a prompt in chat One; the reply is still in flight.
-    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "ask one");
 
-    // Switch to chat Two while One's reply is pending.
     await user.click(screen.getByRole("button", { name: "Show chat history" }));
     await user.click(screen.getByRole("button", { name: "Two" }));
     expect(await screen.findByText("from chat two")).toBeInTheDocument();
 
-    // The late reply resolves; it is persisted but must not appear in chat Two.
-    resolveAdapter({ assistantText: "REPLY-ONE", rawJson: "{}", nativeSessionId: null });
-    await waitFor(() =>
-      expect(api.appendMessage).toHaveBeenCalledWith(
-        expect.objectContaining({ sender: "assistant" }),
-      ),
-    );
+    resolveRoute(routeResult("ask one", [{ provider: "codex", content: "REPLY-ONE" }]));
+    await waitFor(() => expect(api.runRoute).toHaveBeenCalled());
     expect(screen.queryByText("REPLY-ONE")).not.toBeInTheDocument();
     expect(screen.getByText("from chat two")).toBeInTheDocument();
   });
@@ -492,101 +523,156 @@ describe("ChatPanel", () => {
 
     const time = container.querySelector(".message__time");
     expect(time).not.toBeNull();
-    // 24h HH:MM for a same-day message (no date prefix).
     expect(time?.textContent).toMatch(/^\d{2}:\d{2}$/);
   });
 
   it("restores the thinking indicator when returning to a chat whose reply is still pending", async () => {
     const user = userEvent.setup();
-    let resolveAdapter!: (result: AdapterResult) => void;
-    const adapterPromise = new Promise<AdapterResult>((resolve) => {
-      resolveAdapter = resolve;
-    });
+    const routePromise = new Promise<RouteRunResult>(() => {});
     const sessions: PersistedSession[] = [
       { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
       { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
     ];
-    const api = makeApi({ sessions, runAdapter: vi.fn(() => adapterPromise) });
+    const api = makeApi({ sessions, runRoute: vi.fn(() => routePromise) });
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "ask one");
     expect(screen.getByTestId("thinking")).toBeInTheDocument();
 
-    // Switch away: the other chat is idle, no thinking indicator.
     await user.click(screen.getByRole("button", { name: "Show chat history" }));
     await user.click(screen.getByRole("button", { name: /^Two/ }));
     expect(screen.queryByTestId("thinking")).toBeNull();
 
-    // Switch back: the reply is still in flight, so thinking must reappear.
     await user.click(screen.getByRole("button", { name: /^One/ }));
     expect(screen.getByTestId("thinking")).toBeInTheDocument();
-
-    resolveAdapter({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
-    await waitFor(() => expect(screen.queryByTestId("thinking")).toBeNull());
   });
 
   it("marks a background reply unread in the rail and clears it when reopened", async () => {
     const user = userEvent.setup();
-    let resolveAdapter!: (result: AdapterResult) => void;
-    const adapterPromise = new Promise<AdapterResult>((resolve) => {
-      resolveAdapter = resolve;
+    let resolveRoute!: (r: RouteRunResult) => void;
+    const routePromise = new Promise<RouteRunResult>((resolve) => {
+      resolveRoute = resolve;
     });
     const sessions: PersistedSession[] = [
       { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
       { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
     ];
-    const api = makeApi({ sessions, runAdapter: vi.fn(() => adapterPromise) });
+    const api = makeApi({ sessions, runRoute: vi.fn(() => routePromise) });
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "ask one");
     await user.click(screen.getByRole("button", { name: "Show chat history" }));
 
-    // While pending, the One row shows a reply-in-progress indicator.
     expect(
       screen.getByRole("button", { name: /One, reply in progress/ }),
     ).toBeInTheDocument();
 
-    // Switch to Two, then let One's reply land in the background → unread.
     await user.click(screen.getByRole("button", { name: /^Two/ }));
-    resolveAdapter({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
+    resolveRoute(routeResult("ask one", [{ provider: "codex", content: "done" }]));
     expect(
       await screen.findByRole("button", { name: /One, unread answer/ }),
     ).toBeInTheDocument();
 
-    // Reopening One clears its unread flag.
     await user.click(screen.getByRole("button", { name: /One, unread answer/ }));
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /One, unread answer/ })).toBeNull(),
     );
   });
 
+  it("keeps the composer compact before and during one-line input", async () => {
+    const user = userEvent.setup();
+    const scrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "scrollHeight",
+    );
+    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return this.value ? 24 : 96;
+      },
+    });
+
+    try {
+      const api = makeApi();
+      render(<ChatPanel api={api} />);
+      await waitForReady(api);
+
+      const input = screen.getByLabelText("Ask side-pilot");
+      expect(input).toHaveStyle({ height: "32px" });
+
+      await user.type(input, "a");
+
+      expect(input).toHaveStyle({ height: "32px" });
+    } finally {
+      if (scrollHeight) {
+        Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", scrollHeight);
+      } else {
+        Reflect.deleteProperty(HTMLTextAreaElement.prototype, "scrollHeight");
+      }
+    }
+  });
+
+  it("remeasures composer height when the app width changes", async () => {
+    const user = userEvent.setup();
+    let measuredScrollHeight = 32;
+    const scrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "scrollHeight",
+    );
+    Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return measuredScrollHeight;
+      },
+    });
+
+    try {
+      const api = makeApi();
+      render(<ChatPanel api={api} />);
+      await waitForReady(api);
+
+      const input = screen.getByLabelText("Ask side-pilot");
+      await user.type(input, "long text that fits one row while wide");
+      expect(input).toHaveStyle({ height: "32px" });
+
+      measuredScrollHeight = 56;
+      window.dispatchEvent(new Event("resize"));
+      expect(input).toHaveStyle({ height: "56px" });
+
+      measuredScrollHeight = 32;
+      window.dispatchEvent(new Event("resize"));
+      expect(input).toHaveStyle({ height: "32px" });
+    } finally {
+      if (scrollHeight) {
+        Object.defineProperty(HTMLTextAreaElement.prototype, "scrollHeight", scrollHeight);
+      } else {
+        Reflect.deleteProperty(HTMLTextAreaElement.prototype, "scrollHeight");
+      }
+    }
+  });
+
   it("clears a background chat's unread flag when that chat is deleted", async () => {
     const user = userEvent.setup();
-    let resolveAdapter!: (result: AdapterResult) => void;
-    const adapterPromise = new Promise<AdapterResult>((resolve) => {
-      resolveAdapter = resolve;
+    let resolveRoute!: (r: RouteRunResult) => void;
+    const routePromise = new Promise<RouteRunResult>((resolve) => {
+      resolveRoute = resolve;
     });
     const sessions: PersistedSession[] = [
       { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
       { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
     ];
-    const api = makeApi({ sessions, runAdapter: vi.fn(() => adapterPromise) });
+    const api = makeApi({ sessions, runRoute: vi.fn(() => routePromise) });
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    // Reply on One lands while viewing Two → One is unread.
-    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "ask one");
     await user.click(screen.getByRole("button", { name: "Show chat history" }));
     await user.click(screen.getByRole("button", { name: /^Two/ }));
-    resolveAdapter({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
+    resolveRoute(routeResult("ask one", [{ provider: "codex", content: "done" }]));
     const unread = await screen.findByRole("button", { name: /One, unread answer/ });
 
-    // Delete One via its options menu; its unread status must not linger.
     await user.click(screen.getByRole("button", { name: /Options for One/ }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(
@@ -602,31 +688,26 @@ describe("ChatPanel", () => {
 
   it("surfaces an unread badge on the rail toggle when a background reply lands and the rail is closed", async () => {
     const user = userEvent.setup();
-    let resolveAdapter!: (result: AdapterResult) => void;
-    const adapterPromise = new Promise<AdapterResult>((resolve) => {
-      resolveAdapter = resolve;
+    let resolveRoute!: (r: RouteRunResult) => void;
+    const routePromise = new Promise<RouteRunResult>((resolve) => {
+      resolveRoute = resolve;
     });
     const sessions: PersistedSession[] = [
       { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
       { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
     ];
-    const api = makeApi({ sessions, runAdapter: vi.fn(() => adapterPromise) });
+    const api = makeApi({ sessions, runRoute: vi.fn(() => routePromise) });
     render(<ChatPanel api={api} />);
     await waitForReady(api);
 
-    // With nothing unread, the closed toggle has no unread signal.
     expect(screen.getByRole("button", { name: "Show chat history" })).toBeInTheDocument();
 
-    // Reply on One lands while viewing Two → One is unread in the background.
-    await user.type(screen.getByLabelText("Ask side-pilot"), "ask one");
-    await user.click(screen.getByRole("button", { name: /send/i }));
+    await send(user, "ask one");
     await user.click(screen.getByRole("button", { name: /^Show chat history/ }));
     await user.click(screen.getByRole("button", { name: /^Two/ }));
-    resolveAdapter({ assistantText: "done", rawJson: "{}", nativeSessionId: null });
+    resolveRoute(routeResult("ask one", [{ provider: "codex", content: "done" }]));
     await screen.findByRole("button", { name: /One, unread answer/ });
 
-    // Close the rail: the toggle itself must now signal there's an unread answer
-    // (otherwise a collapsed rail hides the only indicator).
     await user.click(screen.getByRole("button", { name: "Hide chat history" }));
     expect(
       screen.getByRole("button", { name: /Show chat history, unread/i }),
@@ -645,16 +726,13 @@ describe("ChatPanel", () => {
     render(<ChatPanel api={api} />);
 
     const link = await screen.findByRole("link", { name: "the docs" });
-    // Href is kept for hover/accessibility, but the click is intercepted.
     expect(link).toHaveAttribute("href", "https://example.com/guide");
 
     const clickEvent = createEvent.click(link);
     fireEvent(link, clickEvent);
-    // Default navigation is prevented so the WebView never leaves the app.
     expect(clickEvent.defaultPrevented).toBe(true);
     expect(api.openExternal).toHaveBeenCalledWith("https://example.com/guide");
 
-    // Middle-click (auxclick) is intercepted the same way — no new-tab nav.
     const auxEvent = new MouseEvent("auxclick", {
       bubbles: true,
       cancelable: true,

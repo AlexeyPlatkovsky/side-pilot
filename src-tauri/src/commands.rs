@@ -12,7 +12,8 @@ use std::sync::Mutex;
 use tauri::State;
 use tokio_util::sync::CancellationToken;
 
-use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult};
+use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult, AssistantId};
+use crate::routing::{execute_route, RouteRequest, RouteRunResult};
 use crate::storage::{Message, NewMessage, Session, StorageError, Store};
 
 pub struct AppState {
@@ -120,6 +121,48 @@ async fn run_adapter_with_state(
         run_id,
     };
     let result = state.registry.run(request, cancel).await;
+    result
+}
+
+/// Route a prompt to one provider or to all active providers (SP-016).
+///
+/// Persists the user prompt, sends each provider only the context it has not yet
+/// seen (app-owned transcript replay, §6), dispatches `All` routes concurrently,
+/// persists each successful response, and records `message_provider_sends`. The
+/// `Result` error surfaces storage failures; per-provider adapter failures are
+/// returned inside each [`ProviderRunOutcome`](crate::routing::ProviderRunOutcome).
+#[tauri::command]
+pub async fn run_route(
+    state: State<'_, AppState>,
+    store: State<'_, Store>,
+    request: RouteRequest,
+) -> Result<RouteRunResult, StorageError> {
+    run_route_with_state(&state, &store, request).await
+}
+
+async fn run_route_with_state(
+    state: &AppState,
+    store: &Store,
+    request: RouteRequest,
+) -> Result<RouteRunResult, StorageError> {
+    // Register one cancellation token per provider slot so `cancel_adapter_run`
+    // can target an in-flight provider; the ids are released once the route
+    // resolves (mirrors `ActiveRunGuard` for the single-run path). A `&mut Vec`
+    // capture (not `RefCell`) keeps the command future `Send`/`Sync`.
+    let mut registered: Vec<String> = Vec::new();
+    let result = {
+        let registered = &mut registered;
+        let make_cancel = |provider: AssistantId| {
+            let run_id = format!("{}-{}", state.next_run_id(), provider.as_str());
+            registered.push(run_id.clone());
+            state.register_run(run_id)
+        };
+        execute_route(store, &state.registry, request, make_cancel).await
+    };
+
+    for run_id in registered {
+        state.finish_run(&run_id);
+    }
     result
 }
 
@@ -324,6 +367,46 @@ mod tests {
 
         assert_eq!(err, AdapterError::BinaryNotFound);
         assert!(!state.cancel_run("run-error").await);
+    }
+
+    #[tokio::test]
+    async fn run_route_persists_prompt_and_releases_run_tokens() {
+        let state = state_with(Arc::new(StaticAdapter {
+            result: Ok(AdapterResult {
+                assistant_text: "pong".to_string(),
+                raw_json: "{}".to_string(),
+                native_session_id: None,
+                usage: None,
+            }),
+        }));
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        let result = run_route_with_state(
+            &state,
+            &store,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: crate::routing::Route::Single {
+                    provider: AssistantId::Codex,
+                },
+                prompt: "ping".to_string(),
+                active_providers: vec![],
+                model: None,
+                timeout_ms: 1000,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.user_message.content, "ping");
+        assert_eq!(result.outcomes.len(), 1);
+        assert_eq!(
+            result.outcomes[0].message.as_ref().unwrap().content,
+            "pong"
+        );
+        // Per-provider run tokens were released once the route resolved.
+        assert_eq!(state.active_run_count(), 0);
     }
 
     #[tokio::test]

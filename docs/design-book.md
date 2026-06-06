@@ -44,6 +44,9 @@ Use these in components.
 | `--color-on-accent-muted` | `--cream` 78% | Secondary text on an accent surface (currently unused — was the user-message label, removed when "You" labels were dropped) |
 | `--color-danger` | `--clay` | Error text/border (chat failure banner) |
 | `--color-unread` | `--orange` | Unread-answer dot in the chat list |
+| `--provider-gpt` | `--teal` | AI switcher icon accent for GPT (Codex); cream monogram (5.6:1) |
+| `--provider-claude` | `--clay` | AI switcher icon accent for Claude; cream monogram (6:1) |
+| `--provider-gemini` | `--honey` | AI switcher icon accent for Gemini; light fill, so the monogram uses `--ink` (~9:1) |
 | `--surface-panel` | warm cream 95% | Main panel background |
 | `--surface-panel-soft` | warm cream 82% | Header gradient stop |
 | `--surface-warm` | warm 96% | Header gradient stop |
@@ -137,6 +140,7 @@ they are not part of any repeated scale:
 - Send button `width: 32px; height: 32px` — single-purpose icon control sizing.
 - `max-width: 86%` on messages, `opacity` values, and `line-height` values.
 - Chat history rail (SP-048–057): `.chat-rail` `width: 210px` (fixed, ~50% wider than the original 140px so titles and row indicators read inside the 380px expanded panel); `.chat-row__select` `height: 32px` (compact one-line rows); `.chat-row__options` `min-width: 120px` (options popup); `.dialog` `max-width: 280px` (modal width, fits the 380px window). Message bubbles use `min-width: min-content` so a narrowed panel never wraps the one-row `.message__meta` label (model + timestamp). `.chat-row__spinner` uses a `2px` ring stroke (the in-progress indicator's only literal; thicker than the default `1px` borders so the small ring reads).
+- AI switcher (SP-017): `.ai-switcher__toggle` `width: 32px; height: 32px` (icon control beside Send, matches the send button); `.ai-switcher__menu` `min-width: 132px; max-height: 220px` (right-anchored picker that opens inward so it never clips the 380px panel edge); `.provider-icon` `20px` monogram chip; `.provider-icon__grid` uses sub-icon literals (`gap: 2px`, `border-radius: 1px`) for the 12px 2×2 "All" glyph — too small for the spacing/radius scales, same precedent as the spinner stroke.
 
 If any of these starts repeating across components, promote it to a token here.
 

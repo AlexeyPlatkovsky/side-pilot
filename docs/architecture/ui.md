@@ -14,11 +14,13 @@ App
      ├─ Escape handler            # steps back one level
      ├─ click-vs-drag discriminator  # wasDragged() threshold
      └─ ChatPanel (ChatPanel.tsx)
-         ├─ uses chatReducer      # messages[], status (idle|pending|error)
+         ├─ uses chatReducer      # messages[] (incl. pending/error slots), status
          ├─ uses useChat(api)     # session list, active session, pending/unread sets
+         ├─ per-session route state # ActiveRoute per chat: single provider | All (default GPT)
          ├─ toolbar               # model label, Rename, Clear
-         ├─ transcript            # Markdown-rendered messages
-         ├─ composer              # textarea + Send
+         ├─ transcript            # Markdown replies, per-provider pending slots, inline error cards
+         ├─ composer              # textarea + AiSwitcher + Send
+         ├─ AiSwitcher            # provider-logo button + vertical picker (All + GPT/Claude/Gemini)
          ├─ ChatHistory           # session rail (aside)
          └─ Dialogs               # RenameDialog, DeleteDialog, ClearDialog
 ```
@@ -34,22 +36,24 @@ App
 | Active session id | `useState` in `useChat` | `string \| null` |
 | Pending set | `useState` in `useChat` | `Set<sessionId>` |
 | Unread set | `useState` in `useChat` | `Set<sessionId>` |
+| Active routes | `useState` in `ChatPanel` | Session-id keyed `ActiveRoute` values (`{single, provider}` \| `{all}`); each chat defaults to GPT |
+| Picker open | `useState` in `AiSwitcher` | `boolean` (rendered only while not in flight) |
 
-### Data Flow for Prompt Submission
+### Data Flow for Prompt Submission (SP-017 multi-provider route)
 
 ```
-User types prompt → compose() in ChatPanel
-  → dispatch({ type: "submit" })   # optimistic user message, status → pending
-  → api.appendMessage(user)         # persist user turn
-  → generateTitle()                 # name untitled chat from first prompt
-  → api.renameSession()             # persist title
-  → api.runAdapter(request)         # Tauri IPC → CLI (blocking)
-  → api.appendMessage(assistant)    # persist reply
-  → dispatch({ type: "success" })   # append reply, status → idle
-  → api.updateCodexSessionId()      # save native resume id
+User types prompt → onSubmit() in ChatPanel (with the active route)
+  → dispatch({ type: "routeSubmit" })  # optimistic user message + one pending slot per target provider, status → pending
+  → generateTitle() + api.renameSession()  # name an untitled chat from its first prompt
+  → api.runRoute({ sessionId, route, prompt, activeProviders, model })
+        # Tauri IPC → run_route: persists prompt, computes each provider's
+        # unsent diff (transcript replay, §6), dispatches single or All
+        # (concurrently), persists each reply, records message_provider_sends
+  → map outcomes → reply messages (success) or inline error cards (failure)
+  → dispatch({ type: "routeSettled" })  # swap pending slots for results, status → idle
 ```
 
-Late replies (user switched chats mid-flight) land in the originating session's unread set, not the active transcript.
+The submit path routes through `run_route` (SP-016), so conversation context is carried by app-owned transcript replay rather than native session resume; the client no longer calls `appendMessage`/`updateCodexSessionId` itself. Per-provider failures arrive inside the outcomes as inline error cards (not a banner); the error banner remains only for a whole-call (storage) failure on the catch path. Late replies (user switched chats mid-flight) land in the originating session's unread set, not the active transcript.
 
 ### Source Files
 
@@ -58,7 +62,10 @@ Late replies (user switched chats mid-flight) land in the originating session's 
 | `src/App.tsx` | Root — renders `<Bubble>` with `tauriChatApi` |
 | `src/main.tsx` | Vite entry point |
 | `src/components/Bubble.tsx` | Floating bubble shell: collapsed dot → expanded panel |
-| `src/components/ChatPanel.tsx` | Chat transcript, toolbar, composer, session management |
+| `src/components/ChatPanel.tsx` | Chat transcript, toolbar, composer, AI switcher, route submission, session management |
+| `src/components/AiSwitcher.tsx` | Provider-logo switcher button + vertical picker (All + GPT/Claude/Gemini) |
+| `src/components/ProviderIcon.tsx` | Provider monogram chips + the All grid glyph |
+| `src/chat/providers.ts` | Provider registry, `ActiveRoute`, route helpers, per-provider labels/errors |
 | `src/components/ChatHistory.tsx` | Session rail: list, rename, delete, new chat |
 | `src/components/Dialog.tsx` | Accessible modal dialog (focus trap, Escape) |
 | `src/components/RenameDialog.tsx` | Chat rename form inside Dialog |

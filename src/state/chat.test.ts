@@ -83,4 +83,75 @@ describe("chatReducer", () => {
     chatReducer(before, { type: "submit", message: userMsg("x") });
     expect(before).toEqual(initialChatState);
   });
+
+  // ---- Multi-provider route lifecycle (SP-017) ----------------------------
+
+  const pendingSlot = (provider: string): ChatMessage => ({
+    id: `pending-${provider}`,
+    sender: "assistant",
+    assistantId: provider,
+    content: "",
+    createdAt: 1,
+    pending: true,
+  });
+
+  it("routeSubmit appends the user message plus one pending slot per provider", () => {
+    const state = chatReducer(initialChatState, {
+      type: "routeSubmit",
+      userMessage: userMsg("to all"),
+      slots: [pendingSlot("codex"), pendingSlot("claude"), pendingSlot("gemini")],
+    });
+    expect(state.messages).toHaveLength(4);
+    expect(state.messages.filter((m) => m.pending)).toHaveLength(3);
+    expect(state.status).toEqual({ kind: "pending" });
+  });
+
+  it("routeSettled swaps the pending slots for their results and returns to idle", () => {
+    const submitted = chatReducer(initialChatState, {
+      type: "routeSubmit",
+      userMessage: userMsg("to all"),
+      slots: [pendingSlot("codex"), pendingSlot("gemini")],
+    });
+    const settled = chatReducer(submitted, {
+      type: "routeSettled",
+      results: [
+        assistantMsg("gpt reply"),
+        {
+          id: "err-gemini",
+          sender: "assistant",
+          assistantId: "gemini",
+          content: "Gemini timed out before responding.",
+          createdAt: 1,
+          error: true,
+        },
+      ],
+    });
+    // No pending slots remain; user message + the two results are present.
+    expect(settled.messages.some((m) => m.pending)).toBe(false);
+    expect(settled.messages.map((m) => m.content)).toEqual([
+      "to all",
+      "gpt reply",
+      "Gemini timed out before responding.",
+    ]);
+    expect(settled.messages.find((m) => m.error)?.assistantId).toBe("gemini");
+    expect(settled.status).toEqual({ kind: "idle" });
+  });
+
+  it("error drops orphaned pending slots but keeps the user message", () => {
+    const submitted = chatReducer(initialChatState, {
+      type: "routeSubmit",
+      userMessage: userMsg("to all"),
+      slots: [pendingSlot("codex"), pendingSlot("claude")],
+    });
+    const errored = chatReducer(submitted, {
+      type: "error",
+      message: "Local history is unavailable right now.",
+    });
+    expect(errored.messages.map((m) => m.content)).toEqual(["to all"]);
+    expect(errored.messages.some((m) => m.pending)).toBe(false);
+    expect(errored.status).toEqual({
+      kind: "error",
+      message: "Local history is unavailable right now.",
+    });
+  });
 });

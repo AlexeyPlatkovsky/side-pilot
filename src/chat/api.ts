@@ -23,6 +23,8 @@ import type { AdapterResult as RustAdapterResult } from "./generated/AdapterResu
 import type { Session as RustSession } from "./generated/Session";
 import type { Message as RustMessage } from "./generated/Message";
 import type { NewMessage as RustNewMessage } from "./generated/NewMessage";
+import type { RouteRequest as RustRouteRequest } from "./generated/RouteRequest";
+import type { RouteRunResult as RustRouteRunResult } from "./generated/RouteRunResult";
 
 /**
  * The request the UI sends to `run_adapter`. Projected from the Rust
@@ -50,8 +52,26 @@ export type PersistedSession = RustSession;
 export type PersistedMessage = RustMessage;
 export type NewMessage = RustNewMessage;
 
+/**
+ * The request the UI sends to `run_route` (SP-016/SP-017). The UI supplies the
+ * route, prompt, and active providers; `timeoutMs` falls back to the backend's
+ * serde default when omitted.
+ */
+export type RouteRequest = Pick<
+  RustRouteRequest,
+  "sessionId" | "route" | "prompt" | "activeProviders" | "model"
+>;
+export type RouteRunResult = RustRouteRunResult;
+
 export interface ChatApi {
   runAdapter(request: AdapterRequest): Promise<AdapterResult>;
+  /**
+   * Route a prompt to one provider or to all active providers (SP-016). Persists
+   * the prompt and each successful response server-side and returns one outcome
+   * per provider; per-provider failures arrive inside the outcomes, not as a
+   * rejection.
+   */
+  runRoute(request: RouteRequest): Promise<RouteRunResult>;
   createSession(title?: string | null): Promise<PersistedSession>;
   appendMessage(message: NewMessage): Promise<PersistedMessage>;
   readHistory(sessionId: string): Promise<PersistedMessage[]>;
@@ -74,6 +94,7 @@ export interface ChatApi {
 /** The real backend, wired to the registered Tauri commands. */
 export const tauriChatApi: ChatApi = {
   runAdapter: (request) => invoke("run_adapter", { request }),
+  runRoute: (request) => invoke("run_route", { request }),
   createSession: (title = null) => invoke("create_session", { title }),
   appendMessage: (message) => invoke("append_message", { message }),
   readHistory: (sessionId) => invoke("read_history", { sessionId }),
@@ -93,6 +114,7 @@ export const tauriChatApi: ChatApi = {
  */
 export const inertChatApi: ChatApi = {
   runAdapter: () => Promise.reject(new Error("chat backend unavailable")),
+  runRoute: () => Promise.reject(new Error("chat backend unavailable")),
   createSession: () =>
     Promise.resolve({
       id: "inert-session",

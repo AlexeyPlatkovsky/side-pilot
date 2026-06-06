@@ -151,7 +151,11 @@ Every adapter MUST use the tool's non-interactive mode with machine-readable out
 |---|---|---|---|---|---|---|
 | Claude Code | `claude -p "<prompt>"` | `--output-format json` (or `stream-json`) | inherits process `cwd`; `--add-dir <dir>` to widen | `--model <id>` | `--permission-mode <mode>` | `--session-id <uuid>`, resume `-r <id>` |
 | OpenAI Codex | `codex exec "<prompt>"` (prompt may come via stdin) | `--json` (JSONL events); `--output-last-message <file>` for final text | `-C/--cd <dir>` | `-m/--model <id>` | `-s/--sandbox <mode>` | `codex exec resume` |
-| Gemini | `gemini -p "<prompt>"` (stdin appended) | `-o/--output-format json` (or `stream-json`) | inherits process `cwd`; `--include-directories <dirs>` | `-m/--model <id>` | `--approval-mode <mode>` | `--session-id <uuid>`, resume `-r <id>` |
+| Gemini | `gemini -p "<prompt>"` (stdin appended) | `-o/--output-format json` (or `stream-json`) | inherits process `cwd`; `--include-directories <dirs>` | `-m/--model <id>` | `--approval-mode <mode>` (+ `--skip-trust`, see note) | resume `-r latest`/`-r <index>` (not UUID); `--session-id <uuid>` starts a new session |
+
+> **Verified CLI constraints (gemini 0.44.1, GeminiAdapter / SP-014):**
+> - A headless run in an **untrusted** directory (the neutral app-controlled `cwd`, §3) is refused and `--approval-mode` is silently downgraded. The adapter always passes **`--skip-trust`**, which restores trust for the read-only session; combined with `--approval-mode plan` the read-only posture (§4) is preserved (the tool still cannot edit or execute).
+> - `gemini -r/--resume` accepts `"latest"` or an **index**, not a session UUID, and `--session-id` *starts* a new session — so UUID-based native resume is unavailable. The adapter does not wire `resume_session_id` into the command; multi-tool continuity relies on app-owned transcript replay (§6) and the native `session_id` is captured from output only as a per-tool optimization.
 
 ### 2. Binary resolution and environment
 

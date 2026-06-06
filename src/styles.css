@@ -54,6 +54,14 @@
   /* Unread-answer indicator dot in the chat list (notable orange). */
   --color-unread: var(--orange);
 
+  /* AI provider accents for the switcher icons (SP-017). Drawn from the palette
+     so each provider reads distinctly while clearing AA contrast for the
+     monogram glyph: teal + clay carry cream text (5.6:1 / 6:1); honey is light,
+     so its chip uses ink text (~9:1) — see `.provider-icon--gemini`. */
+  --provider-gpt: var(--teal);
+  --provider-claude: var(--clay);
+  --provider-gemini: var(--honey);
+
   /* Surfaces */
   --surface-panel: rgba(255, 248, 238, 0.95);
   --surface-panel-soft: rgba(255, 248, 238, 0.82);
@@ -440,6 +448,20 @@ body {
   font-style: italic;
 }
 
+/* A failed provider slot rendered inline in the thread (SP-017): the assistant
+   bubble takes the danger border/tint so a partial All-route failure reads as an
+   error without removing it from the conversation flow. */
+.message--error {
+  border-color: var(--color-danger);
+  background: var(--surface-danger);
+}
+
+.message__error {
+  margin: var(--space-1) 0 0;
+  color: var(--color-danger);
+  font-size: var(--font-sm);
+}
+
 /* Failure banner — keeps the transcript intact while surfacing the error. */
 .conversation__error {
   margin: 0;
@@ -523,6 +545,138 @@ body {
 .composer__send:disabled {
   cursor: default;
   opacity: 0.76;
+}
+
+/* --- AI switcher (SP-017) -------------------------------------------------- */
+/* The provider switcher sits between the input and Send. `position: relative`
+   anchors the picker, which opens upward above the composer. */
+.ai-switcher {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ai-switcher__toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.ai-switcher__toggle:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ai-switcher__toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Vertical picker, opened upward so it never spills below the pinned composer.
+   Anchored to the switcher's right edge (the switcher sits near the panel's
+   right edge, beside Send) so the menu opens inward and never clips the panel. */
+.ai-switcher__menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-1));
+  right: 0;
+  left: auto;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 132px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-popup);
+}
+
+.ai-switcher__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-switcher__option:hover {
+  background: var(--overlay-hover);
+}
+
+.ai-switcher__option:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+/* The currently active route has a distinct background (Scenario 2). */
+.ai-switcher__option--active {
+  background: var(--tint-honey);
+  font-weight: var(--font-weight-bold);
+}
+
+.ai-switcher__option-label {
+  letter-spacing: 0;
+}
+
+/* Provider monogram chip used in the toggle face and picker rows. */
+.provider-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--provider-gpt);
+  color: var(--color-on-accent);
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+}
+
+.provider-icon--gpt {
+  background: var(--provider-gpt);
+}
+
+.provider-icon--claude {
+  background: var(--provider-claude);
+}
+
+.provider-icon--gemini {
+  background: var(--provider-gemini);
+  /* Honey is a light accent, so the monogram uses ink for AA contrast (~9:1). */
+  color: var(--ink);
+}
+
+/* The All icon: a 2×2 grid of dots suggesting every provider at once. */
+.provider-icon--all {
+  background: var(--ink);
+}
+
+.provider-icon__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  width: 12px;
+  height: 12px;
+}
+
+.provider-icon__grid i {
+  border-radius: 1px;
+  background: var(--color-on-accent);
 }
 
 /* =============================================================================

@@ -25,7 +25,17 @@ import {
 } from "../chat/history";
 import { useChatStatus } from "../chat/useChatStatus";
 import { useSessionList } from "../chat/useSessionList";
-import { ASSISTANT_MODEL, assistantModelLabel } from "../chat/config";
+import { ASSISTANT_MODEL } from "../chat/config";
+import {
+  ALL_PROVIDER_IDS,
+  DEFAULT_ROUTE,
+  describeProviderError,
+  messageLabel,
+  routeTargets,
+  type ActiveRoute,
+} from "../chat/providers";
+import type { AssistantId } from "../chat/generated/AssistantId";
+import { AiSwitcher } from "./AiSwitcher";
 import { ChatHistory } from "./ChatHistory";
 import { Dialog } from "./Dialog";
 import { RenameDialog } from "./RenameDialog";
@@ -47,13 +57,17 @@ interface ActiveSession {
 }
 
 /**
- * Chat logic hook (SP-006, SP-048–051). Owns the transcript reducer plus the
- * session list and the active session, and wires every chat operation through
- * the injected [`ChatApi`]: prompt submission (persist user turn, run the
- * blocking Codex call, persist + display the reply, record the native resume
- * id, and title an untitled chat from its first prompt), session switching,
- * new/rename/delete, and clear. The local store is the display source of truth,
- * so the transcript and list are (re)loaded from it.
+ * Chat logic hook (SP-006, SP-048–051, SP-017). Owns the transcript reducer plus
+ * the session list and the active session, and wires every chat operation through
+ * the injected [`ChatApi`]: prompt submission via the multi-provider route
+ * (`run_route` persists the prompt and each provider's reply server-side and
+ * returns one outcome per target; the client shows an optimistic user message
+ * plus one labeled pending slot per provider, then swaps in replies or inline
+ * error cards), titling an untitled chat from its first prompt, session
+ * switching, new/rename/delete, and clear. Multi-provider continuity is carried
+ * by app-owned transcript replay (§6), not native session resume. The local
+ * store is the display source of truth, so the transcript and list are
+ * (re)loaded from it.
  */
 export function useChat(api: ChatApi) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
@@ -116,7 +130,7 @@ export function useChat(api: ChatApi) {
   }, [api, applySessions, setActive]);
 
   const submit = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, route: ActiveRoute) => {
       const trimmed = prompt.trim();
       const session = activeRef.current;
       if (!trimmed || !session) return;
@@ -124,6 +138,7 @@ export function useChat(api: ChatApi) {
       // which the user may switch to another chat; the late reply must land in
       // (and only re-render) its originating chat, never whichever is now active.
       const originId = session.id;
+      const targets = routeTargets(route);
 
       const userMessage: ChatMessage = {
         id: newId(),
@@ -131,19 +146,25 @@ export function useChat(api: ChatApi) {
         content: trimmed,
         createdAt: Date.now(),
       };
-      // Show the user's message immediately and enter the pending state, and
-      // mark this chat in-flight so the rail shows a spinner (SP-056).
-      dispatch({ type: "submit", message: userMessage });
+      // One labeled pending slot per target provider so the user sees each
+      // provider "loading" until the route settles (SP-017).
+      const slots: ChatMessage[] = targets.map((provider) => ({
+        id: `pending-${provider}-${newId()}`,
+        sender: "assistant",
+        assistantId: provider,
+        content: "",
+        createdAt: Date.now(),
+        pending: true,
+      }));
+      // Show the user's message + provider slots immediately, enter the pending
+      // state, and mark this chat in-flight so the rail shows a spinner (SP-056).
+      dispatch({ type: "routeSubmit", userMessage, slots });
       markPending(originId);
 
       try {
-        // Persist the user turn first so it survives a failed/late reply.
-        await api.appendMessage({
-          sessionId: session.id,
-          sender: "user",
-          content: trimmed,
-        });
-        // Name a still-untitled chat from its first prompt (SP-049).
+        // Name a still-untitled chat from its first prompt (SP-049). `run_route`
+        // persists the user prompt and each successful reply server-side, so the
+        // client no longer appends them itself.
         if (!session.title || !session.title.trim()) {
           const generated = generateTitle(trimmed);
           if (generated) {
@@ -151,36 +172,38 @@ export function useChat(api: ChatApi) {
             session.title = updated.title;
           }
         }
-        const result = await api.runAdapter({
-          assistant: "codex",
-          prompt: trimmed,
-          model: ASSISTANT_MODEL.id,
-          reasoningEffort: ASSISTANT_MODEL.effort,
-          resumeSessionId: session.codexSessionId ?? undefined,
-        });
-        const persisted = await api.appendMessage({
+        const result = await api.runRoute({
           sessionId: session.id,
-          sender: "assistant",
-          assistantId: "codex",
-          content: result.assistantText,
-          rawJson: result.rawJson,
+          route,
+          prompt: trimmed,
+          activeProviders: ALL_PROVIDER_IDS as AssistantId[],
+          model: ASSISTANT_MODEL.id,
         });
         // This turn is no longer in flight.
         clearPending(originId);
+        // Map each provider outcome to a transcript entry: a persisted reply, or
+        // an inline error card under that provider's label.
+        const results: ChatMessage[] = result.outcomes.map((outcome) =>
+          outcome.message
+            ? toChatMessage(outcome.message)
+            : {
+                id: `error-${outcome.provider}-${newId()}`,
+                sender: "assistant",
+                assistantId: outcome.provider,
+                content: outcome.error
+                  ? describeProviderError(outcome.error, outcome.provider)
+                  : "The request failed.",
+                createdAt: Date.now(),
+                error: true,
+              },
+        );
         if (activeRef.current?.id === originId) {
-          // Still viewing this chat — show the reply.
-          dispatch({ type: "success", message: toChatMessage(persisted) });
+          // Still viewing this chat — swap the pending slots for their results.
+          dispatch({ type: "routeSettled", results });
         } else if (getSessions().some((s) => s.id === originId)) {
           // Replied in the background — flag it unread until the user opens it.
           // Skip if the chat was deleted meanwhile, so no phantom dot lingers.
           markUnread(originId);
-        }
-
-        // Capture the native Codex session for future resume (§6).
-        const native = result.nativeSessionId;
-        if (native && session.codexSessionId !== native) {
-          session.codexSessionId = native;
-          await api.updateCodexSessionId(session.id, native);
         }
       } catch (err) {
         clearPending(originId);
@@ -309,12 +332,15 @@ export interface ChatPanelProps {
 }
 
 /**
- * The expanded panel's chat body (SP-006, SP-048–051): a collapsible history
- * rail, a toolbar (rail toggle + active chat title + Clear), an ordered
- * transcript with safe Markdown rendering for assistant replies, a visible
- * blocking ("thinking") state, an error banner that keeps the user's message,
- * and the prompt composer. Each assistant reply is badged with the model and
- * reasoning effort (e.g. "GPT-5.5-medium"); user messages are unlabeled.
+ * The expanded panel's chat body (SP-006, SP-048–051, SP-017): a collapsible
+ * history rail, a toolbar (rail toggle + active chat title + Clear), an ordered
+ * transcript with safe Markdown rendering for assistant replies, per-provider
+ * blocking ("thinking") slots, inline error cards for failed provider slots
+ * (plus a residual error banner for infrastructure/storage failures from the
+ * catch path), the prompt composer, and the AI switcher beside Send for choosing
+ * a single provider or All. Each assistant reply is labeled by provider — the
+ * GPT slot keeps the model+effort badge ("GPT-5.5-medium"); user messages are
+ * unlabeled.
  */
 export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
   const {
@@ -331,6 +357,7 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
     clearActive,
   } = useChat(api);
   const [draft, setDraft] = useState("");
+  const [routesBySession, setRoutesBySession] = useState<Record<string, ActiveRoute>>({});
   const [railOpen, setRailOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [renamingActive, setRenamingActive] = useState(false);
@@ -368,11 +395,35 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
   const activeTitle = activeSession?.title?.trim() || "New chat";
+  const route = activeSessionId
+    ? (routesBySession[activeSessionId] ?? DEFAULT_ROUTE)
+    : DEFAULT_ROUTE;
   const canClear = !isPending && state.messages.length > 0;
   // A background reply landed in some non-active chat. Surface it on the toggle
   // while the rail is collapsed, so the in-row dot isn't the only indicator.
   const hasUnread = unreadIds.size > 0;
   const showUnreadBadge = !railOpen && hasUnread;
+
+  // Provider selection belongs to a chat, not the panel. Chats without an
+  // explicit selection (including newly created chats) use the GPT default.
+  const setActiveRoute = useCallback(
+    (next: ActiveRoute) => {
+      if (!activeSessionId) return;
+      setRoutesBySession((current) => ({ ...current, [activeSessionId]: next }));
+    },
+    [activeSessionId],
+  );
+
+  // Drop retained UI state after a chat is deleted.
+  useEffect(() => {
+    const sessionIds = new Set(sessions.map((session) => session.id));
+    if (Object.keys(routesBySession).every((sessionId) => sessionIds.has(sessionId))) return;
+    setRoutesBySession(
+      Object.fromEntries(
+        Object.entries(routesBySession).filter(([sessionId]) => sessionIds.has(sessionId)),
+      ),
+    );
+  }, [routesBySession, sessions]);
 
   // Keep the latest turn in view as the transcript grows. Guarded because
   // `scrollIntoView` is not implemented in the jsdom test environment.
@@ -406,7 +457,7 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (isPending || !draft.trim()) return;
-    void submit(draft);
+    void submit(draft, route);
     setDraft("");
   };
 
@@ -415,7 +466,7 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!isPending && draft.trim()) {
-        void submit(draft);
+        void submit(draft, route);
         setDraft("");
       }
     }
@@ -482,13 +533,64 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
         </div>
 
         <div className="conversation" aria-live="polite">
-          {state.messages.map((message) =>
-            message.sender === "assistant" ? (
+          {state.messages.map((message) => {
+            if (message.sender !== "assistant") {
+              // User messages carry only a timestamp; bubble alignment marks the
+              // sender.
+              return (
+                <article key={message.id} className="message message--user">
+                  <div className="message__meta">
+                    <time className="message__time">
+                      {formatMessageTimestamp(message.createdAt, now)}
+                    </time>
+                  </div>
+                  <p>{message.content}</p>
+                </article>
+              );
+            }
+            const label = messageLabel(message.assistantId);
+            // A per-provider slot still awaiting its reply (SP-017).
+            if (message.pending) {
+              return (
+                <article
+                  key={message.id}
+                  className="message message--assistant message--thinking"
+                  data-testid="thinking"
+                >
+                  <span className="message__label">{label}</span>
+                  <p className="message__thinking" role="status">
+                    Thinking…
+                  </p>
+                </article>
+              );
+            }
+            // A failed provider slot renders as an inline error card in-thread.
+            if (message.error) {
+              return (
+                <article
+                  key={message.id}
+                  className="message message--assistant message--error"
+                  data-testid="provider-error"
+                  data-provider={message.assistantId}
+                >
+                  <div className="message__meta">
+                    <span className="message__label">{label}</span>
+                    <time className="message__time">
+                      {formatMessageTimestamp(message.createdAt, now)}
+                    </time>
+                  </div>
+                  <p className="message__error" role="alert">
+                    {message.content}
+                  </p>
+                </article>
+              );
+            }
+            return (
               <article key={message.id} className="message message--assistant">
-                {/* One-row meta: model+effort badge then the timestamp. Kept on a
-                    single line (nowrap) so a narrow panel never wraps it. */}
+                {/* One-row meta: provider/model label then the timestamp. Kept on
+                    a single line (nowrap) so a narrow panel never wraps it. */}
                 <div className="message__meta">
-                  <span className="message__label">{assistantModelLabel}</span>
+                  <span className="message__label">{label}</span>
                   <time className="message__time">
                     {formatMessageTimestamp(message.createdAt, now)}
                   </time>
@@ -502,25 +604,16 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
                   </ReactMarkdown>
                 </div>
               </article>
-            ) : (
-              // User messages carry only a timestamp; bubble alignment marks the
-              // sender.
-              <article key={message.id} className="message message--user">
-                <div className="message__meta">
-                  <time className="message__time">
-                    {formatMessageTimestamp(message.createdAt, now)}
-                  </time>
-                </div>
-                <p>{message.content}</p>
-              </article>
-            ),
-          )}
-          {isPending && (
+            );
+          })}
+          {/* Fallback thinking indicator: a route restored into the pending
+              state on session-switch-back has no optimistic provider slots, so
+              show a single generic indicator until its reply lands. */}
+          {isPending && !state.messages.some((m) => m.pending) && (
             <article
               className="message message--assistant message--thinking"
               data-testid="thinking"
             >
-              <span className="message__label">{assistantModelLabel}</span>
               <p className="message__thinking" role="status">
                 Thinking…
               </p>
@@ -544,6 +637,7 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
           />
+          <AiSwitcher route={route} disabled={isPending} onSelect={setActiveRoute} />
           <button
             type="submit"
             className="composer__send"
