@@ -11,6 +11,7 @@ This file overrides any tool-specific adapter on conflict.
 Cross-platform desktop (macOS + Windows) floating AI assistant. Routes user prompts to local CLI tools (Claude Code CLI, OpenAI Codex CLI, Gemini CLI) via the Rust core (`std::process::Command` / `tauri-plugin-shell`). Built with **Tauri (Rust) + React + TypeScript**.
 
 Primary design specification: `docs/idea.md`
+Implemented architecture reference: `docs/architecture/README.md`
 Project profile: `.claude/docs/project_specification.md`
 
 ---
@@ -30,6 +31,8 @@ Proceed directly. State the classification.
 When unsure, treat as non-trivial.
 
 When a session begins as discussion and the user signals readiness to proceed ("go ahead", "do it", "implement it", "fix it", or equivalent), this classification gate fires again. That signal is not permission to skip it.
+
+Requirements discovery, scoping, feature refinement, and re-scoping an existing Beads item are non-trivial tasks in their own right. Load the manager immediately for this work — do not wait for an implementation signal.
 
 ---
 
@@ -170,6 +173,7 @@ Each required `Agent:` artifact must originate from an actually spawned subagent
 | Source | Purpose |
 |---|---|
 | `docs/idea.md` | Primary design specification — single source of truth for features, MVP scope, architecture intent |
+| `docs/architecture/README.md` | Implemented architecture index — read first, then only the focused architecture sub-file needed for UI, IPC, Rust core, or database work |
 | `.claude/docs/project_specification.md` | Project profile — role, duties, quality expectations, domain vocabulary |
 | `README.md` | Developer guide — prerequisites, build/dev/test commands, source layout, cross-platform notes |
 | `docs/design-book.md` | Design system reference — spacing, radius, color, icon, and type tokens defined in `src/styles.css` |

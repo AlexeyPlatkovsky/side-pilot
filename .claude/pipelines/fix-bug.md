@@ -98,7 +98,7 @@ Do not advance to Step 5 until verdict is `Approved` or `Approved with minor not
 
 ### Step 5 — Documentation Maintenance (conditional)
 
-**Trigger:** the fix changes observable behavior, a public interface, a command signature, an architecture constraint, or a domain fact documented in `AGENTS.md`, `docs/idea.md`, or `.claude/docs/`.
+**Trigger:** the fix changes observable behavior, a public interface, a command signature, an architecture constraint, or a domain fact documented in `AGENTS.md`, `docs/idea.md`, `docs/architecture/`, or `.claude/docs/`.
 **Skip:** fix is internal-only with no externally visible behavioral change.
 
 Skill: `.claude/skills/documentation-maintenance/SKILL.md`

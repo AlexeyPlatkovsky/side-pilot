@@ -52,11 +52,26 @@ For every non-trivial task, route `.claude/skills/work-with-git/SKILL.md` after 
 
 The manager only routes the git branch gate. The skill decides whether to create a branch, stay on the current branch, or ask the user when branch ownership is ambiguous.
 
+## Architecture Documentation Gate
+
+For non-trivial product or engineering work that touches or depends on existing UI, IPC, Rust core, adapters, CLI process execution, links, storage, sessions, or messages, require focused architecture loading:
+1. Read `docs/architecture/README.md` first as the routing index.
+2. Read only the matching sub-file(s):
+   - `docs/architecture/ui.md` for React components, UI data flow, and state
+   - `docs/architecture/ipc.md` for Tauri commands, capabilities, permissions, and `ChatApi`
+   - `docs/architecture/rust.md` for adapters, CLI process execution, app bootstrap, and link handling
+   - `docs/architecture/db.md` for SQLite storage, schema, migrations, sessions, and messages
+3. Do not bulk-load the full `docs/architecture/` directory unless the task explicitly spans every layer.
+
+Skip this gate only for named low-value categories: narrow instruction-only changes, pure copy edits, documentation-only restructuring that does not change architecture facts, or isolated command execution.
+
+When routing implementation, discovery, triage, or review work, include the architecture-doc decision in the visible manager output: required with focused file(s), or skipped with reason.
+
 ## Routing
 
 | Task | Route |
 |---|---|
-| Discover, specify, or scope requirements for a new or partially-defined feature, epic, or task (requirements unknown, incomplete, or unverified). **Do not route here** if a complete approved spec or Beads item with populated acceptance criteria already exists — route to `implement-feature` instead. | `.claude/pipelines/discover-feature.md` |
+| Discover, specify, scope, or refine requirements for a feature, epic, or task — including re-scoping an existing Beads item whose spec is bloated, incomplete, or poorly defined. Signal phrases: "discuss what X should do", "scope", "refine", "let's talk about requirements for". **Do not route here** if: a complete approved spec (scope-verifier returned No gaps, user gave explicit approval) already exists and no re-scoping is requested — route to `implement-feature` instead; or if the user is describing a defect, crash, or unexpected behavior — route to `triage-bug` instead. | `.claude/pipelines/discover-feature.md` |
 | Implement a Tauri/React/Rust feature (floating window, hotkey, chat UI, storage, etc.) | `.claude/pipelines/implement-feature.md` |
 | Implement a non-trivial UI design variant, visual redesign, theme, or matching desktop app icon | `.claude/pipelines/implement-design-variant.md` |
 | Add, change, re-snap, or audit design tokens (spacing, radius, color, icon, type) and `docs/design-book.md` | `.claude/pipelines/design-system.md` |
@@ -71,7 +86,7 @@ The manager only routes the git branch gate. The skill decides whether to create
 | Review non-trivial UI design or icon work | `.claude/agents/design-reviewer.md` |
 | Open design decision with meaningful trade-offs | `.claude/skills/brainstorm/SKILL.md` |
 | Instruction system change (root contract, manager, pipelines, skills, agents, conventions) | Direct execution with gates from AGENTS.md §Instruction System Changes. Task-complete still required. |
-| Create or update non-instruction reference documentation (e.g. `docs/architecture.md`, `.claude/docs/`) | Direct execution — no pipeline, Beads, or git branch required. Post-change documentation maintenance skill does not apply (the change *is* documentation). Task-complete still required. |
+| Create or update non-instruction reference documentation (e.g. `docs/architecture/README.md`, `.claude/docs/`) | Direct execution — no pipeline, Beads, or git branch required. Post-change documentation maintenance skill does not apply (the change *is* documentation). Task-complete still required. |
 | Review an instruction artifact for quality and compliance | `.claude/agents/instruction-evaluator.md` |
 | Acceptance-test a new or changed instruction artifact | `.claude/agents/artifact-acceptance-tester.md` |
 
@@ -111,6 +126,7 @@ Include:
 - git branch gate requirement
 - selected pipeline or capability
 - validation requirement
+- architecture documentation context requirement (required / skipped, focused file list or reason)
 - documentation maintenance step (yes / no, and why)
 - explicit final task-complete step
 - expected output artifact label for each non-trivial routed handoff

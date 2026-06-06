@@ -27,6 +27,7 @@ Inspect the actual diff or executed steps before deciding whether docs need main
 
 Project authoritative documentation locations:
 - `docs/idea.md` — primary design specification
+- `docs/architecture/README.md` — implemented architecture index; read it first, then inspect/update only the focused architecture sub-file(s) affected by the change
 - `.claude/docs/project_specification.md` — project profile
 - `.claude/docs/README.md` — docs index
 
@@ -49,6 +50,7 @@ When documentation updates are needed:
 - edit only affected docs
 - preserve the project's existing documentation style
 - update indexes or cross-references affected by the change
+- for implemented architecture changes, update the focused sub-file(s) under `docs/architecture/` rather than duplicating architecture facts in unrelated docs; multi-layer changes may update multiple focused files
 - avoid broad rewrites unless the task explicitly requires them
 
 If the needed update is unclear, risky, or outside the approved task scope, report the gap instead of guessing.
