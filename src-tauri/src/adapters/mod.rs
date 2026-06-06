@@ -12,8 +12,10 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
+pub mod ansi;
 pub mod binary;
 pub mod cache;
+pub mod claude;
 pub mod codex;
 pub mod contract;
 pub mod environment;
@@ -21,6 +23,7 @@ pub mod error;
 pub mod process;
 pub mod registry;
 
+pub use claude::ClaudeAdapter;
 pub use codex::CodexAdapter;
 pub use contract::{AdapterRequest, AdapterResult, PermissionMode, Usage};
 pub use error::AdapterError;

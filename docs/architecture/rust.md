@@ -9,11 +9,25 @@ See `docs/architecture/README.md` for the source tree overview and file routing 
 ```
 AdapterRegistry                          # routes AssistantId → CliAdapter
   └─ CliAdapter trait                   # fn run(req, cancel) → Result<AdapterResult, AdapterError>
-       └─ CodexAdapter (MVP only)        # drives `codex exec --json`
+       ├─ CodexAdapter                   # drives `codex exec --json`
+       └─ ClaudeAdapter                  # drives `claude -p --output-format json --permission-mode plan`
             ├─ BinaryResolver trait      # absolute path lookup → SystemBinaryResolver
             ├─ CommandRunner trait       # spawn & wait → SystemCommandRunner (tokio)
             └─ EnvironmentProvider trait # shell/process env → SystemEnvironmentProvider
 ```
+
+The default registry shares one `SystemBinaryResolver`, `SystemCommandRunner`, and
+`SystemEnvironmentProvider` across adapters; the resolver and env provider cache
+per `AssistantId`, so a single instance serves every registered adapter. Gemini's
+adapter is the next SP-011 child and is not yet registered.
+
+Claude differs from Codex in two contract-driven ways: it takes its file-access
+root from the process `cwd` (no `-C`/working-root flag), and its read-only `plan`
+permission mode is passed on **every** run — including resume (`-r <id>`) — so the
+conservative posture (`docs/idea.md` §4) cannot be lost across turns. `claude
+--output-format json` emits a JSON **array** of events whose final `{"type":
+"result",…}` element carries the assistant text, `session_id`, and `usage`; the
+parser also accepts a bare result object.
 
 Each adapter constructs a `CommandSpec` (program, args, cwd, env, timeout, cancel token) and hands it to the injected `CommandRunner`. The runner uses `tokio::process::Command` with:
 - **Process group isolation**: Unix `process_group(0)` / Windows `CREATE_NEW_PROCESS_GROUP`
@@ -31,7 +45,9 @@ Binary resolution is cached per assistant. On Unix/macOS it uses `/bin/zsh -lc '
 | `src-tauri/src/adapters/contract.rs` | `AdapterRequest`, `AdapterResult`, `Usage`, `PermissionMode` |
 | `src-tauri/src/adapters/error.rs` | `AdapterError` taxonomy (6 variants) |
 | `src-tauri/src/adapters/registry.rs` | `AdapterRegistry` — routes `AssistantId` → `CliAdapter` |
-| `src-tauri/src/adapters/codex.rs` | Codex CLI adapter (MVP: the only registered adapter) |
+| `src-tauri/src/adapters/codex.rs` | Codex CLI adapter (`codex exec --json`) |
+| `src-tauri/src/adapters/claude.rs` | Claude Code CLI adapter (`claude -p --output-format json`) |
+| `src-tauri/src/adapters/ansi.rs` | Shared defensive ANSI-escape stripper (§5) used by both adapters |
 | `src-tauri/src/adapters/process.rs` | `CommandRunner` trait + tokio subprocess runner |
 | `src-tauri/src/adapters/binary.rs` | `BinaryResolver` — absolute path lookup per `AssistantId` |
 | `src-tauri/src/adapters/environment.rs` | `EnvironmentProvider` — shell/process env resolution |

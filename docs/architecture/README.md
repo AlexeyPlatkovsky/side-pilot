@@ -52,7 +52,9 @@ side-pilot/
 │   │   ├── contract.rs           # AdapterRequest, AdapterResult, Usage, PermissionMode
 │   │   ├── error.rs              # AdapterError taxonomy (6 variants)
 │   │   ├── registry.rs           # AdapterRegistry — routes AssistantId → CliAdapter
-│   │   ├── codex.rs              # Codex CLI adapter (MVP: the only registered adapter)
+│   │   ├── codex.rs              # Codex CLI adapter (codex exec --json)
+│   │   ├── claude.rs            # Claude Code CLI adapter (claude -p --output-format json)
+│   │   ├── ansi.rs              # Shared defensive ANSI-escape stripper (§5)
 │   │   ├── process.rs            # CommandRunner trait + tokio subprocess runner
 │   │   ├── binary.rs             # BinaryResolver — absolute path lookup per AssistantId
 │   │   └── environment.rs        # EnvironmentProvider — shell/process env resolution
@@ -96,8 +98,8 @@ The current codebase implements the MVP chat shell and Codex-only backend:
 - Floating always-on-top Tauri window configured as a frameless transparent bubble.
 - React bubble/panel UI with local chat sessions, history rail, rename/delete/clear, Markdown replies, pending and unread rail states.
 - SQLite-backed local session/message history.
-- Codex CLI adapter only, running blocking read-only `codex exec --json` calls.
-- Adapter routing seam already shaped for Claude and Gemini, but those adapters are not registered.
+- Codex and Claude CLI adapters registered, running blocking read-only calls (`codex exec --json`; `claude -p --output-format json --permission-mode plan`).
+- Adapter routing seam also shaped for Gemini, whose adapter (SP-014) is not yet registered.
 
 Deferred from the broader product specification:
 

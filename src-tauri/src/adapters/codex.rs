@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
+use super::ansi::strip_ansi;
 use super::binary::BinaryResolver;
 use super::contract::{AdapterRequest, AdapterResult, PermissionMode, Usage};
 use super::environment::EnvironmentProvider;
@@ -291,68 +292,6 @@ fn parse_codex_output(stdout: &str) -> Result<ParsedCodex, AdapterError> {
     }
 }
 
-/// Strip ANSI escape sequences defensively before parsing (§5).
-///
-/// Codex CLI output is plain JSONL, but a terminal wrapper may interleave
-/// escapes around the lines. We strip the escape classes that show up in
-/// practice so a wrapped line still parses as JSON:
-/// - CSI (`ESC [ … final`) — colors, cursor moves.
-/// - OSC (`ESC ] … BEL|ST`) — window-title / hyperlink sequences, terminated
-///   by BEL (`0x07`) or ST (`ESC \`). The old CSI-only stripper mis-handled
-///   these because `]` itself falls in the CSI final-byte range.
-/// - String sequences DCS/SOS/PM/APC (`ESC P|X|^|_ … ST`).
-/// - nF / two-byte escapes (`ESC (intermediates) final`, e.g. `ESC c`).
-fn strip_ansi(input: &str) -> String {
-    const ESC: char = '\u{1b}';
-    const BEL: char = '\u{07}';
-    let mut out = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c != ESC {
-            out.push(c);
-            continue;
-        }
-        match chars.next() {
-            // Dangling ESC at end of input — nothing to strip.
-            None => break,
-            // CSI: parameter/intermediate bytes then a final byte 0x40..=0x7E.
-            Some('[') => {
-                for seq in chars.by_ref() {
-                    if ('\u{40}'..='\u{7e}').contains(&seq) {
-                        break;
-                    }
-                }
-            }
-            // String sequences: OSC / DCS / SOS / PM / APC, terminated by BEL
-            // or ST (ESC \).
-            Some(']') | Some('P') | Some('X') | Some('^') | Some('_') => {
-                while let Some(seq) = chars.next() {
-                    if seq == BEL {
-                        break;
-                    }
-                    if seq == ESC {
-                        if chars.peek() == Some(&'\\') {
-                            chars.next();
-                        }
-                        break;
-                    }
-                }
-            }
-            // nF escape: intermediate bytes 0x20..=0x2F then a final byte.
-            Some(c) if ('\u{20}'..='\u{2f}').contains(&c) => {
-                for seq in chars.by_ref() {
-                    if !('\u{20}'..='\u{2f}').contains(&seq) {
-                        break;
-                    }
-                }
-            }
-            // Two-byte escape (e.g. `ESC c` reset): the escape is complete.
-            Some(_) => {}
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -479,30 +418,6 @@ mod tests {
         );
         let parsed = parse_codex_output(&noisy).unwrap();
         assert_eq!(parsed.assistant_text, "hi");
-    }
-
-    #[test]
-    fn strip_ansi_removes_csi_color_sequences() {
-        assert_eq!(strip_ansi("\u{1b}[2mhello\u{1b}[0m"), "hello");
-    }
-
-    #[test]
-    fn strip_ansi_removes_osc_sequences_terminated_by_bel() {
-        // OSC: ESC ] 0 ; <title> BEL  — terminated by BEL, not a CSI final byte.
-        assert_eq!(strip_ansi("\u{1b}]0;window title\u{07}body"), "body");
-    }
-
-    #[test]
-    fn strip_ansi_removes_osc_sequences_terminated_by_st() {
-        // OSC terminated by ST (ESC \).
-        assert_eq!(strip_ansi("\u{1b}]8;;https://x\u{1b}\\link"), "link");
-    }
-
-    #[test]
-    fn strip_ansi_removes_two_byte_and_charset_escapes() {
-        // ESC c (full reset) and ESC ( B (designate G0 charset) are non-CSI.
-        assert_eq!(strip_ansi("\u{1b}cplain"), "plain");
-        assert_eq!(strip_ansi("\u{1b}(Bplain"), "plain");
     }
 
     #[test]
