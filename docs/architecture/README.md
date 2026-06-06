@@ -106,7 +106,7 @@ The current codebase implements the MVP chat shell and Codex-only backend:
 - React bubble/panel UI with local chat sessions, history rail, rename/delete/clear, Markdown replies, pending and unread rail states.
 - SQLite-backed local session/message history.
 - Codex, Claude, and Gemini CLI adapters registered, running blocking read-only calls (`codex exec --json`; `claude -p --output-format json --permission-mode plan`; `gemini -o json --approval-mode plan --skip-trust`).
-- Multi-provider routing core (SP-016): `run_route` dispatches a prompt to one provider or concurrently to `All`, sending each provider only the context it has not seen via app-owned transcript replay (`message_provider_sends` junction table), with per-slot partial-failure isolation and persisted display-only error rows.
+- Multi-provider routing core (SP-016): `run_route` dispatches a prompt to one provider or concurrently to `All`, sending each provider only the context it has not seen via app-owned transcript replay (`message_provider_sends` junction table), with per-slot partial-failure isolation and persisted display-only error rows whose visible CLI diagnostic is reduced to a useful bounded summary.
 - AI switcher UI (SP-017): a provider-logo switcher beside Send opens a vertical picker (All + GPT/Claude/Gemini); the active route drives `run_route`, with each provider's reply shown as a separate labeled transcript slot (per-provider loading + inline error cards), the switcher disabled while any response is in flight.
 
 Deferred from the broader product specification:

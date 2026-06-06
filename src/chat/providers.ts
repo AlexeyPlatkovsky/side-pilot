@@ -76,6 +76,89 @@ export function messageLabel(assistantId: string | undefined): string {
   return providerInfo(assistantId as AssistantId).label;
 }
 
+const MAX_PROVIDER_ERROR_DETAIL_CHARS = 240;
+
+function truncateErrorDetail(detail: string): string {
+  const chars = Array.from(detail);
+  if (chars.length <= MAX_PROVIDER_ERROR_DETAIL_CHARS) return detail;
+  return `${chars.slice(0, MAX_PROVIDER_ERROR_DETAIL_CHARS - 1).join("")}…`;
+}
+
+function stripLogPrefixes(line: string): string {
+  let result = line.trim();
+  while (result.startsWith("[")) {
+    const end = result.indexOf("]");
+    if (end < 0) break;
+    result = result.slice(end + 1).trimStart();
+  }
+  return result;
+}
+
+function extractNamedError(stderr: string): string | undefined {
+  const marker = "Error: ";
+  const start = stderr.lastIndexOf(marker);
+  if (start < 0) return undefined;
+
+  let detail = stderr.slice(start + marker.length);
+  const cutAt = ["\n", "\r", " at ", " {"]
+    .map((delimiter) => detail.indexOf(delimiter))
+    .filter((index) => index >= 0);
+  if (cutAt.length > 0) detail = detail.slice(0, Math.min(...cutAt));
+  detail = detail.trim().replace(/\s+/g, " ");
+  return detail || undefined;
+}
+
+function isStructuredDumpLine(line: string): boolean {
+  if (
+    line.startsWith("{") ||
+    line.startsWith("}") ||
+    line.startsWith('"') ||
+    line.startsWith("'") ||
+    /^[\[\],]+$/.test(line)
+  ) {
+    return true;
+  }
+  const colon = line.indexOf(":");
+  if (colon < 0) return false;
+  const key = line.slice(0, colon).trim().replace(/^["']|["']$/g, "");
+  return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(key);
+}
+
+function summarizeCliStderr(stderr: string): string | undefined {
+  const trimmed = stderr.trim();
+  if (!trimmed) return undefined;
+
+  const namedError = extractNamedError(trimmed);
+  if (namedError) return truncateErrorDetail(namedError);
+
+  const usefulLine = trimmed
+    .split(/\r?\n/)
+    .map(stripLogPrefixes)
+    .filter(
+      (line) =>
+        line &&
+        !line.startsWith("at ") &&
+        !line.startsWith("Full report available at:") &&
+        !/^Error when talking to .+ API$/.test(line) &&
+        !isStructuredDumpLine(line),
+    )
+    .at(-1);
+  if (!usefulLine) return undefined;
+  return truncateErrorDetail(usefulLine.replace(/\s+/g, " "));
+}
+
+function asSentence(detail: string): string {
+  return /[.!?…]$/.test(detail) ? detail : `${detail}.`;
+}
+
+/** A concise user-visible message for a CLI process that exited unsuccessfully. */
+export function describeCliExit(name: string, stderr: string | undefined): string {
+  const detail = summarizeCliStderr(stderr ?? "");
+  return detail
+    ? `${name} exited with an error: ${asSentence(detail)}`
+    : `${name} exited with an error.`;
+}
+
 /**
  * A human-readable, provider-named message for a failed slot's inline error
  * card (SP-017). Unlike `describeError`, this names the actual provider instead
@@ -93,7 +176,7 @@ export function describeProviderError(error: AdapterError, provider: AssistantId
     case "cancelled":
       return `The ${name} request was cancelled.`;
     case "nonZeroExit":
-      return `${name} exited with an error${error.stderr ? `: ${error.stderr}` : ""}.`;
+      return describeCliExit(name, error.stderr);
     case "outputParseFailure":
       return `${name} returned output that could not be read.`;
     default:

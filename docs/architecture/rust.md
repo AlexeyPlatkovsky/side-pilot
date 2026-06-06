@@ -52,6 +52,12 @@ Each adapter constructs a `CommandSpec` (program, args, cwd, env, timeout, cance
 - **Process group termination**: SIGTERM+SIGKILL (Unix) / `taskkill /T /F` (Windows)
 - **`kill_on_drop(true)`** as fallback
 
+Routing persists provider failures as display-only error rows. For a non-zero
+CLI exit, the visible message selects a useful terminal error, removes stack
+trace/report/structured-dump noise, normalizes whitespace, and caps the detail
+at 240 characters. The typed `AdapterError` stored in `raw_json` retains the
+original diagnostic for internal troubleshooting.
+
 Binary resolution is cached per assistant. On Unix/macOS it uses `/bin/zsh -lc 'command -v <tool>'`; on Windows it uses `where`. Environment resolution is also cached per assistant: Unix/macOS reads a login-shell `env`, while Windows currently uses the process environment inherited by the app.
 
 ### Adapter Source Files

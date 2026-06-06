@@ -77,7 +77,11 @@ test("a background provider error is visible when its unread chat is reopened", 
   await page.getByRole("button", { name: "Fix login bug", exact: true }).click();
   await page.getByRole("button", { name: /Refactor auth module, unread answer/ }).click();
 
-  await expect(page.getByRole("alert")).toContainText("Gemini is not authenticated");
+  const error = page.getByRole("alert");
+  await expect(error).toHaveText(
+    "Gemini exited with an error: Requested entity was not found.",
+  );
+  await expect(error).not.toContainText("Full report available");
   await page.screenshot({ path: "e2e/.artifacts/provider-error-restored.png" });
 });
 

@@ -13,6 +13,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type { Sender } from "../state/chat";
+import { describeCliExit } from "./providers";
 
 // IPC types generated from the Rust contract by ts-rs (SP-065). These files in
 // `./generated/` are the single source of truth for the wire shape: regenerate
@@ -195,7 +196,7 @@ export function describeError(err: unknown): string {
       case "cancelled":
         return "The request was cancelled.";
       case "nonZeroExit":
-        return `GPT exited with an error${tagged.stderr ? `: ${tagged.stderr}` : ""}.`;
+        return describeCliExit("GPT", tagged.stderr);
       case "outputParseFailure":
         return "GPT returned output that could not be read.";
       case "notFound":

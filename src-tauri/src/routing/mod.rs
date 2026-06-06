@@ -127,6 +127,99 @@ fn format_turn(message: &Message) -> String {
     }
 }
 
+const MAX_PROVIDER_ERROR_DETAIL_CHARS: usize = 240;
+
+fn truncate_error_detail(detail: &str) -> String {
+    if detail.chars().count() <= MAX_PROVIDER_ERROR_DETAIL_CHARS {
+        return detail.to_string();
+    }
+    detail
+        .chars()
+        .take(MAX_PROVIDER_ERROR_DETAIL_CHARS - 1)
+        .chain(std::iter::once('…'))
+        .collect()
+}
+
+fn strip_log_prefixes(mut line: &str) -> &str {
+    line = line.trim();
+    while let Some(rest) = line.strip_prefix('[') {
+        let Some(end) = rest.find(']') else {
+            break;
+        };
+        line = rest[end + 1..].trim_start();
+    }
+    line
+}
+
+fn extract_named_error(stderr: &str) -> Option<String> {
+    let marker = "Error: ";
+    let start = stderr.rfind(marker)? + marker.len();
+    let mut detail = &stderr[start..];
+    for delimiter in ["\n", "\r", " at ", " {"] {
+        if let Some(index) = detail.find(delimiter) {
+            detail = &detail[..index];
+        }
+    }
+    let detail = detail.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!detail.is_empty()).then(|| detail)
+}
+
+fn is_structured_dump_line(line: &str) -> bool {
+    let line = line.trim();
+    if line.starts_with(['{', '}', '"', '\''])
+        || line
+            .chars()
+            .all(|character| matches!(character, '[' | ']' | ','))
+    {
+        return true;
+    }
+    let Some((key, _)) = line.split_once(':') else {
+        return false;
+    };
+    let key = key.trim().trim_matches(['"', '\'']);
+    !key.is_empty()
+        && key
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_alphabetic() || character == '_')
+        && key
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
+}
+
+fn summarize_cli_stderr(stderr: &str) -> Option<String> {
+    let trimmed = stderr.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Some(detail) = extract_named_error(trimmed) {
+        return Some(truncate_error_detail(&detail));
+    }
+
+    trimmed
+        .lines()
+        .map(strip_log_prefixes)
+        .filter(|line| {
+            !line.is_empty()
+                && !line.starts_with("at ")
+                && !line.starts_with("Full report available at:")
+                && !(line.starts_with("Error when talking to ") && line.ends_with(" API"))
+                && !is_structured_dump_line(line)
+        })
+        .next_back()
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .map(|detail| truncate_error_detail(&detail))
+}
+
+fn as_sentence(detail: &str) -> String {
+    if detail.ends_with(['.', '!', '?', '…']) {
+        detail.to_string()
+    } else {
+        format!("{detail}.")
+    }
+}
+
 fn provider_error_message(provider: AssistantId, error: &AdapterError) -> String {
     let name = match provider {
         AssistantId::Codex => "GPT",
@@ -142,13 +235,10 @@ fn provider_error_message(provider: AssistantId, error: &AdapterError) -> String
         }
         AdapterError::TimedOut => format!("{name} timed out before responding."),
         AdapterError::Cancelled => format!("The {name} request was cancelled."),
-        AdapterError::NonZeroExit { stderr, .. } => {
-            if stderr.is_empty() {
-                format!("{name} exited with an error.")
-            } else {
-                format!("{name} exited with an error: {stderr}.")
-            }
-        }
+        AdapterError::NonZeroExit { stderr, .. } => summarize_cli_stderr(stderr).map_or_else(
+            || format!("{name} exited with an error."),
+            |detail| format!("{name} exited with an error: {}", as_sentence(&detail)),
+        ),
         AdapterError::OutputParseFailure { .. } => {
             format!("{name} returned output that could not be read.")
         }
@@ -347,6 +437,127 @@ mod tests {
 
     fn no_cancel(_: AssistantId) -> CancellationToken {
         CancellationToken::new()
+    }
+
+    #[test]
+    fn provider_error_message_reduces_noisy_cli_stderr_to_useful_summary() {
+        let stderr = [
+            "Ripgrep is not available. Falling back to GrepTool.",
+            "[ERROR] [IDEClient] Directory mismatch.",
+            "Error when talking to Gemini API",
+            "Full report available at: /var/folders/example/gemini-client-error.json",
+            "ModelNotFoundError: Requested entity was not found.",
+            "    at classifyGoogleError (file:///gemini/chunk.js:304138:12)",
+            "    at async GeminiChat.streamWithRetries (file:///gemini/chunk.js:328079:29)",
+            r#"{ "session_id": "secret", "error": { "type": "Error", "message": "Requested entity was not found." } }"#,
+        ]
+        .join("\n");
+
+        assert_eq!(
+            provider_error_message(
+                AssistantId::Gemini,
+                &AdapterError::NonZeroExit {
+                    code: Some(404),
+                    stderr,
+                },
+            ),
+            "Gemini exited with an error: Requested entity was not found."
+        );
+    }
+
+    #[test]
+    fn provider_error_message_caps_over_length_cli_stderr() {
+        let message = provider_error_message(
+            AssistantId::Claude,
+            &AdapterError::NonZeroExit {
+                code: Some(1),
+                stderr: "x".repeat(2_000),
+            },
+        );
+
+        assert!(message.chars().count() <= 280);
+        assert!(message.contains('…'));
+    }
+
+    #[test]
+    fn provider_error_message_uses_generic_text_for_whitespace_only_stderr() {
+        assert_eq!(
+            provider_error_message(
+                AssistantId::Codex,
+                &AdapterError::NonZeroExit {
+                    code: Some(1),
+                    stderr: " \n\t ".to_string(),
+                },
+            ),
+            "GPT exited with an error."
+        );
+    }
+
+    #[test]
+    fn provider_error_message_extracts_named_error_from_single_line_dump() {
+        assert_eq!(
+            provider_error_message(
+                AssistantId::Gemini,
+                &AdapterError::NonZeroExit {
+                    code: Some(404),
+                    stderr: "warning ModelNotFoundError: Requested entity was not found. at classifyGoogleError (chunk.js:1) { code: 404 }".to_string(),
+                },
+            ),
+            "Gemini exited with an error: Requested entity was not found."
+        );
+    }
+
+    #[test]
+    fn error_detail_truncation_keeps_the_limit_and_truncates_the_next_character() {
+        assert_eq!(truncate_error_detail(&"x".repeat(240)), "x".repeat(240));
+        assert_eq!(
+            truncate_error_detail(&"x".repeat(241)),
+            format!("{}…", "x".repeat(239))
+        );
+    }
+
+    #[test]
+    fn provider_error_message_uses_generic_text_for_diagnostic_noise_only() {
+        for stderr in [
+            "Full report available at: /tmp/error.json",
+            "    at classifyError (chunk.js:1)\n    at async run (chunk.js:2)",
+            r#"{"session_id":"secret","code":404}"#,
+            "{\n  \"session_id\": \"secret\",\n  \"code\": 404\n}",
+        ] {
+            assert_eq!(
+                provider_error_message(
+                    AssistantId::Codex,
+                    &AdapterError::NonZeroExit {
+                        code: Some(1),
+                        stderr: stderr.to_string(),
+                    },
+                ),
+                "GPT exited with an error."
+            );
+        }
+    }
+
+    #[test]
+    fn provider_error_message_keeps_useful_line_before_pretty_structured_dump() {
+        let stderr = [
+            "Directory mismatch. Run the CLI from the open workspace.",
+            "{",
+            r#"  "session_id": "secret","#,
+            "  code: 404",
+            "}",
+        ]
+        .join("\n");
+
+        assert_eq!(
+            provider_error_message(
+                AssistantId::Gemini,
+                &AdapterError::NonZeroExit {
+                    code: Some(404),
+                    stderr,
+                },
+            ),
+            "Gemini exited with an error: Directory mismatch. Run the CLI from the open workspace."
+        );
     }
 
     fn sends_count(store: &Store, message_id: &str, provider: &str) -> i64 {

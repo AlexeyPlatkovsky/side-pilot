@@ -143,8 +143,9 @@ const api: ChatApi = {
               seq: list.length + 1,
               sender: "assistant",
               assistantId: provider,
-              content: `${provider === "gemini" ? "Gemini" : provider} is not authenticated. Sign in to its CLI and try again.`,
-              rawJson: '{"kind":"notAuthenticated"}',
+              content: `${provider === "gemini" ? "Gemini" : provider} exited with an error: Requested entity was not found.`,
+              rawJson:
+                '{"kind":"nonZeroExit","code":404,"stderr":"Full report available at: /tmp/gemini-error.json\\nModelNotFoundError: Requested entity was not found.\\n at classifyGoogleError (chunk.js:1)"}',
               isError: true,
               createdAt: Date.now(),
             };
@@ -152,7 +153,12 @@ const api: ChatApi = {
             return {
               provider,
               message: row,
-              error: { kind: "notAuthenticated" as const },
+              error: {
+                kind: "nonZeroExit" as const,
+                code: 404,
+                stderr:
+                  "Full report available at: /tmp/gemini-error.json\nModelNotFoundError: Requested entity was not found.\n at classifyGoogleError (chunk.js:1)",
+              },
             };
           }
           const row: PersistedMessage = {
