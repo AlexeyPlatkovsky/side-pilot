@@ -11,7 +11,8 @@ export type RouteRequest = { sessionId: string, route: Route, prompt: string,
  */
 activeProviders: Array<AssistantId>, 
 /**
- * Optional model override applied to each fresh adapter request.
+ * Optional Codex model override. Claude and Gemini use their CLI defaults
+ * because this shared route currently has no per-provider model settings.
  */
 model?: string, 
 /**

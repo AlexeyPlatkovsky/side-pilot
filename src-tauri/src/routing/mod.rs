@@ -45,7 +45,8 @@ pub struct RouteRequest {
     /// Providers considered active for an `All` route, in display order.
     #[serde(default)]
     pub active_providers: Vec<AssistantId>,
-    /// Optional model override applied to each fresh adapter request.
+    /// Optional Codex model override. Claude and Gemini use their CLI defaults
+    /// because this shared route currently has no per-provider model settings.
     #[serde(default)]
     #[ts(optional)]
     pub model: Option<String>,
@@ -293,7 +294,11 @@ pub async fn execute_route(
                 assistant: provider,
                 prompt,
                 working_directory: None,
-                model: request.model.clone(),
+                model: if provider == AssistantId::Codex {
+                    request.model.clone()
+                } else {
+                    None
+                },
                 reasoning_effort: None,
                 permission_mode: PermissionMode::ReadOnly,
                 timeout_ms: request.timeout_ms,
@@ -397,6 +402,10 @@ mod tests {
         result: Result<AdapterResult, AdapterError>,
     }
 
+    struct ModelEchoAdapter {
+        id: AssistantId,
+    }
+
     #[async_trait]
     impl CliAdapter for StubAdapter {
         fn id(&self) -> AssistantId {
@@ -412,6 +421,26 @@ mod tests {
             self.result.clone().map(|mut r| {
                 r.raw_json = req.prompt;
                 r
+            })
+        }
+    }
+
+    #[async_trait]
+    impl CliAdapter for ModelEchoAdapter {
+        fn id(&self) -> AssistantId {
+            self.id
+        }
+
+        async fn run(
+            &self,
+            req: AdapterRequest,
+            _cancel: CancellationToken,
+        ) -> Result<AdapterResult, AdapterError> {
+            Ok(AdapterResult {
+                assistant_text: "ok".to_string(),
+                raw_json: req.model.unwrap_or_else(|| "default".to_string()),
+                native_session_id: None,
+                usage: None,
             })
         }
     }
@@ -437,6 +466,53 @@ mod tests {
 
     fn no_cancel(_: AssistantId) -> CancellationToken {
         CancellationToken::new()
+    }
+
+    #[tokio::test]
+    async fn route_applies_the_codex_model_only_to_codex() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let mut registry = AdapterRegistry::new();
+        for id in [AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini] {
+            registry.register(Arc::new(ModelEchoAdapter { id }));
+        }
+
+        let result = execute_route(
+            &store,
+            &registry,
+            RouteRequest {
+                session_id: session.id,
+                route: Route::All,
+                prompt: "hello".to_string(),
+                active_providers: vec![
+                    AssistantId::Codex,
+                    AssistantId::Claude,
+                    AssistantId::Gemini,
+                ],
+                model: Some("gpt-5.5".to_string()),
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let raw_json = |provider| {
+            result
+                .outcomes
+                .iter()
+                .find(|outcome| outcome.provider == provider)
+                .unwrap()
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref()
+                .unwrap()
+        };
+        assert_eq!(raw_json(AssistantId::Codex), "gpt-5.5");
+        assert_eq!(raw_json(AssistantId::Claude), "default");
+        assert_eq!(raw_json(AssistantId::Gemini), "default");
     }
 
     #[test]

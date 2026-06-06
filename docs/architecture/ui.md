@@ -48,7 +48,8 @@ User types prompt → onSubmit() in ChatPanel (with the active route)
   → api.runRoute({ sessionId, route, prompt, activeProviders, model })
         # Tauri IPC → run_route: persists prompt, computes each provider's
         # unsent diff (transcript replay, §6), dispatches single or All
-        # (concurrently), persists each reply, records message_provider_sends
+        # (concurrently), applies the configured model only to Codex, persists
+        # each reply, records message_provider_sends
   → map persisted outcomes → reply messages (success) or inline error cards (failure)
   → dispatch({ type: "routeSettled" })  # swap pending slots for results, status → idle
 ```

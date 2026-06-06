@@ -46,6 +46,11 @@ Gemini has two verified divergences from the `docs/idea.md` §1 contract table
 `stats.models.<name>.tokens`); token usage is summed across models onto the
 shared `Usage` shape (`candidates` → output tokens, `thoughts` → reasoning).
 
+The shared `run_route` request currently carries the configured Codex model
+only. Routing applies that override to Codex and leaves the model unset for
+Claude and Gemini, allowing those CLIs to select their own valid defaults.
+Per-provider model selection is deferred with the model-selector UI.
+
 Each adapter constructs a `CommandSpec` (program, args, cwd, env, timeout, cancel token) and hands it to the injected `CommandRunner`. The runner uses `tokio::process::Command` with:
 - **Process group isolation**: Unix `process_group(0)` / Windows `CREATE_NEW_PROCESS_GROUP`
 - **`tokio::select!` biased**: cancel → Timeout → Output

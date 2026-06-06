@@ -55,8 +55,9 @@ export type NewMessage = RustNewMessage;
 
 /**
  * The request the UI sends to `run_route` (SP-016/SP-017). The UI supplies the
- * route, prompt, and active providers; `timeoutMs` falls back to the backend's
- * serde default when omitted.
+ * route, prompt, active providers, and the configured Codex model; Claude and
+ * Gemini use their CLI defaults. `timeoutMs` falls back to the backend's serde
+ * default when omitted.
  */
 export type RouteRequest = Pick<
   RustRouteRequest,
