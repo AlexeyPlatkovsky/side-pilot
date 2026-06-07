@@ -11,6 +11,7 @@ App
  └─ Bubble (Bubble.tsx)
      ├─ uses bubbleReducer       # collapsed / expanded / settings
      ├─ retains per-session routes across ChatPanel unmounts
+     ├─ retains useChat controller across collapse/settings
      ├─ injects ChatApi           # tauriChatApi | inertChatApi
      ├─ Escape handler            # steps back one level
      ├─ click-vs-drag discriminator  # wasDragged() threshold
@@ -31,11 +32,12 @@ App
 | State | Owner | Type |
 |---|---|---|
 | Bubble visibility | `useReducer(bubbleReducer)` in `Bubble` | `"collapsed" \| "expanded" \| "settings"` |
-| Transcript messages | `useReducer(chatReducer)` in `useChat` | `ChatMessage[]` |
+| Transcript messages | `useReducer(chatReducer)` in shell-retained `useChat` | `ChatMessage[]` |
 | Chat status | `useReducer(chatReducer)` in `useChat` | `{ kind: "idle" \| "pending" \| "error"; message?: string }` |
 | Session list | `useState` in `useChat` | `PersistedSession[]` |
 | Active session id | `useState` in `useChat` | `string \| null` |
 | Pending set | `useState` in `useChat` | `Set<sessionId>` |
+| Pending turns | `useRef` in `useChat` | Session-id keyed optimistic prompt plus labeled provider slots; restores the complete in-flight turn after chat switches |
 | Unread set | `useState` in `useChat` | `Set<sessionId>` |
 | Active routes | `useState` in `Bubble`, passed into `ChatPanel` | Session-id keyed `ActiveRoute` values (`{single, provider}` \| `{all}`); retained across collapse/reopen, each chat defaults to GPT |
 | Picker open | `useState` in `AiSwitcher` | `boolean` (rendered only while not in flight) |
@@ -56,6 +58,18 @@ User types prompt → onSubmit() in ChatPanel (with the active route)
 ```
 
 The submit path routes through `run_route` (SP-016), so conversation context is carried by app-owned transcript replay rather than native session resume; the client no longer calls `appendMessage`/`updateCodexSessionId` itself. Per-provider failures are persisted as display-only message rows and arrive inside the outcomes as inline error cards (not a banner), so switching away and reopening the chat restores them from history. Non-zero CLI exits show a useful diagnostic summary capped at 240 characters instead of raw stack traces or report dumps. The error banner remains only for a whole-call (storage) failure on the catch path. Late outcomes (success or failure) in a background chat mark it unread until the user opens it.
+
+`Bubble` owns the live `useChat` controller so collapse and the settings view can
+temporarily unmount `ChatPanel` without losing in-flight requests, pending/unread
+status, or the active transcript. While a route is pending, `useChat` also keeps
+the optimistic prompt and labeled provider slots per session; switching back
+reconstructs the complete turn. A snapshot of known persisted message ids
+distinguishes a newly persisted prompt from an identical earlier prompt, so
+neither is lost or duplicated.
+Pending-turn metadata is removed on success, whole-call failure, delete, and
+clear. Session history reads use latest-selection-wins ordering so a slow earlier
+read cannot replace the chat the user selected afterward, and deleting its
+selection target invalidates the pending activation.
 
 ### Source Files
 

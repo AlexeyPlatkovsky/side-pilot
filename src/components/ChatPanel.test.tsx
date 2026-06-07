@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import {
+  act,
   createEvent,
   fireEvent,
   render,
@@ -241,6 +242,28 @@ describe("ChatPanel", () => {
         activeProviders: ["codex", "claude", "gemini"],
       }),
     );
+  });
+
+  it("clears every All-provider thinking slot when the whole route call fails", async () => {
+    const user = userEvent.setup();
+    let rejectRoute!: (error: Error) => void;
+    const routePromise = new Promise<RouteRunResult>((_, reject) => {
+      rejectRoute = reject;
+    });
+    const api = makeApi({ runRoute: vi.fn(() => routePromise) });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+    await send(user, "fail everyone");
+    expect(screen.getAllByTestId("thinking")).toHaveLength(3);
+
+    rejectRoute(new Error("storage unavailable"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("storage unavailable");
+    expect(screen.queryAllByTestId("thinking")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: /choose ai provider/i })).toBeEnabled();
   });
 
   it("does not render raw HTML embedded in an assistant reply (XSS-safe)", async () => {
@@ -547,6 +570,317 @@ describe("ChatPanel", () => {
 
     await user.click(screen.getByRole("button", { name: /^One/ }));
     expect(screen.getByTestId("thinking")).toBeInTheDocument();
+  });
+
+  it("restores every labeled All-provider thinking slot when returning to a pending chat", async () => {
+    const user = userEvent.setup();
+    const routePromise = new Promise<RouteRunResult>(() => {});
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({ sessions, runRoute: vi.fn(() => routePromise) });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+    await send(user, "ask everyone");
+    expect(screen.getAllByTestId("thinking")).toHaveLength(3);
+
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    await user.click(screen.getByRole("button", { name: /^One/ }));
+
+    const thinking = screen.getAllByTestId("thinking");
+    expect(thinking).toHaveLength(3);
+    expect(thinking.map((node) => node.dataset.provider)).toEqual([
+      "codex",
+      "claude",
+      "gemini",
+    ]);
+    expect(screen.getByText("ask everyone")).toBeInTheDocument();
+  });
+
+  it("keeps the optimistic prompt when switching away before title generation finishes", async () => {
+    const user = userEvent.setup();
+    const routePromise = new Promise<RouteRunResult>(() => {});
+    const renamePromise = new Promise<PersistedSession>(() => {});
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: null, updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({ sessions, runRoute: vi.fn(() => routePromise) });
+    api.renameSession = vi.fn(() => renamePromise);
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await send(user, "prompt before persistence");
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    await user.click(screen.getByRole("button", { name: /Untitled chat, reply in progress/ }));
+
+    expect(screen.getByText("prompt before persistence")).toBeInTheDocument();
+    expect(screen.getByTestId("thinking")).toBeInTheDocument();
+  });
+
+  it("does not duplicate a pending prompt that history has already persisted", async () => {
+    const user = userEvent.setup();
+    const routePromise = new Promise<RouteRunResult>(() => {});
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    let s1Reads = 0;
+    const api = makeApi({
+      sessions,
+      runRoute: vi.fn(() => routePromise),
+      readHistory: vi.fn((id: string) => {
+        if (id !== "s1" || s1Reads++ === 0) return Promise.resolve([]);
+        return Promise.resolve([
+          persisted({ id: "persisted-prompt", sender: "user", content: "same prompt" }),
+        ]);
+      }),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await send(user, "same prompt");
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    await user.click(screen.getByRole("button", { name: /^One/ }));
+
+    expect(screen.getAllByText("same prompt")).toHaveLength(1);
+    expect(screen.getByTestId("thinking")).toBeInTheDocument();
+  });
+
+  it("keeps a repeated pending prompt when history only contains the identical prior prompt", async () => {
+    const user = userEvent.setup();
+    const routePromise = new Promise<RouteRunResult>(() => {});
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const prior = persisted({ id: "prior-prompt", sender: "user", content: "same prompt" });
+    const api = makeApi({
+      sessions,
+      history: [prior],
+      runRoute: vi.fn(() => routePromise),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await send(user, "same prompt");
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    await user.click(screen.getByRole("button", { name: /^One/ }));
+
+    expect(screen.getAllByText("same prompt")).toHaveLength(2);
+    expect(screen.getByTestId("thinking")).toBeInTheDocument();
+  });
+
+  it("keeps the latest selected chat when history reads settle out of order", async () => {
+    const user = userEvent.setup();
+    let resolveTwo!: (messages: PersistedMessage[]) => void;
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 3 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 2 },
+      { ...SESSION, id: "s3", title: "Three", updatedAt: 1 },
+    ];
+    const api = makeApi({
+      sessions,
+      readHistory: vi.fn((id: string) => {
+        if (id === "s2") {
+          return new Promise<PersistedMessage[]>((resolve) => {
+            resolveTwo = resolve;
+          });
+        }
+        if (id === "s3") {
+          return Promise.resolve([
+            persisted({ id: "three-message", sessionId: "s3", sender: "user", content: "three" }),
+          ]);
+        }
+        return Promise.resolve([]);
+      }),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    await user.click(screen.getByRole("button", { name: /^Three/ }));
+    expect(await screen.findByText("three")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveTwo([
+        persisted({ id: "two-message", sessionId: "s2", sender: "user", content: "two" }),
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("three")).toBeInTheDocument();
+    expect(screen.queryByText("two")).toBeNull();
+  });
+
+  it("cancels an in-flight selection when the user reselects the active chat", async () => {
+    const user = userEvent.setup();
+    let resolveTwo!: (messages: PersistedMessage[]) => void;
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({
+      sessions,
+      readHistory: vi.fn((id: string) => {
+        if (id === "s2") {
+          return new Promise<PersistedMessage[]>((resolve) => {
+            resolveTwo = resolve;
+          });
+        }
+        return Promise.resolve([
+          persisted({ id: "one-message", sessionId: "s1", sender: "user", content: "one" }),
+        ]);
+      }),
+    });
+    render(<ChatPanel api={api} />);
+    expect(await screen.findByText("one")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    await user.click(screen.getByRole("button", { name: /^One/ }));
+    await act(async () => {
+      resolveTwo([
+        persisted({ id: "two-message", sessionId: "s2", sender: "user", content: "two" }),
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("one")).toBeInTheDocument();
+    expect(screen.queryByText("two")).toBeNull();
+  });
+
+  it("does not activate a deleted chat when its pending history read settles", async () => {
+    const user = userEvent.setup();
+    let resolveTwo!: (messages: PersistedMessage[]) => void;
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({
+      sessions,
+      readHistory: vi.fn((id: string) => {
+        if (id === "s2") {
+          return new Promise<PersistedMessage[]>((resolve) => {
+            resolveTwo = resolve;
+          });
+        }
+        return Promise.resolve([
+          persisted({ id: "one-message", sessionId: "s1", sender: "user", content: "one" }),
+        ]);
+      }),
+    });
+    api.deleteSession = vi.fn((id: string) => {
+      const index = sessions.findIndex((session) => session.id === id);
+      if (index >= 0) sessions.splice(index, 1);
+      return Promise.resolve();
+    });
+    render(<ChatPanel api={api} />);
+    expect(await screen.findByText("one")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    await user.click(screen.getByRole("button", { name: /Options for Two/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Delete chat/ })).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    await waitFor(() => expect(api.deleteSession).toHaveBeenCalledWith("s2"));
+
+    await act(async () => {
+      resolveTwo([
+        persisted({ id: "two-message", sessionId: "s2", sender: "user", content: "two" }),
+      ]);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("one")).toBeInTheDocument();
+    expect(screen.queryByText("two")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Two" })).toBeNull();
+  });
+
+  it("keeps independent labeled thinking slots for multiple pending chats", async () => {
+    const user = userEvent.setup();
+    const routePromise = new Promise<RouteRunResult>(() => {});
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({ sessions, runRoute: vi.fn(() => routePromise) });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+    await send(user, "ask everyone");
+
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    await send(user, "ask gpt");
+    expect(screen.getAllByTestId("thinking")).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: /^One/ }));
+    expect(screen.getAllByTestId("thinking")).toHaveLength(3);
+
+    await user.click(screen.getByRole("button", { name: /^Two/ }));
+    expect(screen.getAllByTestId("thinking")).toHaveLength(1);
+  });
+
+  it("does not revive a pending chat after it is deleted and its late result settles", async () => {
+    const user = userEvent.setup();
+    let resolveRoute!: (r: RouteRunResult) => void;
+    const routePromise = new Promise<RouteRunResult>((resolve) => {
+      resolveRoute = resolve;
+    });
+    const sessions: PersistedSession[] = [
+      { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
+      { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
+    ];
+    const api = makeApi({ sessions, runRoute: vi.fn(() => routePromise) });
+    api.deleteSession = vi.fn((id: string) => {
+      const index = sessions.findIndex((session) => session.id === id);
+      if (index >= 0) sessions.splice(index, 1);
+      return Promise.resolve();
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+    await send(user, "ask everyone");
+    await user.click(screen.getByRole("button", { name: "Show chat history" }));
+    await user.click(screen.getByRole("button", { name: /Options for One/ }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await user.click(
+      within(screen.getByRole("dialog", { name: /Delete chat/ })).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    await waitFor(() => expect(api.deleteSession).toHaveBeenCalledWith("s1"));
+
+    resolveRoute(
+      routeResult("ask everyone", [
+        { provider: "codex", content: "late gpt" },
+        { provider: "claude", content: "late claude" },
+        { provider: "gemini", content: "late gemini" },
+      ]),
+    );
+
+    await waitFor(() => expect(api.listSessions).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/late (gpt|claude|gemini)/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "One" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /unread answer|reply in progress/ })).toBeNull();
   });
 
   it("marks a background reply unread in the rail and clears it when reopened", async () => {

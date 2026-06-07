@@ -99,7 +99,14 @@ const api: ChatApi = {
     messages[created.id] = [];
     return Promise.resolve({ ...created });
   },
-  readHistory: (id) => Promise.resolve((messages[id] ?? []).map((m) => ({ ...m }))),
+  readHistory: (id) => {
+    const history = (messages[id] ?? []).map((m) => ({ ...m }));
+    const delay =
+      fixtureParams.get("slowHistory") === id
+        ? Number(fixtureParams.get("historyDelay") ?? 1000)
+        : 0;
+    return new Promise((resolve) => setTimeout(() => resolve(history), delay));
+  },
   appendMessage: (m: NewMessage) => {
     const list = (messages[m.sessionId] ??= []);
     const row: PersistedMessage = {
@@ -202,7 +209,7 @@ const api: ChatApi = {
           return { provider, message: row };
         });
         resolve({ userMessage, outcomes });
-      }, 600),
+      }, Number(fixtureParams.get("routeDelay") ?? 600)),
     ),
   renameSession: (id, title) => {
     const s = sessions.find((x) => x.id === id)!;

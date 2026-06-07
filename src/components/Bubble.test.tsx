@@ -2,6 +2,24 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Bubble } from "./Bubble";
+import { inertChatApi, type ChatApi, type RouteRunResult } from "../chat/api";
+
+function pendingChatApi(): ChatApi {
+  const session = {
+    id: "s1",
+    title: "Pending chat",
+    createdAt: 1,
+    updatedAt: 1,
+    codexSessionId: null,
+  };
+  return {
+    ...inertChatApi,
+    listSessions: vi.fn(() => Promise.resolve([session])),
+    createSession: vi.fn(() => Promise.resolve(session)),
+    readHistory: vi.fn(() => Promise.resolve([])),
+    runRoute: vi.fn(() => new Promise<RouteRunResult>(() => {})),
+  };
+}
 
 describe("Bubble", () => {
   it("renders the compact bubble by default, with no panel", () => {
@@ -76,6 +94,46 @@ describe("Bubble", () => {
         name: /choose ai provider \(current: Gemini\)/i,
       }),
     ).toBeInTheDocument();
+  });
+
+  it("preserves every labeled All-provider thinking slot after collapsing and reopening", async () => {
+    const user = userEvent.setup();
+    render(<Bubble resizeWindow={vi.fn()} chatApi={pendingChatApi()} />);
+
+    await user.click(screen.getByRole("button", { name: /open side-pilot/i }));
+    await screen.findByLabelText("Ask side-pilot");
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+    await user.type(screen.getByLabelText("Ask side-pilot"), "ask everyone");
+    await user.click(screen.getByRole("button", { name: /^send/i }));
+    expect(screen.getAllByTestId("thinking")).toHaveLength(3);
+
+    await user.click(screen.getByRole("button", { name: /collapse/i }));
+    await user.click(screen.getByRole("button", { name: /open side-pilot/i }));
+
+    const thinking = await screen.findAllByTestId("thinking");
+    expect(thinking).toHaveLength(3);
+    expect(thinking.map((node) => node.dataset.provider)).toEqual([
+      "codex",
+      "claude",
+      "gemini",
+    ]);
+  });
+
+  it("preserves every labeled All-provider thinking slot through the settings view", async () => {
+    const user = userEvent.setup();
+    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} chatApi={pendingChatApi()} />);
+    await screen.findByLabelText("Ask side-pilot");
+
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+    await user.type(screen.getByLabelText("Ask side-pilot"), "ask everyone");
+    await user.click(screen.getByRole("button", { name: /^send/i }));
+
+    await user.click(screen.getByRole("button", { name: /open settings/i }));
+    await user.click(screen.getByRole("button", { name: /back to panel/i }));
+
+    expect(await screen.findAllByTestId("thinking")).toHaveLength(3);
   });
 
   it("renders the warm companion panel identity", async () => {

@@ -58,6 +58,26 @@ interface ActiveSession {
   title: string | null;
 }
 
+interface PendingTurn {
+  userMessage: ChatMessage;
+  slots: ChatMessage[];
+  knownMessageIds: Set<string>;
+}
+
+function mergePendingTurn(history: ChatMessage[], pending?: PendingTurn): ChatMessage[] {
+  if (!pending) return history;
+  const last = history.at(-1);
+  const userAlreadyPersisted =
+    last?.sender === "user" &&
+    last.content === pending.userMessage.content &&
+    !pending.knownMessageIds.has(last.id);
+  return [
+    ...history,
+    ...(userAlreadyPersisted ? [] : [pending.userMessage]),
+    ...pending.slots,
+  ];
+}
+
 /**
  * Chat logic hook (SP-006, SP-048–051, SP-017). Owns the transcript reducer plus
  * the session list and the active session, and wires every chat operation through
@@ -71,7 +91,7 @@ interface ActiveSession {
  * store is the display source of truth, so the transcript and list are
  * (re)loaded from it.
  */
-export function useChat(api: ChatApi) {
+export function useChat(api: ChatApi, enabled = true) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   // Session list (reactive + ref read) and per-session rail status (pending /
@@ -91,9 +111,19 @@ export function useChat(api: ChatApi) {
   // Ref mirrors the active session so async callbacks read the current one
   // without a stale closure.
   const activeRef = useRef<ActiveSession | null>(null);
+  // Pending turns are session-scoped UI state. Keep their optimistic prompt and
+  // provider slots outside the active transcript so switching chats can
+  // reconstruct the complete in-flight turn.
+  const pendingTurnsRef = useRef<Map<string, PendingTurn>>(new Map());
+  const knownMessageIdsRef = useRef<Map<string, Set<string>>>(new Map());
+  // A session history read may finish after a later selection. Only the latest
+  // selection intent may activate a chat.
+  const selectionRequestRef = useRef(0);
+  const selectionTargetRef = useRef<string | null>(null);
 
   const setActive = useCallback(
     (session: PersistedSession, messages: ChatMessage[]) => {
+      knownMessageIdsRef.current.set(session.id, new Set(messages.map((message) => message.id)));
       activeRef.current = {
         id: session.id,
         codexSessionId: session.codexSessionId,
@@ -104,7 +134,7 @@ export function useChat(api: ChatApi) {
       // switching back to it shows "Thinking…" instead of an idle transcript.
       dispatch({
         type: "loaded",
-        messages,
+        messages: mergePendingTurn(messages, pendingTurnsRef.current.get(session.id)),
         pending: isPending(session.id),
       });
     },
@@ -112,6 +142,7 @@ export function useChat(api: ChatApi) {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     (async () => {
       try {
@@ -129,7 +160,7 @@ export function useChat(api: ChatApi) {
     return () => {
       cancelled = true;
     };
-  }, [api, applySessions, setActive]);
+  }, [api, applySessions, enabled, setActive]);
 
   const submit = useCallback(
     async (prompt: string, route: ActiveRoute) => {
@@ -161,6 +192,11 @@ export function useChat(api: ChatApi) {
       // Show the user's message + provider slots immediately, enter the pending
       // state, and mark this chat in-flight so the rail shows a spinner (SP-056).
       dispatch({ type: "routeSubmit", userMessage, slots });
+      pendingTurnsRef.current.set(originId, {
+        userMessage,
+        slots,
+        knownMessageIds: new Set(knownMessageIdsRef.current.get(originId) ?? []),
+      });
       markPending(originId);
 
       try {
@@ -180,7 +216,18 @@ export function useChat(api: ChatApi) {
           prompt: trimmed,
           activeProviders: ALL_PROVIDER_IDS as AssistantId[],
         });
+        knownMessageIdsRef.current.set(
+          originId,
+          new Set([
+            ...(knownMessageIdsRef.current.get(originId) ?? []),
+            result.userMessage.id,
+            ...result.outcomes.flatMap((outcome) =>
+              outcome.message ? [outcome.message.id] : [],
+            ),
+          ]),
+        );
         // This turn is no longer in flight.
+        pendingTurnsRef.current.delete(originId);
         clearPending(originId);
         // Map each provider outcome to a transcript entry: a persisted reply, or
         // an inline error card under that provider's label.
@@ -207,6 +254,7 @@ export function useChat(api: ChatApi) {
           markUnread(originId);
         }
       } catch (err) {
+        pendingTurnsRef.current.delete(originId);
         clearPending(originId);
         // Same guard: don't surface this turn's error in a chat the user moved to.
         if (activeRef.current?.id === originId) {
@@ -226,26 +274,41 @@ export function useChat(api: ChatApi) {
 
   const selectSession = useCallback(
     async (id: string) => {
-      if (activeRef.current?.id === id) return;
+      const request = ++selectionRequestRef.current;
+      selectionTargetRef.current = id;
+      if (activeRef.current?.id === id) {
+        selectionTargetRef.current = null;
+        return;
+      }
       const session = getSessions().find((s) => s.id === id);
-      if (!session) return;
-      // Opening a chat clears its unread flag (SP-056).
-      clearUnread(id);
+      if (!session) {
+        selectionTargetRef.current = null;
+        return;
+      }
       try {
         const history = await api.readHistory(id);
+        if (request !== selectionRequestRef.current) return;
+        selectionTargetRef.current = null;
+        // Opening a chat clears its unread flag (SP-056).
+        clearUnread(id);
         setActive(session, history.map(toChatMessage));
       } catch (err) {
-        dispatch({ type: "error", message: describeError(err) });
+        if (request === selectionRequestRef.current) {
+          selectionTargetRef.current = null;
+          dispatch({ type: "error", message: describeError(err) });
+        }
       }
     },
     [api, setActive, getSessions, clearUnread],
   );
 
   const newChat = useCallback(async () => {
+    const request = ++selectionRequestRef.current;
+    selectionTargetRef.current = null;
     try {
       const created = await api.createSession();
       applySessions([...getSessions(), created]);
-      setActive(created, []);
+      if (request === selectionRequestRef.current) setActive(created, []);
     } catch (err) {
       dispatch({ type: "error", message: describeError(err) });
     }
@@ -267,12 +330,19 @@ export function useChat(api: ChatApi) {
   const deleteSession = useCallback(
     async (id: string) => {
       const wasActive = activeRef.current?.id === id;
+      let activationRequest: number | null = null;
+      if (wasActive || selectionTargetRef.current === id) {
+        activationRequest = ++selectionRequestRef.current;
+        selectionTargetRef.current = null;
+      }
       const nextId = pickNextActiveSession(getSessions(), id);
       try {
         await api.deleteSession(id);
         // The chat is gone — drop any in-flight/unread status it held so the
         // sets don't leak ids for a session that no longer exists.
         forget(id);
+        pendingTurnsRef.current.delete(id);
+        knownMessageIdsRef.current.delete(id);
         const remaining = getSessions().filter((s) => s.id !== id);
         if (!wasActive) {
           applySessions(remaining);
@@ -282,12 +352,14 @@ export function useChat(api: ChatApi) {
           const next = remaining.find((s) => s.id === nextId)!;
           applySessions(remaining);
           const history = await api.readHistory(nextId);
-          setActive(next, history.map(toChatMessage));
+          if (activationRequest === selectionRequestRef.current) {
+            setActive(next, history.map(toChatMessage));
+          }
         } else {
           // No chats remain — start a fresh empty one (session model).
           const created = await api.createSession();
           applySessions([created]);
-          setActive(created, []);
+          if (activationRequest === selectionRequestRef.current) setActive(created, []);
         }
       } catch (err) {
         dispatch({ type: "error", message: describeError(err) });
@@ -305,6 +377,8 @@ export function useChat(api: ChatApi) {
       session.title = cleared.title;
       // A cleared chat is emptied, so it carries no in-flight/unread status.
       forget(cleared.id);
+      pendingTurnsRef.current.delete(cleared.id);
+      knownMessageIdsRef.current.set(cleared.id, new Set());
       dispatch({ type: "loaded", messages: [] });
       applySessions(getSessions().map((s) => (s.id === cleared.id ? cleared : s)));
     } catch (err) {
@@ -327,14 +401,27 @@ export function useChat(api: ChatApi) {
   };
 }
 
-export interface ChatPanelProps {
+interface ChatPanelBaseProps {
   /** Backend seam; defaults to the no-IPC stub so shell tests stay offline. */
   api?: ChatApi;
-  /** Optional route state retained by a shell that may unmount the chat panel. */
-  routesBySession?: RoutesBySession;
-  /** Updates shell-retained route state when provided with `routesBySession`. */
-  setRoutesBySession?: Dispatch<SetStateAction<RoutesBySession>>;
+  /** Optional controller retained by a shell that may unmount the chat panel. */
+  chat?: ChatController;
 }
+
+interface RetainedRouteProps {
+  /** Route state retained by a shell that may unmount the chat panel. */
+  routesBySession: RoutesBySession;
+  /** Updates shell-retained route state. */
+  setRoutesBySession: Dispatch<SetStateAction<RoutesBySession>>;
+}
+
+interface LocalRouteProps {
+  routesBySession?: never;
+  setRoutesBySession?: never;
+}
+
+export type ChatPanelProps = ChatPanelBaseProps & (RetainedRouteProps | LocalRouteProps);
+export type ChatController = ReturnType<typeof useChat>;
 
 /**
  * The expanded panel's chat body (SP-006, SP-048–051, SP-017): a collapsible
@@ -348,9 +435,11 @@ export interface ChatPanelProps {
  */
 export function ChatPanel({
   api = inertChatApi,
+  chat: retainedChat,
   routesBySession: retainedRoutesBySession,
   setRoutesBySession: setRetainedRoutesBySession,
 }: ChatPanelProps) {
+  const localChat = useChat(api, !retainedChat);
   const {
     state,
     sessions,
@@ -363,7 +452,7 @@ export function ChatPanel({
     renameSession,
     deleteSession,
     clearActive,
-  } = useChat(api);
+  } = retainedChat ?? localChat;
   const [draft, setDraft] = useState("");
   const [localRoutesBySession, setLocalRoutesBySession] = useState<RoutesBySession>({});
   const routesBySession = retainedRoutesBySession ?? localRoutesBySession;
@@ -576,6 +665,7 @@ export function ChatPanel({
                   key={message.id}
                   className="message message--assistant message--thinking"
                   data-testid="thinking"
+                  data-provider={message.assistantId}
                 >
                   <span className="message__label">{label}</span>
                   <p className="message__thinking" role="status">
@@ -626,9 +716,8 @@ export function ChatPanel({
               </article>
             );
           })}
-          {/* Fallback thinking indicator: a route restored into the pending
-              state on session-switch-back has no optimistic provider slots, so
-              show a single generic indicator until its reply lands. */}
+          {/* Defensive fallback for a pending session without recoverable
+              provider-slot metadata (for example, state from an older client). */}
           {isPending && !state.messages.some((m) => m.pending) && (
             <article
               className="message message--assistant message--thinking"
