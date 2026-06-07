@@ -12,12 +12,19 @@ import type {
   NewMessage,
   PersistedMessage,
   PersistedSession,
+  RouteRunResult,
 } from "./chat/api";
 import "./styles.css";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const t0 = Date.now();
+const fixtureParams = new URLSearchParams(window.location.search);
+const providerPreference = {
+  codex: { model: "gpt-5.5", reasoningEffort: "low" },
+  claude: { model: "haiku", reasoningEffort: "low" },
+  gemini: { model: "gemini-3-flash-preview", reasoningEffort: "none" },
+} as const;
 
 const sessions: PersistedSession[] = [
   {
@@ -44,8 +51,11 @@ const messages: Record<string, PersistedMessage[]> = {
       seq: 1,
       sender: "user",
       assistantId: null,
+      model: null,
+      reasoningEffort: null,
       content: "How do I add passkey login?",
       rawJson: null,
+      isError: false,
       createdAt: t0 - 5 * MINUTE,
     },
     {
@@ -54,9 +64,12 @@ const messages: Record<string, PersistedMessage[]> = {
       seq: 2,
       sender: "assistant",
       assistantId: "codex",
+      model: providerPreference.codex.model,
+      reasoningEffort: providerPreference.codex.reasoningEffort,
       content:
         "Use the WebAuthn API: register a credential, then verify the assertion on sign-in. See the [WebAuthn guide](https://example.com/webauthn) for details.",
       rawJson: "{}",
+      isError: false,
       createdAt: t0 - 4 * MINUTE,
     },
   ],
@@ -66,6 +79,13 @@ const messages: Record<string, PersistedMessage[]> = {
 let nextSeq = 100;
 
 const api: ChatApi = {
+  getProviderPreferences: () =>
+    Promise.resolve({
+      codex: { model: "gpt-5.5", reasoning: "low" },
+      claude: { model: "haiku", reasoning: "low" },
+      gemini: { model: "gemini-3-flash-preview", reasoning: "none" },
+    }),
+  updateProviderPreferences: (value) => Promise.resolve(value),
   listSessions: () => Promise.resolve(sessions.map((s) => ({ ...s }))),
   createSession: (title = null) => {
     const created: PersistedSession = {
@@ -79,7 +99,14 @@ const api: ChatApi = {
     messages[created.id] = [];
     return Promise.resolve({ ...created });
   },
-  readHistory: (id) => Promise.resolve((messages[id] ?? []).map((m) => ({ ...m }))),
+  readHistory: (id) => {
+    const history = (messages[id] ?? []).map((m) => ({ ...m }));
+    const delay =
+      fixtureParams.get("slowHistory") === id
+        ? Number(fixtureParams.get("historyDelay") ?? 1000)
+        : 0;
+    return new Promise((resolve) => setTimeout(() => resolve(history), delay));
+  },
   appendMessage: (m: NewMessage) => {
     const list = (messages[m.sessionId] ??= []);
     const row: PersistedMessage = {
@@ -88,8 +115,11 @@ const api: ChatApi = {
       seq: list.length + 1,
       sender: m.sender,
       assistantId: m.assistantId ?? null,
+      model: m.model ?? null,
+      reasoningEffort: m.reasoningEffort ?? null,
       content: m.content,
       rawJson: m.rawJson ?? null,
+      isError: false,
       createdAt: Date.now(),
     };
     list.push(row);
@@ -108,6 +138,78 @@ const api: ChatApi = {
           }),
         600,
       ),
+    ),
+  // Mirrors run_route: persists the prompt + one reply per target provider after
+  // a short delay so the switcher's per-provider slots and (in All mode) the
+  // multi-slot layout can be exercised in the WebKit harness.
+  runRoute: (request) =>
+    new Promise<RouteRunResult>((resolve) =>
+      setTimeout(() => {
+        const list = (messages[request.sessionId] ??= []);
+        const userMessage: PersistedMessage = {
+          id: `m${nextSeq++}`,
+          sessionId: request.sessionId,
+          seq: list.length + 1,
+          sender: "user",
+          assistantId: null,
+          model: null,
+          reasoningEffort: null,
+          content: request.prompt,
+          rawJson: null,
+          isError: false,
+          createdAt: Date.now(),
+        };
+        list.push(userMessage);
+        const targets =
+          request.route.kind === "all"
+            ? request.activeProviders
+            : [request.route.provider];
+        const outcomes = targets.map((provider) => {
+          if (fixtureParams.get("route") === "error") {
+            const row: PersistedMessage = {
+              id: `m${nextSeq++}`,
+              sessionId: request.sessionId,
+              seq: list.length + 1,
+              sender: "assistant",
+              assistantId: provider,
+              model: providerPreference[provider].model,
+              reasoningEffort: providerPreference[provider].reasoningEffort,
+              content: `${provider === "gemini" ? "Gemini" : provider} exited with an error: Requested entity was not found.`,
+              rawJson:
+                '{"kind":"nonZeroExit","code":404,"stderr":"Full report available at: /tmp/gemini-error.json\\nModelNotFoundError: Requested entity was not found.\\n at classifyGoogleError (chunk.js:1)"}',
+              isError: true,
+              createdAt: Date.now(),
+            };
+            list.push(row);
+            return {
+              provider,
+              message: row,
+              error: {
+                kind: "nonZeroExit" as const,
+                code: 404,
+                stderr:
+                  "Full report available at: /tmp/gemini-error.json\nModelNotFoundError: Requested entity was not found.\n at classifyGoogleError (chunk.js:1)",
+              },
+            };
+          }
+          const row: PersistedMessage = {
+            id: `m${nextSeq++}`,
+            sessionId: request.sessionId,
+            seq: list.length + 1,
+            sender: "assistant",
+            assistantId: provider,
+            model: providerPreference[provider].model,
+            reasoningEffort: providerPreference[provider].reasoningEffort,
+            content: `A short **${provider}** reply for the runtime fixture.`,
+            rawJson: "{}",
+            isError: false,
+            createdAt: Date.now(),
+          };
+          list.push(row);
+          return { provider, message: row };
+        });
+        resolve({ userMessage, outcomes });
+      }, Number(fixtureParams.get("routeDelay") ?? 600)),
     ),
   renameSession: (id, title) => {
     const s = sessions.find((x) => x.id === id)!;
@@ -132,8 +234,34 @@ const api: ChatApi = {
     return Promise.resolve();
   },
   openExternal: () => Promise.resolve(),
+  retryRoute: (request) => {
+    // Delete the error message, then produce a fresh reply.
+    const list = messages[request.sessionId] ?? [];
+    const idx = list.findIndex((m) => m.id === request.errorMessageId);
+    if (idx >= 0) list.splice(idx, 1);
+    const row: PersistedMessage = {
+      id: `m${nextSeq++}`,
+      sessionId: request.sessionId,
+      seq:
+        (messages[request.sessionId]?.length ?? 0) + 1,
+      sender: "assistant",
+      assistantId: request.provider,
+      model: providerPreference[request.provider].model,
+      reasoningEffort: providerPreference[request.provider].reasoningEffort,
+      content: `A retried **${request.provider}** reply.`,
+      rawJson: "{}",
+      isError: false,
+      createdAt: Date.now(),
+    };
+    list.push(row);
+    return Promise.resolve({ provider: request.provider, message: row });
+  },
 };
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <Bubble initialState="expanded" resizeWindow={() => {}} chatApi={api} />,
+  <Bubble
+    initialState={fixtureParams.get("initial") === "collapsed" ? "collapsed" : "expanded"}
+    resizeWindow={() => {}}
+    chatApi={api}
+  />,
 );

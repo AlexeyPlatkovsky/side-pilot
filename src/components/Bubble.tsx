@@ -1,9 +1,10 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { bubbleReducer, type BubbleState } from "../state/bubbleState";
 import { applyWindowSize } from "../state/windowResize";
 import { useClickVsDrag } from "../state/drag";
-import { ChatPanel } from "./ChatPanel";
+import { ChatPanel, useChat } from "./ChatPanel";
 import { inertChatApi, type ChatApi } from "../chat/api";
+import type { ActiveRoute } from "../chat/providers";
 // Single source of truth for the app mark: the same artwork bundled as the
 // macOS/Windows app (Dock) icon, reused for the collapsed bubble and the
 // panel header so all three reads identically.
@@ -39,6 +40,8 @@ export function Bubble({
   chatApi = inertChatApi,
 }: BubbleProps) {
   const [state, dispatch] = useReducer(bubbleReducer, initialState);
+  const [routesBySession, setRoutesBySession] = useState<Record<string, ActiveRoute>>({});
+  const chat = useChat(chatApi);
 
   // The collapsed dot and the panel mark are both window-drag handles and click
   // targets; this shared hook tells a click apart from a drag so dragging the
@@ -180,7 +183,12 @@ export function Bubble({
             <p className="settings__placeholder">Settings sections arrive next.</p>
           </div>
         ) : (
-          <ChatPanel api={chatApi} />
+          <ChatPanel
+            api={chatApi}
+            chat={chat}
+            routesBySession={routesBySession}
+            setRoutesBySession={setRoutesBySession}
+          />
         )}
       </section>
     </div>

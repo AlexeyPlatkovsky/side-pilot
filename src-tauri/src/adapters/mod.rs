@@ -12,18 +12,24 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
+pub mod ansi;
 pub mod binary;
 pub mod cache;
+pub mod claude;
 pub mod codex;
 pub mod contract;
 pub mod environment;
 pub mod error;
+pub mod gemini;
+pub mod json;
 pub mod process;
 pub mod registry;
 
+pub use claude::ClaudeAdapter;
 pub use codex::CodexAdapter;
 pub use contract::{AdapterRequest, AdapterResult, PermissionMode, Usage};
 pub use error::AdapterError;
+pub use gemini::GeminiAdapter;
 pub use registry::AdapterRegistry;
 
 /// A CLI adapter drives one assistant's command-line tool: it constructs the
@@ -60,6 +66,16 @@ impl AssistantId {
             AssistantId::Codex => "codex",
             AssistantId::Claude => "claude",
             AssistantId::Gemini => "gemini",
+        }
+    }
+
+    /// Human-readable provider name used for labeled transcript replay, e.g. the
+    /// `[Codex said]:` prefix on a prior response from another provider (SP-016, §6).
+    pub fn display_name(self) -> &'static str {
+        match self {
+            AssistantId::Codex => "Codex",
+            AssistantId::Claude => "Claude",
+            AssistantId::Gemini => "Gemini",
         }
     }
 }

@@ -27,17 +27,19 @@ side-pilot/
 │   ├── main.tsx                  # Vite entry point
 │   ├── components/
 │   │   ├── Bubble.tsx            # Floating bubble shell: collapsed dot → expanded panel
-│   │   ├── ChatPanel.tsx         # Chat transcript, toolbar, composer, session management
+│   │   ├── ChatPanel.tsx         # Chat transcript, toolbar, composer, AI switcher, route submission
+│   │   ├── AiSwitcher.tsx        # Provider switcher button + vertical picker (All + GPT/Claude/Gemini)
+│   │   ├── ProviderIcon.tsx      # Provider logo images + the All grid glyph
 │   │   ├── ChatHistory.tsx       # Session rail: list, rename, delete, new chat
 │   │   ├── Dialog.tsx            # Accessible modal dialog (focus trap, Escape)
 │   │   └── RenameDialog.tsx      # Chat rename form inside Dialog
 │   ├── chat/
 │   │   ├── api.ts                # ChatApi interface + Tauri IPC bridge (tauriChatApi)
-│   │   ├── config.ts             # Assistant model configuration (id, label, effort)
+│   │   ├── providers.ts          # Provider registry, ActiveRoute, route + label/error helpers
 │   │   └── history.ts            # Title generation, relative time, sorting, selection
 │   ├── state/
 │   │   ├── bubbleState.ts        # Bubble visual state machine (collapsed/expanded/settings)
-│   │   ├── chat.ts               # Chat transcript reducer (loaded/submit/success/error)
+│   │   ├── chat.ts               # Chat transcript reducer (loaded/submit/success/error/route*)
 │   │   ├── drag.ts               # Click-vs-drag discrimination threshold
 │   │   └── windowResize.ts       # Tauri window resize bridge
 │   └── styles.css                # All CSS (design tokens, component styles)
@@ -45,17 +47,23 @@ side-pilot/
 ├── src-tauri/src/                # Rust/Tauri core
 │   ├── main.rs                   # Binary entry point → side_pilot_lib::run()
 │   ├── lib.rs                    # Tauri builder: commands, store, invoke handler
-│   ├── commands.rs               # 12 IPC command handlers (typed seam)
+│   ├── commands.rs               # IPC command handlers (typed seam)
 │   ├── links.rs                  # External URL validation (http/https/mailto only)
 │   ├── adapters/
 │   │   ├── mod.rs                # CliAdapter trait, AssistantId enum
 │   │   ├── contract.rs           # AdapterRequest, AdapterResult, Usage, PermissionMode
 │   │   ├── error.rs              # AdapterError taxonomy (6 variants)
 │   │   ├── registry.rs           # AdapterRegistry — routes AssistantId → CliAdapter
-│   │   ├── codex.rs              # Codex CLI adapter (MVP: the only registered adapter)
+│   │   ├── codex.rs              # Codex CLI adapter (codex exec --json)
+│   │   ├── claude.rs            # Claude Code CLI adapter (claude -p --output-format json)
+│   │   ├── gemini.rs           # Gemini CLI adapter (gemini -o json --approval-mode plan --skip-trust)
+│   │   ├── ansi.rs              # Shared defensive ANSI-escape stripper (§5)
+│   │   ├── json.rs             # Shared lenient single-document JSON parser (Claude/Gemini)
 │   │   ├── process.rs            # CommandRunner trait + tokio subprocess runner
 │   │   ├── binary.rs             # BinaryResolver — absolute path lookup per AssistantId
 │   │   └── environment.rs        # EnvironmentProvider — shell/process env resolution
+│   ├── routing/
+│   │   └── mod.rs                # Multi-provider route planner, transcript replay, concurrent dispatch (SP-016)
 │   └── storage/
 │       ├── mod.rs                # Re-exports
 │       ├── model.rs              # Session, Message, NewMessage, Sender types
@@ -96,12 +104,13 @@ The current codebase implements the MVP chat shell and Codex-only backend:
 - Floating always-on-top Tauri window configured as a frameless transparent bubble.
 - React bubble/panel UI with local chat sessions, history rail, rename/delete/clear, Markdown replies, pending and unread rail states.
 - SQLite-backed local session/message history.
-- Codex CLI adapter only, running blocking read-only `codex exec --json` calls.
-- Adapter routing seam already shaped for Claude and Gemini, but those adapters are not registered.
+- Codex, Claude, and Gemini CLI adapters registered, running blocking read-only calls (`codex exec --json`; `claude -p --output-format json --permission-mode plan`; `gemini -o json --approval-mode plan --skip-trust`).
+- Multi-provider routing core (SP-016): `run_route` dispatches a prompt to one provider or concurrently to `All`, sending each provider only the context it has not seen via app-owned transcript replay (`message_provider_sends` junction table), with per-slot partial-failure isolation and persisted display-only error rows whose visible CLI diagnostic is reduced to a useful bounded summary.
+- AI switcher UI (SP-017): a provider-logo switcher beside Send opens a vertical picker (All + GPT/Claude/Gemini); the active route drives `run_route`, with each provider's reply shown as a separate labeled transcript slot (per-provider loading + inline error cards), the switcher disabled while any response is in flight.
 
 Deferred from the broader product specification:
 
-- Global hotkey, tray/menu-bar entry, active-app context, selected-text capture, screenshots, voice, slash-command routing, `/all`, and multi-assistant comparison.
+- Global hotkey, tray/menu-bar entry, active-app context, selected-text capture, screenshots, voice, slash-command routing, and the `/summarize` synthesis workflow (slash commands and summarize were explicitly cut from SP-015's scope).
 - User-visible cancellation control. The Rust command exists, and the request contract supports `runId`, but the current React submit flow does not pass a run id or expose a cancel button.
 
 ---
@@ -118,6 +127,7 @@ START → create_session()              # new empty session
   → [user switches to another session]
   → [reply arrives → unread flag set]
   → [user reopens → read_history()]   # load transcript
+  → [provider fails → persisted error row] # visible after switching/restart, never replayed
   → [user clears → clear_session()]   # empty but preserved
   → [user deletes → delete_session()] # gone forever
 ```

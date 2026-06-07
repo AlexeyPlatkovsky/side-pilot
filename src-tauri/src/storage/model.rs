@@ -69,12 +69,13 @@ pub struct Message {
     #[ts(type = "number")]
     pub seq: i64,
     pub sender: Sender,
-    /// Which assistant produced an assistant message (`codex` for the MVP).
-    /// `None` for user messages.
     pub assistant_id: Option<String>,
+    pub model: Option<String>,
+    pub reasoning_effort: Option<String>,
     pub content: String,
-    /// Raw routing metadata / structured CLI output retained for inspection.
     pub raw_json: Option<String>,
+    // Display-only provider failure; excluded from transcript replay.
+    pub is_error: bool,
     #[ts(type = "number")]
     pub created_at: i64,
 }
@@ -89,6 +90,12 @@ pub struct NewMessage {
     #[serde(default)]
     #[ts(optional)]
     pub assistant_id: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub model: Option<String>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub reasoning_effort: Option<String>,
     pub content: String,
     #[serde(default)]
     #[ts(optional)]
@@ -115,14 +122,20 @@ mod tests {
             seq: 1,
             sender: Sender::Assistant,
             assistant_id: Some("codex".to_string()),
+            model: Some("gpt-5.5".to_string()),
+            reasoning_effort: Some("low".to_string()),
             content: "pong".to_string(),
             raw_json: None,
+            is_error: false,
             created_at: 42,
         };
         let json = serde_json::to_value(&message).unwrap();
         assert_eq!(json["sessionId"], "s1");
         assert_eq!(json["assistantId"], "codex");
+        assert_eq!(json["model"], "gpt-5.5");
+        assert_eq!(json["reasoningEffort"], "low");
         assert_eq!(json["sender"], "assistant");
+        assert_eq!(json["isError"], false);
         assert_eq!(json["createdAt"], 42);
     }
 
@@ -137,6 +150,8 @@ mod tests {
         assert_eq!(msg.session_id, "s1");
         assert_eq!(msg.sender, Sender::User);
         assert_eq!(msg.assistant_id, None);
+        assert_eq!(msg.model, None);
+        assert_eq!(msg.reasoning_effort, None);
         assert_eq!(msg.raw_json, None);
     }
 }

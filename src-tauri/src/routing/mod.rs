@@ -1,0 +1,1551 @@
+//! Multi-provider route planning and app-owned transcript replay (SP-016).
+//!
+//! This module is the Rust-core half of the AI switcher (SP-015). It decides
+//! which adapters a prompt targets, computes the per-provider **diff** (the
+//! messages a provider has not yet seen), composes that diff into a single
+//! transcript with prior responses from *other* providers labeled
+//! `[ProviderName said]: …`, dispatches single-provider and `All` routes (the latter
+//! concurrently), and records `message_provider_sends` rows so each provider
+//! only ever receives new context.
+//!
+//! Native per-tool session ids may still be captured as a per-tool optimization,
+//! but they are not the source of truth for multi-provider context — app-owned
+//! transcript replay is (`docs/idea.md` §6).
+
+use futures::future::join_all;
+use serde::{Deserialize, Serialize};
+use tokio_util::sync::CancellationToken;
+use ts_rs::TS;
+
+use crate::adapters::contract::DEFAULT_TIMEOUT_MS;
+use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AssistantId, PermissionMode};
+use crate::preferences::{ProviderPreference, ProviderPreferences};
+use crate::storage::{Message, NewMessage, Sender, StorageError, Store};
+
+/// Which provider(s) a prompt is routed to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
+pub enum Route {
+    /// Route to exactly one provider.
+    Single { provider: AssistantId },
+    /// Route concurrently to every active provider.
+    All,
+}
+
+/// A request to route one prompt through the planner.
+#[derive(Debug, Clone, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
+pub struct RouteRequest {
+    pub session_id: String,
+    pub route: Route,
+    pub prompt: String,
+    /// Providers considered active for an `All` route, in display order.
+    #[serde(default)]
+    pub active_providers: Vec<AssistantId>,
+    /// Per-provider timeout in milliseconds (SP-009 contract).
+    #[serde(default = "default_timeout_ms")]
+    #[ts(type = "number")]
+    pub timeout_ms: u64,
+}
+
+fn default_timeout_ms() -> u64 {
+    DEFAULT_TIMEOUT_MS
+}
+
+/// The outcome of one provider's slot in a route run.
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
+pub struct ProviderRunOutcome {
+    pub provider: AssistantId,
+    /// The persisted assistant history row: a reply on success or a
+    /// display-only inline error card on failure.
+    #[ts(optional)]
+    pub message: Option<Message>,
+    /// The typed adapter error on failure (the slot failed; siblings are
+    /// unaffected).
+    #[ts(optional)]
+    pub error: Option<AdapterError>,
+}
+
+/// The result of a whole route run: the persisted user prompt plus one outcome
+/// per targeted provider, in target order.
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
+pub struct RouteRunResult {
+    pub user_message: Message,
+    pub outcomes: Vec<ProviderRunOutcome>,
+}
+
+/// Resolve a route to its ordered, de-duplicated list of target providers.
+pub fn plan_targets(route: &Route, active: &[AssistantId]) -> Vec<AssistantId> {
+    match route {
+        Route::Single { provider } => vec![*provider],
+        Route::All => {
+            let mut targets: Vec<AssistantId> = Vec::with_capacity(active.len());
+            for provider in active {
+                if !targets.contains(provider) {
+                    targets.push(*provider);
+                }
+            }
+            targets
+        }
+    }
+}
+
+/// Compose a provider's diff into a single replayable transcript. User turns are
+/// rendered verbatim; assistant turns are labeled with the producing provider
+/// (`[ProviderName said]: …`) so cross-provider context is unambiguous (§6).
+pub fn compose_prompt(messages: &[Message]) -> String {
+    messages
+        .iter()
+        .map(format_turn)
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
+fn format_turn(message: &Message) -> String {
+    match message.sender {
+        Sender::User => message.content.clone(),
+        Sender::Assistant => {
+            let label = message
+                .assistant_id
+                .as_deref()
+                .and_then(|id| id.parse::<AssistantId>().ok())
+                .map(AssistantId::display_name)
+                .unwrap_or("Assistant");
+            format!("[{label} said]: {content}", content = message.content)
+        }
+    }
+}
+
+const MAX_PROVIDER_ERROR_DETAIL_CHARS: usize = 240;
+
+fn truncate_error_detail(detail: &str) -> String {
+    if detail.chars().count() <= MAX_PROVIDER_ERROR_DETAIL_CHARS {
+        return detail.to_string();
+    }
+    detail
+        .chars()
+        .take(MAX_PROVIDER_ERROR_DETAIL_CHARS - 1)
+        .chain(std::iter::once('…'))
+        .collect()
+}
+
+fn strip_log_prefixes(mut line: &str) -> &str {
+    line = line.trim();
+    while let Some(rest) = line.strip_prefix('[') {
+        let Some(end) = rest.find(']') else {
+            break;
+        };
+        line = rest[end + 1..].trim_start();
+    }
+    line
+}
+
+fn extract_named_error(stderr: &str) -> Option<String> {
+    let marker = "Error: ";
+    let start = stderr.rfind(marker)? + marker.len();
+    let mut detail = &stderr[start..];
+    for delimiter in ["\n", "\r", " at ", " {"] {
+        if let Some(index) = detail.find(delimiter) {
+            detail = &detail[..index];
+        }
+    }
+    let detail = detail.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!detail.is_empty()).then_some(detail)
+}
+
+fn is_structured_dump_line(line: &str) -> bool {
+    let line = line.trim();
+    if line.starts_with(['{', '}', '"', '\''])
+        || line
+            .chars()
+            .all(|character| matches!(character, '[' | ']' | ','))
+    {
+        return true;
+    }
+    let Some((key, _)) = line.split_once(':') else {
+        return false;
+    };
+    let key = key.trim().trim_matches(['"', '\'']);
+    !key.is_empty()
+        && key
+            .chars()
+            .next()
+            .is_some_and(|character| character.is_ascii_alphabetic() || character == '_')
+        && key
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '-'))
+}
+
+fn summarize_cli_stderr(stderr: &str) -> Option<String> {
+    let trimmed = stderr.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Some(detail) = extract_named_error(trimmed) {
+        return Some(truncate_error_detail(&detail));
+    }
+
+    trimmed
+        .lines()
+        .map(strip_log_prefixes)
+        .rfind(|line| {
+            !(line.is_empty()
+                || line.starts_with("at ")
+                || line.starts_with("Full report available at:")
+                || (line.starts_with("Error when talking to ") && line.ends_with(" API"))
+                || is_structured_dump_line(line))
+        })
+        .map(|line| line.split_whitespace().collect::<Vec<_>>().join(" "))
+        .map(|detail| truncate_error_detail(&detail))
+}
+
+fn as_sentence(detail: &str) -> String {
+    if detail.ends_with(['.', '!', '?', '…']) {
+        detail.to_string()
+    } else {
+        format!("{detail}.")
+    }
+}
+
+fn provider_error_message(provider: AssistantId, error: &AdapterError) -> String {
+    let name = match provider {
+        AssistantId::Codex => "GPT",
+        AssistantId::Claude => "Claude",
+        AssistantId::Gemini => "Gemini",
+    };
+    match error {
+        AdapterError::BinaryNotFound => {
+            format!("{name} isn't available — its CLI wasn't found on your PATH.")
+        }
+        AdapterError::NotAuthenticated => {
+            format!("{name} is not authenticated. Sign in to its CLI and try again.")
+        }
+        AdapterError::TimedOut => format!("{name} timed out before responding."),
+        AdapterError::Cancelled => format!("The {name} request was cancelled."),
+        AdapterError::NonZeroExit { stderr, .. } => summarize_cli_stderr(stderr).map_or_else(
+            || format!("{name} exited with an error."),
+            |detail| format!("{name} exited with an error: {}", as_sentence(&detail)),
+        ),
+        AdapterError::OutputParseFailure { .. } => {
+            format!("{name} returned output that could not be read.")
+        }
+    }
+}
+
+/// Everything needed to dispatch one provider's slot, snapshotted from a
+/// consistent pre-send state so concurrent `All` runs do not race the store.
+struct Prepared {
+    provider: AssistantId,
+    preference: ProviderPreference,
+    diff_ids: Vec<String>,
+    request: AdapterRequest,
+    cancel: CancellationToken,
+}
+
+/// Run a route end to end: persist the prompt, compute each provider's diff,
+/// dispatch (concurrently for `All`), persist successes, and record sends.
+///
+/// Adapter failures are returned per slot inside [`ProviderRunOutcome`] — a
+/// failing provider never cancels its siblings and never records a send. The
+/// outer `Result` error is reserved for storage failures (e.g. the session does
+/// not exist).
+pub async fn execute_route_with_preferences(
+    store: &Store,
+    registry: &AdapterRegistry,
+    preferences: &ProviderPreferences,
+    request: RouteRequest,
+    mut make_cancel: impl FnMut(AssistantId) -> CancellationToken,
+) -> Result<RouteRunResult, StorageError> {
+    // 1. Persist the user's prompt as the next message in the session.
+    let user_message = store.append_message(NewMessage {
+        session_id: request.session_id.clone(),
+        sender: Sender::User,
+        assistant_id: None,
+        content: request.prompt.clone(),
+        raw_json: None,
+        model: None,
+        reasoning_effort: None,
+    })?;
+
+    // 2. Resolve target providers for this route.
+    let targets = plan_targets(&request.route, &request.active_providers);
+
+    // 3. Snapshot each provider's diff and build its request BEFORE any dispatch
+    //    so concurrent runs observe a consistent pre-send transcript.
+    let mut prepared: Vec<Prepared> = Vec::with_capacity(targets.len());
+    for provider in targets {
+        let preference = preferences.for_provider(provider).clone();
+        let diff = store.unsent_messages(&request.session_id, provider.as_str())?;
+        let diff_ids = diff.iter().map(|m| m.id.clone()).collect();
+        let prompt = compose_prompt(&diff);
+        // Resume the provider's own native CLI session when one was recorded for
+        // this chat, so prior turns are remembered natively and only the diff is
+        // replayed. All three adapters resume by UUID (Claude `-r`, Codex
+        // `codex exec resume`, Gemini `--resume`); any provider that records no
+        // id simply runs fresh and relies on transcript replay.
+        let resume_session_id = store.native_session_id(&request.session_id, provider.as_str())?;
+        prepared.push(Prepared {
+            provider,
+            preference: preference.clone(),
+            diff_ids,
+            request: AdapterRequest {
+                assistant: provider,
+                prompt,
+                working_directory: None,
+                model: Some(preference.model.clone()),
+                reasoning_effort: if provider == AssistantId::Gemini {
+                    None
+                } else {
+                    preference.reasoning_argument()
+                },
+                permission_mode: PermissionMode::ReadOnly,
+                timeout_ms: request.timeout_ms,
+                resume_session_id,
+                run_id: None,
+            },
+            cancel: make_cancel(provider),
+        });
+    }
+
+    // 4. Dispatch concurrently. `join_all` polls every future together, so a
+    //    partial failure resolves independently without cancelling the others.
+    let results = join_all(prepared.iter().map(|p| {
+        let request = p.request.clone();
+        let cancel = p.cancel.clone();
+        async move { registry.run(request, cancel).await }
+    }))
+    .await;
+
+    // 5. Persist successful responses and record sends; collect outcomes in
+    //    target order. Store work happens after the concurrent await, so no lock
+    //    is held across `.await`.
+    let mut outcomes = Vec::with_capacity(prepared.len());
+    for (prep, result) in prepared.into_iter().zip(results) {
+        match result {
+            Ok(adapter_result) => {
+                // Record the provider's native session id so its next turn
+                // resumes this session instead of starting context-less. The
+                // latest id wins (resume can fork the id); a provider that
+                // returns none simply keeps running fresh.
+                if let Some(native) = &adapter_result.native_session_id {
+                    store.set_native_session_id(
+                        &request.session_id,
+                        prep.provider.as_str(),
+                        native,
+                    )?;
+                }
+                let message = store.append_message(NewMessage {
+                    session_id: request.session_id.clone(),
+                    sender: Sender::Assistant,
+                    assistant_id: Some(prep.provider.as_str().to_string()),
+                    model: Some(prep.preference.model.clone()),
+                    reasoning_effort: Some(prep.preference.reasoning.clone()),
+                    content: adapter_result.assistant_text,
+                    raw_json: Some(adapter_result.raw_json),
+                })?;
+                // The provider has now seen its diff and its own answer, so
+                // neither is replayed to it next turn.
+                for id in &prep.diff_ids {
+                    store.mark_message_sent(id, prep.provider.as_str())?;
+                }
+                store.mark_message_sent(&message.id, prep.provider.as_str())?;
+                outcomes.push(ProviderRunOutcome {
+                    provider: prep.provider,
+                    message: Some(message),
+                    error: None,
+                });
+            }
+            Err(error) => {
+                // Failed slots are display history, but never provider context:
+                // the store excludes error rows from transcript replay. Mark the
+                // diff as sent so retries do not compound (feedback loop fix).
+                for id in &prep.diff_ids {
+                    store.mark_message_sent(id, prep.provider.as_str())?;
+                }
+                let message = store.append_error_message(NewMessage {
+                    session_id: request.session_id.clone(),
+                    sender: Sender::Assistant,
+                    assistant_id: Some(prep.provider.as_str().to_string()),
+                    model: Some(prep.preference.model.clone()),
+                    reasoning_effort: Some(prep.preference.reasoning.clone()),
+                    content: provider_error_message(prep.provider, &error),
+                    raw_json: serde_json::to_string(&error).ok(),
+                })?;
+                outcomes.push(ProviderRunOutcome {
+                    provider: prep.provider,
+                    message: Some(message),
+                    error: Some(error),
+                });
+            }
+        }
+    }
+
+    Ok(RouteRunResult {
+        user_message,
+        outcomes,
+    })
+}
+
+/// Retry a single-provider prompt after a failure. Deletes the old error
+/// message from history, dispatches the prompt to the same provider, and returns
+/// the outcome. On success the adapter result is persisted and returned; on
+/// failure a new error message is appended.
+pub async fn retry_result(
+    store: &Store,
+    registry: &AdapterRegistry,
+    preferences: &ProviderPreferences,
+    session_id: String,
+    error_message_id: String,
+    provider: AssistantId,
+    prompt: String,
+    cancel: CancellationToken,
+) -> Result<ProviderRunOutcome, StorageError> {
+    store.delete_message(&error_message_id)?;
+
+    let preference = preferences.for_provider(provider).clone();
+    let request = AdapterRequest {
+        assistant: provider,
+        prompt,
+        working_directory: None,
+        model: Some(preference.model.clone()),
+        reasoning_effort: if provider == AssistantId::Gemini {
+            None
+        } else {
+            preference.reasoning_argument()
+        },
+        permission_mode: PermissionMode::ReadOnly,
+        timeout_ms: DEFAULT_TIMEOUT_MS,
+        resume_session_id: None,
+        run_id: None,
+    };
+
+    match registry.run(request, cancel).await {
+        Ok(adapter_result) => {
+            if let Some(native) = &adapter_result.native_session_id {
+                store.set_native_session_id(&session_id, provider.as_str(), native)?;
+            }
+            let message = store.append_message(NewMessage {
+                session_id,
+                sender: Sender::Assistant,
+                assistant_id: Some(provider.as_str().to_string()),
+                model: Some(preference.model.clone()),
+                reasoning_effort: Some(preference.reasoning.clone()),
+                content: adapter_result.assistant_text,
+                raw_json: Some(adapter_result.raw_json),
+            })?;
+            Ok(ProviderRunOutcome {
+                provider,
+                message: Some(message),
+                error: None,
+            })
+        }
+        Err(error) => {
+            let message = store.append_error_message(NewMessage {
+                session_id,
+                sender: Sender::Assistant,
+                assistant_id: Some(provider.as_str().to_string()),
+                model: Some(preference.model.clone()),
+                reasoning_effort: Some(preference.reasoning.clone()),
+                content: provider_error_message(provider, &error),
+                raw_json: serde_json::to_string(&error).ok(),
+            })?;
+            Ok(ProviderRunOutcome {
+                provider,
+                message: Some(message),
+                error: Some(error),
+            })
+        }
+    }
+}
+
+#[cfg(test)]
+pub async fn execute_route(
+    store: &Store,
+    registry: &AdapterRegistry,
+    request: RouteRequest,
+    make_cancel: impl FnMut(AssistantId) -> CancellationToken,
+) -> Result<RouteRunResult, StorageError> {
+    execute_route_with_preferences(
+        store,
+        registry,
+        &ProviderPreferences::default(),
+        request,
+        make_cancel,
+    )
+    .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+
+    use crate::adapters::{AdapterResult, CliAdapter};
+
+    // ---- Fixtures ------------------------------------------------------------
+
+    fn msg(seq: i64, sender: Sender, assistant_id: Option<&str>, content: &str) -> Message {
+        Message {
+            id: format!("m{seq}"),
+            session_id: "s1".to_string(),
+            seq,
+            sender,
+            assistant_id: assistant_id.map(str::to_string),
+            model: None,
+            reasoning_effort: None,
+            content: content.to_string(),
+            raw_json: None,
+            is_error: false,
+            created_at: seq,
+        }
+    }
+
+    /// Stub adapter that returns a canned result/error and records the prompt it
+    /// received.
+    struct StubAdapter {
+        id: AssistantId,
+        result: Result<AdapterResult, AdapterError>,
+    }
+
+    struct ModelEchoAdapter {
+        id: AssistantId,
+    }
+
+    /// Stub adapter that reports a native session id and echoes the
+    /// `resume_session_id` it received plus the composed prompt, so tests can
+    /// assert that the route resumes a provider's own native session and only
+    /// sends the diff.
+    struct ResumeEchoAdapter {
+        id: AssistantId,
+        native_session_id: Option<String>,
+    }
+
+    #[async_trait]
+    impl CliAdapter for ResumeEchoAdapter {
+        fn id(&self) -> AssistantId {
+            self.id
+        }
+
+        async fn run(
+            &self,
+            req: AdapterRequest,
+            _cancel: CancellationToken,
+        ) -> Result<AdapterResult, AdapterError> {
+            Ok(AdapterResult {
+                assistant_text: "ok".to_string(),
+                raw_json: format!(
+                    "resume={}|prompt={}",
+                    req.resume_session_id.as_deref().unwrap_or("none"),
+                    req.prompt
+                ),
+                native_session_id: self.native_session_id.clone(),
+                usage: None,
+            })
+        }
+    }
+
+    #[async_trait]
+    impl CliAdapter for StubAdapter {
+        fn id(&self) -> AssistantId {
+            self.id
+        }
+        async fn run(
+            &self,
+            req: AdapterRequest,
+            _cancel: CancellationToken,
+        ) -> Result<AdapterResult, AdapterError> {
+            // Echo the composed prompt back as the raw_json so tests can assert
+            // what context the provider received.
+            self.result.clone().map(|mut r| {
+                r.raw_json = req.prompt;
+                r
+            })
+        }
+    }
+
+    #[async_trait]
+    impl CliAdapter for ModelEchoAdapter {
+        fn id(&self) -> AssistantId {
+            self.id
+        }
+
+        async fn run(
+            &self,
+            req: AdapterRequest,
+            _cancel: CancellationToken,
+        ) -> Result<AdapterResult, AdapterError> {
+            Ok(AdapterResult {
+                assistant_text: "ok".to_string(),
+                raw_json: format!(
+                    "{}|{}",
+                    req.model.unwrap_or_else(|| "default".to_string()),
+                    req.reasoning_effort.unwrap_or_else(|| "none".to_string())
+                ),
+                native_session_id: None,
+                usage: None,
+            })
+        }
+    }
+
+    fn ok_result(text: &str) -> Result<AdapterResult, AdapterError> {
+        Ok(AdapterResult {
+            assistant_text: text.to_string(),
+            raw_json: String::new(),
+            native_session_id: None,
+            usage: None,
+        })
+    }
+
+    fn registry_with(
+        adapters: Vec<(AssistantId, Result<AdapterResult, AdapterError>)>,
+    ) -> AdapterRegistry {
+        let mut registry = AdapterRegistry::new();
+        for (id, result) in adapters {
+            registry.register(Arc::new(StubAdapter { id, result }));
+        }
+        registry
+    }
+
+    fn no_cancel(_: AssistantId) -> CancellationToken {
+        CancellationToken::new()
+    }
+
+    #[tokio::test]
+    async fn route_applies_fixed_provider_snapshot_and_persists_badges() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let mut registry = AdapterRegistry::new();
+        for id in [AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini] {
+            registry.register(Arc::new(ModelEchoAdapter { id }));
+        }
+
+        let preferences = ProviderPreferences::default();
+        let result = execute_route_with_preferences(
+            &store,
+            &registry,
+            &preferences,
+            RouteRequest {
+                session_id: session.id,
+                route: Route::All,
+                prompt: "hello".to_string(),
+                active_providers: vec![
+                    AssistantId::Codex,
+                    AssistantId::Claude,
+                    AssistantId::Gemini,
+                ],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let raw_json = |provider| {
+            result
+                .outcomes
+                .iter()
+                .find(|outcome| outcome.provider == provider)
+                .unwrap()
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref()
+                .unwrap()
+        };
+        assert_eq!(raw_json(AssistantId::Codex), "gpt-5.5|low");
+        assert_eq!(raw_json(AssistantId::Claude), "haiku|low");
+        assert_eq!(raw_json(AssistantId::Gemini), "gemini-3-flash-preview|none");
+        for provider in [AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini] {
+            let message = result
+                .outcomes
+                .iter()
+                .find(|outcome| outcome.provider == provider)
+                .unwrap()
+                .message
+                .as_ref()
+                .unwrap();
+            let preference = preferences.for_provider(provider);
+            assert_eq!(message.model.as_deref(), Some(preference.model.as_str()));
+            assert_eq!(
+                message.reasoning_effort.as_deref(),
+                Some(preference.reasoning.as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn provider_error_message_reduces_noisy_cli_stderr_to_useful_summary() {
+        let stderr = [
+            "Ripgrep is not available. Falling back to GrepTool.",
+            "[ERROR] [IDEClient] Directory mismatch.",
+            "Error when talking to Gemini API",
+            "Full report available at: /var/folders/example/gemini-client-error.json",
+            "ModelNotFoundError: Requested entity was not found.",
+            "    at classifyGoogleError (file:///gemini/chunk.js:304138:12)",
+            "    at async GeminiChat.streamWithRetries (file:///gemini/chunk.js:328079:29)",
+            r#"{ "session_id": "secret", "error": { "type": "Error", "message": "Requested entity was not found." } }"#,
+        ]
+        .join("\n");
+
+        assert_eq!(
+            provider_error_message(
+                AssistantId::Gemini,
+                &AdapterError::NonZeroExit {
+                    code: Some(404),
+                    stderr,
+                },
+            ),
+            "Gemini exited with an error: Requested entity was not found."
+        );
+    }
+
+    #[test]
+    fn provider_error_message_caps_over_length_cli_stderr() {
+        let message = provider_error_message(
+            AssistantId::Claude,
+            &AdapterError::NonZeroExit {
+                code: Some(1),
+                stderr: "x".repeat(2_000),
+            },
+        );
+
+        assert!(message.chars().count() <= 280);
+        assert!(message.contains('…'));
+    }
+
+    #[test]
+    fn provider_error_message_uses_generic_text_for_whitespace_only_stderr() {
+        assert_eq!(
+            provider_error_message(
+                AssistantId::Codex,
+                &AdapterError::NonZeroExit {
+                    code: Some(1),
+                    stderr: " \n\t ".to_string(),
+                },
+            ),
+            "GPT exited with an error."
+        );
+    }
+
+    #[test]
+    fn provider_error_message_extracts_named_error_from_single_line_dump() {
+        assert_eq!(
+            provider_error_message(
+                AssistantId::Gemini,
+                &AdapterError::NonZeroExit {
+                    code: Some(404),
+                    stderr: "warning ModelNotFoundError: Requested entity was not found. at classifyGoogleError (chunk.js:1) { code: 404 }".to_string(),
+                },
+            ),
+            "Gemini exited with an error: Requested entity was not found."
+        );
+    }
+
+    #[test]
+    fn error_detail_truncation_keeps_the_limit_and_truncates_the_next_character() {
+        assert_eq!(truncate_error_detail(&"x".repeat(240)), "x".repeat(240));
+        assert_eq!(
+            truncate_error_detail(&"x".repeat(241)),
+            format!("{}…", "x".repeat(239))
+        );
+    }
+
+    #[test]
+    fn provider_error_message_uses_generic_text_for_diagnostic_noise_only() {
+        for stderr in [
+            "Full report available at: /tmp/error.json",
+            "    at classifyError (chunk.js:1)\n    at async run (chunk.js:2)",
+            r#"{"session_id":"secret","code":404}"#,
+            "{\n  \"session_id\": \"secret\",\n  \"code\": 404\n}",
+        ] {
+            assert_eq!(
+                provider_error_message(
+                    AssistantId::Codex,
+                    &AdapterError::NonZeroExit {
+                        code: Some(1),
+                        stderr: stderr.to_string(),
+                    },
+                ),
+                "GPT exited with an error."
+            );
+        }
+    }
+
+    #[test]
+    fn provider_error_message_keeps_useful_line_before_pretty_structured_dump() {
+        let stderr = [
+            "Directory mismatch. Run the CLI from the open workspace.",
+            "{",
+            r#"  "session_id": "secret","#,
+            "  code: 404",
+            "}",
+        ]
+        .join("\n");
+
+        assert_eq!(
+            provider_error_message(
+                AssistantId::Gemini,
+                &AdapterError::NonZeroExit {
+                    code: Some(404),
+                    stderr,
+                },
+            ),
+            "Gemini exited with an error: Directory mismatch. Run the CLI from the open workspace."
+        );
+    }
+
+    fn sends_count(store: &Store, message_id: &str, provider: &str) -> i64 {
+        let conn = store_conn(store);
+        conn.query_row(
+            "SELECT COUNT(*) FROM message_provider_sends WHERE message_id = ?1 AND provider = ?2",
+            rusqlite::params![message_id, provider],
+            |row| row.get(0),
+        )
+        .unwrap()
+    }
+
+    // Test-only access to the store connection for assertions on the junction
+    // table. Mirrors how the store's own tests reach in.
+    fn store_conn(store: &Store) -> std::sync::MutexGuard<'_, rusqlite::Connection> {
+        store.test_connection()
+    }
+
+    // ---- plan_targets --------------------------------------------------------
+
+    #[test]
+    fn single_route_targets_one_provider() {
+        let targets = plan_targets(
+            &Route::Single {
+                provider: AssistantId::Codex,
+            },
+            &[AssistantId::Codex, AssistantId::Claude],
+        );
+        assert_eq!(targets, vec![AssistantId::Codex]);
+    }
+
+    #[test]
+    fn all_route_targets_every_active_provider_in_order() {
+        let targets = plan_targets(
+            &Route::All,
+            &[AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini],
+        );
+        assert_eq!(
+            targets,
+            vec![AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini]
+        );
+    }
+
+    #[test]
+    fn all_route_dedupes_repeated_providers() {
+        let targets = plan_targets(
+            &Route::All,
+            &[AssistantId::Codex, AssistantId::Codex, AssistantId::Claude],
+        );
+        assert_eq!(targets, vec![AssistantId::Codex, AssistantId::Claude]);
+    }
+
+    // ---- compose_prompt ------------------------------------------------------
+
+    #[test]
+    fn compose_lone_user_prompt_is_verbatim() {
+        let composed = compose_prompt(&[msg(1, Sender::User, None, "hello")]);
+        assert_eq!(composed, "hello");
+    }
+
+    #[test]
+    fn compose_labels_prior_responses_with_their_provider() {
+        let composed = compose_prompt(&[
+            msg(1, Sender::User, None, "first question"),
+            msg(2, Sender::Assistant, Some("codex"), "codex answer"),
+            msg(3, Sender::User, None, "follow up"),
+        ]);
+        assert_eq!(
+            composed,
+            "first question\n\n[Codex said]: codex answer\n\nfollow up"
+        );
+    }
+
+    #[test]
+    fn compose_labels_other_provider_responses_as_speech_not_self() {
+        let composed = compose_prompt(&[
+            msg(1, Sender::User, None, "show your session ID"),
+            msg(
+                2,
+                Sender::Assistant,
+                Some("codex"),
+                "My current session ID is abc-123",
+            ),
+        ]);
+        assert_eq!(
+            composed,
+            "show your session ID\n\n[Codex said]: My current session ID is abc-123",
+        );
+    }
+
+    #[test]
+    fn compose_labels_unknown_assistant_generically() {
+        let composed = compose_prompt(&[msg(1, Sender::Assistant, Some("mystery"), "x")]);
+        assert_eq!(composed, "[Assistant said]: x");
+    }
+
+    // ---- execute_route: Scenario 1 (first send, empty history) --------------
+
+    #[tokio::test]
+    async fn first_send_targets_provider_and_records_send() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let registry = registry_with(vec![(AssistantId::Codex, ok_result("pong"))]);
+
+        let result = execute_route(
+            &store,
+            &registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Codex,
+                },
+                prompt: "ping".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.outcomes.len(), 1);
+        let outcome = &result.outcomes[0];
+        assert_eq!(outcome.provider, AssistantId::Codex);
+        assert_eq!(outcome.message.as_ref().unwrap().content, "pong");
+        // The user prompt was sent to codex with no prior context.
+        assert_eq!(result.user_message.content, "ping");
+        assert_eq!(sends_count(&store, &result.user_message.id, "codex"), 1);
+    }
+
+    // ---- execute_route: Scenario 2 (switch provider, full diff + labels) ----
+
+    #[tokio::test]
+    async fn switching_provider_replays_labeled_prior_context() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        // First turn to Codex.
+        let codex_registry = registry_with(vec![(AssistantId::Codex, ok_result("codex says hi"))]);
+        execute_route(
+            &store,
+            &codex_registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Codex,
+                },
+                prompt: "hello".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        // Switch to Claude with a new prompt.
+        let claude_registry = registry_with(vec![(AssistantId::Claude, ok_result("claude reply"))]);
+        let result = execute_route(
+            &store,
+            &claude_registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Claude,
+                },
+                prompt: "and you?".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        // Claude received the full prior transcript with Codex's turn labeled.
+        let received = result.outcomes[0]
+            .message
+            .as_ref()
+            .unwrap()
+            .raw_json
+            .clone();
+        assert_eq!(
+            received.as_deref(),
+            Some("hello\n\n[Codex said]: codex says hi\n\nand you?")
+        );
+        // All three prior messages + nothing missing are now marked sent to claude.
+        let history = store.read_history(&session.id).unwrap();
+        // history: hello(user), codex says hi(assistant), and you?(user), claude reply(assistant)
+        for m in &history[..3] {
+            assert_eq!(
+                sends_count(&store, &m.id, "claude"),
+                1,
+                "msg {} sent to claude",
+                m.seq
+            );
+        }
+    }
+
+    // ---- execute_route: Scenario 3 (same provider, only new message) --------
+
+    #[tokio::test]
+    async fn subsequent_same_provider_send_includes_only_new_message() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let make_registry = || registry_with(vec![(AssistantId::Claude, ok_result("ok"))]);
+
+        for prompt in ["one", "two"] {
+            execute_route(
+                &store,
+                &make_registry(),
+                RouteRequest {
+                    session_id: session.id.clone(),
+                    route: Route::Single {
+                        provider: AssistantId::Claude,
+                    },
+                    prompt: prompt.to_string(),
+                    active_providers: vec![],
+                    timeout_ms: 1000,
+                },
+                no_cancel,
+            )
+            .await
+            .unwrap();
+        }
+
+        // Third send to the same provider should only carry the new prompt.
+        let result = execute_route(
+            &store,
+            &make_registry(),
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Claude,
+                },
+                prompt: "three".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let received = result.outcomes[0]
+            .message
+            .as_ref()
+            .unwrap()
+            .raw_json
+            .clone();
+        assert_eq!(received.as_deref(), Some("three"));
+    }
+
+    // ---- execute_route: Scenario 4 (All dispatches to all providers) --------
+
+    #[tokio::test]
+    async fn all_route_dispatches_to_every_active_provider() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let registry = registry_with(vec![
+            (AssistantId::Codex, ok_result("c")),
+            (AssistantId::Claude, ok_result("l")),
+            (AssistantId::Gemini, ok_result("g")),
+        ]);
+
+        let result = execute_route(
+            &store,
+            &registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::All,
+                prompt: "to all".to_string(),
+                active_providers: vec![
+                    AssistantId::Codex,
+                    AssistantId::Claude,
+                    AssistantId::Gemini,
+                ],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let providers: Vec<AssistantId> = result.outcomes.iter().map(|o| o.provider).collect();
+        assert_eq!(
+            providers,
+            vec![AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini]
+        );
+        // Each got the same fresh prompt (no prior context yet).
+        for outcome in &result.outcomes {
+            assert_eq!(
+                outcome.message.as_ref().unwrap().raw_json.as_deref(),
+                Some("to all")
+            );
+        }
+    }
+
+    // ---- execute_route: Scenario 5 (partial failure isolation) --------------
+
+    #[tokio::test]
+    async fn partial_failure_in_all_mode_does_not_cancel_others() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let registry = registry_with(vec![
+            (AssistantId::Codex, ok_result("c")),
+            (AssistantId::Claude, ok_result("l")),
+            (
+                AssistantId::Gemini,
+                Err(AdapterError::NonZeroExit {
+                    code: Some(1),
+                    stderr: "boom".to_string(),
+                }),
+            ),
+        ]);
+
+        let result = execute_route(
+            &store,
+            &registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::All,
+                prompt: "to all".to_string(),
+                active_providers: vec![
+                    AssistantId::Codex,
+                    AssistantId::Claude,
+                    AssistantId::Gemini,
+                ],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let gemini = result
+            .outcomes
+            .iter()
+            .find(|o| o.provider == AssistantId::Gemini)
+            .unwrap();
+        assert!(gemini.message.as_ref().unwrap().is_error);
+        assert!(gemini.error.is_some(), "gemini slot carries an error");
+
+        // Codex and Claude still succeeded.
+        for id in [AssistantId::Codex, AssistantId::Claude] {
+            let o = result.outcomes.iter().find(|o| o.provider == id).unwrap();
+            assert!(o.message.is_some());
+            assert!(o.error.is_none());
+        }
+
+        // Diff messages are marked sent even on failure so retries do not
+        // compound (feedback-loop fix).
+        assert_eq!(sends_count(&store, &result.user_message.id, "codex"), 1);
+        assert_eq!(sends_count(&store, &result.user_message.id, "claude"), 1);
+        assert_eq!(sends_count(&store, &result.user_message.id, "gemini"), 1);
+    }
+
+    #[tokio::test]
+    async fn failed_slot_persists_display_history_but_is_not_replayed() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let registry = registry_with(vec![(
+            AssistantId::Gemini,
+            Err(AdapterError::NotAuthenticated),
+        )]);
+
+        execute_route(
+            &store,
+            &registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Gemini,
+                },
+                prompt: "first try".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let history = store.read_history(&session.id).unwrap();
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[1].assistant_id.as_deref(), Some("gemini"));
+        assert!(history[1].is_error);
+        assert_eq!(
+            history[1].content,
+            "Gemini is not authenticated. Sign in to its CLI and try again."
+        );
+
+        let retry_registry = registry_with(vec![(AssistantId::Gemini, ok_result("recovered"))]);
+        let result = execute_route(
+            &store,
+            &retry_registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Gemini,
+                },
+                prompt: "retry".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
+            Some("retry"),
+            "retry must not replay old context after failure marks diff as sent"
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_slot_marks_diff_as_sent_so_retry_does_not_replay_old_context() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        // First attempt: Gemini times out.
+        let failing_registry = registry_with(vec![(
+            AssistantId::Gemini,
+            Err(AdapterError::TimedOut),
+        )]);
+        execute_route(
+            &store,
+            &failing_registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Gemini,
+                },
+                prompt: "long query".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        // The user prompt must be marked sent to the failing provider so retry
+        // does not compound (root cause: feedback loop, see triage report).
+        let history = store.read_history(&session.id).unwrap();
+        assert_eq!(
+            sends_count(&store, &history[0].id, "gemini"),
+            1,
+            "user prompt must be marked sent on failure"
+        );
+
+        // Retry with a new prompt. The composed prompt must only carry the new
+        // prompt — the old context must not be replayed.
+        let retry_registry = registry_with(vec![(AssistantId::Gemini, ok_result("recovered"))]);
+        let result = execute_route(
+            &store,
+            &retry_registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Gemini,
+                },
+                prompt: "retry".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
+            Some("retry"),
+            "retry must not replay old context that was marked sent on failure"
+        );
+    }
+
+    // ---- execute_route: native session resume (SP-011 bug fix) -------------
+
+    fn resume_registry(native: Option<&str>) -> AdapterRegistry {
+        let mut registry = AdapterRegistry::new();
+        registry.register(Arc::new(ResumeEchoAdapter {
+            id: AssistantId::Claude,
+            native_session_id: native.map(str::to_string),
+        }));
+        registry
+    }
+
+    #[tokio::test]
+    async fn same_provider_followup_resumes_stored_native_session_and_sends_diff() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        let single = |prompt: &str| RouteRequest {
+            session_id: session.id.clone(),
+            route: Route::Single {
+                provider: AssistantId::Claude,
+            },
+            prompt: prompt.to_string(),
+            active_providers: vec![],
+            timeout_ms: 1000,
+        };
+
+        // Turn 1: no native session exists yet, so the provider runs fresh and
+        // receives the whole (so-far) transcript.
+        let first = execute_route(&store, &resume_registry(Some("sid-1")), single("one"), no_cancel)
+            .await
+            .unwrap();
+        assert_eq!(
+            first.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
+            Some("resume=none|prompt=one"),
+            "the first turn has no native session to resume"
+        );
+        // The native session id the adapter returned is now persisted.
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("sid-1")
+        );
+
+        // Turn 2: the route resumes the stored native session and sends only the
+        // diff (the new prompt) — prior turns are remembered natively, not replayed.
+        let second =
+            execute_route(&store, &resume_registry(Some("sid-2")), single("two"), no_cancel)
+                .await
+                .unwrap();
+        assert_eq!(
+            second.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
+            Some("resume=sid-1|prompt=two"),
+            "the follow-up resumes the native session and replays only the diff"
+        );
+        // The latest returned native session id wins (resume chains can fork).
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("sid-2")
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_without_native_session_id_records_no_resume() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        let single = |prompt: &str| RouteRequest {
+            session_id: session.id.clone(),
+            route: Route::Single {
+                provider: AssistantId::Claude,
+            },
+            prompt: prompt.to_string(),
+            active_providers: vec![],
+            timeout_ms: 1000,
+        };
+
+        // A provider that returns no native session id (e.g. one whose CLI can't
+        // resume) records nothing to resume, so the next turn still runs fresh.
+        execute_route(&store, &resume_registry(None), single("one"), no_cancel)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.native_session_id(&session.id, "claude").unwrap(),
+            None
+        );
+
+        let second = execute_route(&store, &resume_registry(None), single("two"), no_cancel)
+            .await
+            .unwrap();
+        assert_eq!(
+            second.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
+            Some("resume=none|prompt=two"),
+            "with no resumable native session, the diff is still delivered fresh"
+        );
+    }
+
+    // ---- execute_route: per-provider timeout carried from request ----------
+
+    #[tokio::test]
+    async fn timeout_for_one_slot_does_not_affect_others() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let registry = registry_with(vec![
+            (AssistantId::Codex, ok_result("c")),
+            (AssistantId::Claude, Err(AdapterError::TimedOut)),
+        ]);
+
+        let result = execute_route(
+            &store,
+            &registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::All,
+                prompt: "hi".to_string(),
+                active_providers: vec![AssistantId::Codex, AssistantId::Claude],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let codex = result
+            .outcomes
+            .iter()
+            .find(|o| o.provider == AssistantId::Codex)
+            .unwrap();
+        let claude = result
+            .outcomes
+            .iter()
+            .find(|o| o.provider == AssistantId::Claude)
+            .unwrap();
+        assert!(
+            codex.message.is_some(),
+            "codex unaffected by claude timeout"
+        );
+        assert_eq!(claude.error, Some(AdapterError::TimedOut));
+    }
+
+    // ---- retry_result -------------------------------------------------------
+
+    #[tokio::test]
+    async fn retry_result_deletes_error_and_returns_success_outcome() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        // Pre-seed an error message.
+        let error_msg = store
+            .append_error_message(NewMessage {
+                session_id: session.id.clone(),
+                sender: Sender::Assistant,
+                assistant_id: Some("gemini".to_string()),
+                model: Some("gemini-3-flash-preview".to_string()),
+                reasoning_effort: Some("none".to_string()),
+                content: "Gemini timed out before responding.".to_string(),
+                raw_json: Some(r#"{"kind":"timedOut"}"#.to_string()),
+            })
+            .unwrap();
+
+        let mut registry = AdapterRegistry::new();
+        registry.register(Arc::new(StubAdapter {
+            id: AssistantId::Gemini,
+            result: ok_result("fresh answer"),
+        }));
+
+        let outcome = retry_result(
+            &store,
+            &registry,
+            &ProviderPreferences::default(),
+            session.id.clone(),
+            error_msg.id,
+            AssistantId::Gemini,
+            "retried prompt".to_string(),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.provider, AssistantId::Gemini);
+        assert_eq!(
+            outcome.message.as_ref().unwrap().content,
+            "fresh answer"
+        );
+        assert!(outcome.error.is_none());
+        // The old error must be gone.
+        let history = store.read_history(&session.id).unwrap();
+        assert_eq!(history.len(), 1, "error message must be deleted");
+        assert!(!history[0].is_error);
+    }
+
+    #[tokio::test]
+    async fn retry_result_on_failure_deletes_old_error_and_appends_new_error() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let error_msg = store
+            .append_error_message(NewMessage {
+                session_id: session.id.clone(),
+                sender: Sender::Assistant,
+                assistant_id: Some("gemini".to_string()),
+                model: Some("gemini-3-flash-preview".to_string()),
+                reasoning_effort: Some("none".to_string()),
+                content: "Gemini timed out before responding.".to_string(),
+                raw_json: Some(r#"{"kind":"timedOut"}"#.to_string()),
+            })
+            .unwrap();
+
+        let mut registry = AdapterRegistry::new();
+        registry.register(Arc::new(StubAdapter {
+            id: AssistantId::Gemini,
+            result: Err(AdapterError::TimedOut),
+        }));
+
+        let outcome = retry_result(
+            &store,
+            &registry,
+            &ProviderPreferences::default(),
+            session.id.clone(),
+            error_msg.id,
+            AssistantId::Gemini,
+            "retried prompt".to_string(),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.provider, AssistantId::Gemini);
+        assert!(outcome.message.is_some());
+        assert!(outcome.message.unwrap().is_error);
+        assert_eq!(outcome.error, Some(AdapterError::TimedOut));
+        // Old error deleted, new error appended. Only one message remains.
+        let history = store.read_history(&session.id).unwrap();
+        assert_eq!(history.len(), 1);
+        assert!(history[0].is_error);
+        assert_eq!(
+            history[0].content,
+            "Gemini timed out before responding."
+        );
+    }
+}

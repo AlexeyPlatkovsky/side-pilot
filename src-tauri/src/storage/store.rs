@@ -20,7 +20,7 @@ use uuid::Uuid;
 use super::error::StorageError;
 use super::model::{Message, NewMessage, Sender, Session};
 
-const CURRENT_SCHEMA_VERSION: i64 = 1;
+const CURRENT_SCHEMA_VERSION: i64 = 5;
 
 /// Schema for version 1, applied through `PRAGMA user_version` migrations.
 const SCHEMA: &str = "
@@ -43,6 +43,41 @@ CREATE TABLE IF NOT EXISTS messages (
     UNIQUE (session_id, seq)
 );
 CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages (session_id, seq);
+";
+
+/// Schema added in version 2 (SP-016): the `message_provider_sends` junction
+/// table tracks which providers have already received each message, so a
+/// per-provider send includes only the messages that provider has not yet seen
+/// (`docs/idea.md` §6, app-owned transcript replay). Rows cascade-delete with
+/// their message.
+const SCHEMA_V2: &str = "
+CREATE TABLE IF NOT EXISTS message_provider_sends (
+    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    provider   TEXT NOT NULL,
+    sent_at    INTEGER NOT NULL,
+    PRIMARY KEY (message_id, provider)
+);
+CREATE INDEX IF NOT EXISTS idx_provider_sends_provider
+    ON message_provider_sends (provider, message_id);
+";
+
+/// Schema added in version 3: persisted display-only provider failure rows.
+const SCHEMA_V3: &str = "
+ALTER TABLE messages ADD COLUMN is_error INTEGER NOT NULL DEFAULT 0;
+";
+
+/// Schema added in version 5 (SP-011): per-provider native CLI session ids, so
+/// the route path can resume a provider's own session across turns instead of
+/// starting a fresh, context-less process every time (`docs/idea.md` §6 resume).
+/// One row per (session, provider); rows cascade-delete with their session.
+const SCHEMA_V5: &str = "
+CREATE TABLE IF NOT EXISTS provider_sessions (
+    session_id        TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    provider          TEXT NOT NULL,
+    native_session_id TEXT NOT NULL,
+    updated_at        INTEGER NOT NULL,
+    PRIMARY KEY (session_id, provider)
+);
 ";
 
 /// Local SQLite store for chat sessions and messages.
@@ -72,10 +107,19 @@ impl Store {
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, Connection>, StorageError> {
-        self.conn.lock().map_err(|_| StorageError::StorageUnavailable {
-            detail: "connection mutex poisoned by a panic during a prior storage operation"
-                .to_string(),
-        })
+        self.conn
+            .lock()
+            .map_err(|_| StorageError::StorageUnavailable {
+                detail: "connection mutex poisoned by a panic during a prior storage operation"
+                    .to_string(),
+            })
+    }
+
+    /// Test-only access to the underlying connection so sibling modules (e.g.
+    /// `routing`) can assert against tables like `message_provider_sends`.
+    #[cfg(test)]
+    pub fn test_connection(&self) -> MutexGuard<'_, Connection> {
+        self.lock().expect("store connection lock")
     }
 
     /// Create a new session and return it.
@@ -107,6 +151,20 @@ impl Store {
     /// fresh id. Bumps the session's `updated_at`. Fails with `NotFound` if the
     /// session does not exist.
     pub fn append_message(&self, input: NewMessage) -> Result<Message, StorageError> {
+        self.append_message_with_error(input, false)
+    }
+
+    /// Append a display-only provider failure. Routing uses this for failed
+    /// slots; the row remains visible in history but is excluded from replay.
+    pub fn append_error_message(&self, input: NewMessage) -> Result<Message, StorageError> {
+        self.append_message_with_error(input, true)
+    }
+
+    fn append_message_with_error(
+        &self,
+        input: NewMessage,
+        is_error: bool,
+    ) -> Result<Message, StorageError> {
         let conn = self.lock()?;
         let exists: bool = conn
             .query_row(
@@ -134,22 +192,28 @@ impl Store {
             seq: next_seq,
             sender: input.sender,
             assistant_id: input.assistant_id,
+            model: input.model,
+            reasoning_effort: input.reasoning_effort,
             content: input.content,
             raw_json: input.raw_json,
+            is_error,
             created_at: now,
         };
         conn.execute(
             "INSERT INTO messages
-               (id, session_id, seq, sender, assistant_id, content, raw_json, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+               (id, session_id, seq, sender, assistant_id, model, reasoning_effort, content, raw_json, is_error, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 message.id,
                 message.session_id,
                 message.seq,
                 message.sender.as_str(),
                 message.assistant_id,
+                message.model,
+                message.reasoning_effort,
                 message.content,
                 message.raw_json,
+                message.is_error,
                 message.created_at
             ],
         )?;
@@ -164,7 +228,7 @@ impl Store {
     pub fn read_history(&self, session_id: &str) -> Result<Vec<Message>, StorageError> {
         let conn = self.lock()?;
         let mut stmt = conn.prepare(
-            "SELECT id, session_id, seq, sender, assistant_id, content, raw_json, created_at
+            "SELECT id, session_id, seq, sender, assistant_id, model, reasoning_effort, content, raw_json, is_error, created_at
              FROM messages WHERE session_id = ?1 ORDER BY seq ASC",
         )?;
         let rows = stmt.query_map(params![session_id], row_to_message)?;
@@ -216,10 +280,7 @@ impl Store {
     /// `NotFound` if the session does not exist.
     pub fn delete_session(&self, session_id: &str) -> Result<(), StorageError> {
         let conn = self.lock()?;
-        let changed = conn.execute(
-            "DELETE FROM sessions WHERE id = ?1",
-            params![session_id],
-        )?;
+        let changed = conn.execute("DELETE FROM sessions WHERE id = ?1", params![session_id])?;
         if changed == 0 {
             return Err(StorageError::NotFound {
                 entity: format!("session {session_id}"),
@@ -229,7 +290,9 @@ impl Store {
     }
 
     /// Clear a session's contents (SP-051): delete every message and reset the
-    /// native Codex resume id so future prompts do not resume stale context.
+    /// native resume ids (both the legacy `codex_session_id` and every
+    /// per-provider `provider_sessions` row) so future prompts do not resume
+    /// stale context.
     /// The session row survives so it stays selectable as an empty chat.
     /// `updated_at` is left untouched: clearing is not a message, so (like
     /// rename, SP-049) it must not reorder the latest-message-ordered rail.
@@ -251,6 +314,10 @@ impl Store {
         }
         conn.execute(
             "DELETE FROM messages WHERE session_id = ?1",
+            params![session_id],
+        )?;
+        conn.execute(
+            "DELETE FROM provider_sessions WHERE session_id = ?1",
             params![session_id],
         )?;
         conn.execute(
@@ -276,6 +343,110 @@ impl Store {
                 entity: format!("session {session_id}"),
             });
         }
+        Ok(())
+    }
+
+    /// Mark `message_id` as having been sent to `provider` (SP-016). Idempotent:
+    /// a repeated mark for the same (message, provider) pair does not create a
+    /// duplicate row, so re-sends never double-count.
+    pub fn mark_message_sent(&self, message_id: &str, provider: &str) -> Result<(), StorageError> {
+        let conn = self.lock()?;
+        // INSERT OR IGNORE keeps the (message_id, provider) primary key unique,
+        // so a repeated mark is a harmless no-op rather than a duplicate row.
+        conn.execute(
+            "INSERT OR IGNORE INTO message_provider_sends (message_id, provider, sent_at)
+             VALUES (?1, ?2, ?3)",
+            params![message_id, provider, now_millis()],
+        )?;
+        Ok(())
+    }
+
+    /// Delete a single message by id. The message is removed along with any
+    /// `message_provider_sends` rows (cascade). Returns `NotFound` when the id
+    /// does not exist.
+    pub fn delete_message(&self, message_id: &str) -> Result<(), StorageError> {
+        let conn = self.lock()?;
+        let deleted = conn.execute(
+            "DELETE FROM messages WHERE id = ?1",
+            params![message_id],
+        )?;
+        if deleted == 0 {
+            return Err(StorageError::NotFound {
+                entity: format!("message {message_id}"),
+            });
+        }
+        Ok(())
+    }
+
+    /// Return the messages in `session_id` that have **not** yet been sent to
+    /// `provider`, ordered by `seq` (SP-016). This is the per-provider diff: the
+    /// transcript slice that provider has not seen and must receive on its next
+    /// invocation (`docs/idea.md` §6).
+    pub fn unsent_messages(
+        &self,
+        session_id: &str,
+        provider: &str,
+    ) -> Result<Vec<Message>, StorageError> {
+        let conn = self.lock()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, session_id, seq, sender, assistant_id, model, reasoning_effort, content, raw_json, is_error, created_at
+             FROM messages m
+             WHERE m.session_id = ?1
+               AND m.is_error = 0
+               AND NOT EXISTS (
+                   SELECT 1 FROM message_provider_sends s
+                   WHERE s.message_id = m.id AND s.provider = ?2
+               )
+             ORDER BY m.seq ASC",
+        )?;
+        let rows = stmt.query_map(params![session_id, provider], row_to_message)?;
+        let mut messages = Vec::new();
+        for row in rows {
+            messages.push(row?);
+        }
+        Ok(messages)
+    }
+
+    /// Return the native CLI session id recorded for `provider` in `session_id`,
+    /// if any. Used by the route path to resume a provider's own native session
+    /// so prior turns are remembered without re-sending them (§6 resume).
+    pub fn native_session_id(
+        &self,
+        session_id: &str,
+        provider: &str,
+    ) -> Result<Option<String>, StorageError> {
+        let conn = self.lock()?;
+        let native = conn
+            .query_row(
+                "SELECT native_session_id FROM provider_sessions
+                 WHERE session_id = ?1 AND provider = ?2",
+                params![session_id, provider],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        Ok(native)
+    }
+
+    /// Record (insert or replace) the native CLI session id for `provider` in
+    /// `session_id`. Idempotent per (session, provider): the latest id wins so a
+    /// forking resume chain always resumes from the most recent native session.
+    pub fn set_native_session_id(
+        &self,
+        session_id: &str,
+        provider: &str,
+        native_session_id: &str,
+    ) -> Result<(), StorageError> {
+        let conn = self.lock()?;
+        // ON CONFLICT keeps one row per (session, provider) and refreshes it, so
+        // a resumed turn that forks the native session id always wins.
+        conn.execute(
+            "INSERT INTO provider_sessions (session_id, provider, native_session_id, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (session_id, provider)
+             DO UPDATE SET native_session_id = excluded.native_session_id,
+                           updated_at = excluded.updated_at",
+            params![session_id, provider, native_session_id, now_millis()],
+        )?;
         Ok(())
     }
 }
@@ -308,11 +479,7 @@ fn row_to_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Session> {
 fn row_to_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
     let sender_text: String = row.get(3)?;
     let sender = Sender::from_str(&sender_text).map_err(|err| {
-        rusqlite::Error::FromSqlConversionFailure(
-            3,
-            rusqlite::types::Type::Text,
-            err.into(),
-        )
+        rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, err.into())
     })?;
     Ok(Message {
         id: row.get(0)?,
@@ -320,9 +487,12 @@ fn row_to_message(row: &rusqlite::Row<'_>) -> rusqlite::Result<Message> {
         seq: row.get(2)?,
         sender,
         assistant_id: row.get(4)?,
-        content: row.get(5)?,
-        raw_json: row.get(6)?,
-        created_at: row.get(7)?,
+        model: row.get(5)?,
+        reasoning_effort: row.get(6)?,
+        content: row.get(7)?,
+        raw_json: row.get(8)?,
+        is_error: row.get(9)?,
+        created_at: row.get(10)?,
     })
 }
 
@@ -335,9 +505,66 @@ fn migrate_schema(conn: &Connection) -> Result<(), StorageError> {
         });
     }
 
-    if version == 0 {
+    // Migrations are applied stepwise and additively — no data loss on upgrade.
+    if version < 1 {
         conn.execute_batch(SCHEMA)?;
-        conn.pragma_update(None, "user_version", CURRENT_SCHEMA_VERSION)?;
+    }
+    if version < 2 {
+        conn.execute_batch(SCHEMA_V2)?;
+    }
+    if version < 3 {
+        let has_error_column: bool = conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_table_info('messages') WHERE name = 'is_error'
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_error_column {
+            // Recover databases interrupted by the previous non-atomic v3
+            // migration after the column was added but before its version bump.
+            conn.pragma_update(None, "user_version", 3)?;
+        } else {
+            conn.execute_batch(&format!(
+                "BEGIN IMMEDIATE;
+                 {SCHEMA_V3}
+                 PRAGMA user_version = 3;
+                 COMMIT;"
+            ))?;
+        }
+    }
+    if version < 4 {
+        let has_model: bool = conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_table_info('messages') WHERE name = 'model'
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        let has_reasoning: bool = conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM pragma_table_info('messages') WHERE name = 'reasoning_effort'
+             )",
+            [],
+            |row| row.get(0),
+        )?;
+        let mut migration = String::from("BEGIN IMMEDIATE;\n");
+        if !has_model {
+            migration.push_str("ALTER TABLE messages ADD COLUMN model TEXT;\n");
+        }
+        if !has_reasoning {
+            migration.push_str("ALTER TABLE messages ADD COLUMN reasoning_effort TEXT;\n");
+        }
+        migration.push_str("PRAGMA user_version = 4;\nCOMMIT;");
+        conn.execute_batch(&migration)?;
+    }
+    if version < 5 {
+        conn.execute_batch(&format!(
+            "BEGIN IMMEDIATE;
+             {SCHEMA_V5}
+             PRAGMA user_version = 5;
+             COMMIT;"
+        ))?;
     }
 
     Ok(())
@@ -368,6 +595,8 @@ mod tests {
             session_id: session_id.to_string(),
             sender: Sender::User,
             assistant_id: None,
+            model: None,
+            reasoning_effort: None,
             content: content.to_string(),
             raw_json: None,
         }
@@ -378,8 +607,22 @@ mod tests {
             session_id: session_id.to_string(),
             sender: Sender::Assistant,
             assistant_id: Some("codex".to_string()),
+            model: Some("gpt-5.5".to_string()),
+            reasoning_effort: Some("low".to_string()),
             content: content.to_string(),
             raw_json: Some("{\"type\":\"turn.completed\"}".to_string()),
+        }
+    }
+
+    fn error_msg(session_id: &str, content: &str) -> NewMessage {
+        NewMessage {
+            session_id: session_id.to_string(),
+            sender: Sender::Assistant,
+            assistant_id: Some("gemini".to_string()),
+            model: Some("gemini-3-flash-preview".to_string()),
+            reasoning_effort: Some("none".to_string()),
+            content: content.to_string(),
+            raw_json: Some(r#"{"kind":"notAuthenticated"}"#.to_string()),
         }
     }
 
@@ -391,7 +634,9 @@ mod tests {
     #[test]
     fn create_session_persists_a_retrievable_session() {
         let store = Store::in_memory().unwrap();
-        let session = store.create_session(Some("First chat".to_string())).unwrap();
+        let session = store
+            .create_session(Some("First chat".to_string()))
+            .unwrap();
 
         assert!(!session.id.is_empty());
         assert_eq!(session.title.as_deref(), Some("First chat"));
@@ -406,7 +651,9 @@ mod tests {
         let store = Store::in_memory().unwrap();
         let session = store.create_session(None).unwrap();
 
-        let first = store.append_message(user_msg(&session.id, "hello")).unwrap();
+        let first = store
+            .append_message(user_msg(&session.id, "hello"))
+            .unwrap();
         let second = store
             .append_message(assistant_msg(&session.id, "hi back"))
             .unwrap();
@@ -422,13 +669,20 @@ mod tests {
         let store = Store::in_memory().unwrap();
         let session = store.create_session(None).unwrap();
         store.append_message(user_msg(&session.id, "one")).unwrap();
-        store.append_message(assistant_msg(&session.id, "two")).unwrap();
-        store.append_message(user_msg(&session.id, "three")).unwrap();
+        store
+            .append_message(assistant_msg(&session.id, "two"))
+            .unwrap();
+        store
+            .append_message(user_msg(&session.id, "three"))
+            .unwrap();
 
         let history = store.read_history(&session.id).unwrap();
         let contents: Vec<&str> = history.iter().map(|m| m.content.as_str()).collect();
         assert_eq!(contents, vec!["one", "two", "three"]);
-        assert_eq!(history.iter().map(|m| m.seq).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert_eq!(
+            history.iter().map(|m| m.seq).collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
     }
 
     #[test]
@@ -469,9 +723,7 @@ mod tests {
     #[test]
     fn update_codex_session_id_for_unknown_session_is_not_found() {
         let store = Store::in_memory().unwrap();
-        let err = store
-            .update_codex_session_id("missing", "x")
-            .unwrap_err();
+        let err = store.update_codex_session_id("missing", "x").unwrap_err();
         assert!(matches!(err, StorageError::NotFound { .. }));
     }
 
@@ -510,12 +762,18 @@ mod tests {
         let keep = store.create_session(Some("keep".to_string())).unwrap();
         let drop = store.create_session(Some("drop".to_string())).unwrap();
         store.append_message(user_msg(&drop.id, "one")).unwrap();
-        store.append_message(assistant_msg(&drop.id, "two")).unwrap();
+        store
+            .append_message(assistant_msg(&drop.id, "two"))
+            .unwrap();
 
         store.delete_session(&drop.id).unwrap();
 
-        let remaining: Vec<String> =
-            store.list_sessions().unwrap().into_iter().map(|s| s.id).collect();
+        let remaining: Vec<String> = store
+            .list_sessions()
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id)
+            .collect();
         assert_eq!(remaining, vec![keep.id]);
         // Messages of the deleted session are gone (cascade), so re-reading is empty.
         assert!(store.read_history(&drop.id).unwrap().is_empty());
@@ -529,11 +787,29 @@ mod tests {
     }
 
     #[test]
+    fn delete_message_removes_message_returns_not_found_for_unknown_id() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store
+            .append_message(user_msg(&session.id, "hello"))
+            .unwrap();
+        // Delete existing message.
+        store.delete_message(&msg.id).unwrap();
+        let history = store.read_history(&session.id).unwrap();
+        assert!(history.is_empty());
+        // Delete non-existent id.
+        let err = store.delete_message("missing-id").unwrap_err();
+        assert!(matches!(err, StorageError::NotFound { .. }));
+    }
+
+    #[test]
     fn clear_session_deletes_messages_and_resets_codex_id() {
         let store = Store::in_memory().unwrap();
         let session = store.create_session(Some("chat".to_string())).unwrap();
         store.append_message(user_msg(&session.id, "one")).unwrap();
-        store.append_message(assistant_msg(&session.id, "two")).unwrap();
+        store
+            .append_message(assistant_msg(&session.id, "two"))
+            .unwrap();
         store
             .update_codex_session_id(&session.id, "thread-stale")
             .unwrap();
@@ -557,7 +833,9 @@ mod tests {
         assert_eq!(reloaded.codex_session_id, None);
         assert_eq!(reloaded.updated_at, before.updated_at);
         // Next appended message restarts the sequence at 1.
-        let next = store.append_message(user_msg(&session.id, "fresh")).unwrap();
+        let next = store
+            .append_message(user_msg(&session.id, "fresh"))
+            .unwrap();
         assert_eq!(next.seq, 1);
     }
 
@@ -577,7 +855,9 @@ mod tests {
         let session_id = {
             let store = Store::open(&db_path).unwrap();
             let session = store.create_session(None).unwrap();
-            store.append_message(user_msg(&session.id, "persist me")).unwrap();
+            store
+                .append_message(user_msg(&session.id, "persist me"))
+                .unwrap();
             session.id
         };
 
@@ -625,10 +905,363 @@ mod tests {
         let sessions = store.list_sessions().unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].id, "session-existing");
-        assert_eq!(sessions[0].codex_session_id.as_deref(), Some("codex-native"));
+        assert_eq!(
+            sessions[0].codex_session_id.as_deref(),
+            Some("codex-native")
+        );
         let history = store.read_history("session-existing").unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].content, "hi");
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    // ---- message_provider_sends (SP-016) ------------------------------------
+
+    #[test]
+    fn fresh_database_has_provider_sends_table() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store.append_message(user_msg(&session.id, "hi")).unwrap();
+        // The table exists from the v2 migration, so a mark succeeds.
+        store.mark_message_sent(&msg.id, "codex").unwrap();
+    }
+
+    #[test]
+    fn version_one_database_migrates_to_v2_preserving_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at, codex_session_id)
+             VALUES ('s1', 'Existing', 10, 20, NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages
+               (id, session_id, seq, sender, assistant_id, content, raw_json, created_at)
+             VALUES ('m1', 's1', 1, 'user', NULL, 'hi', NULL, 30)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        // Data preserved and the new table is usable.
+        assert_eq!(store.read_history("s1").unwrap().len(), 1);
+        store.mark_message_sent("m1", "claude").unwrap();
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn version_two_database_migrates_error_flag_preserving_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at, codex_session_id)
+             VALUES ('s1', 'Existing', 10, 20, NULL)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO messages
+               (id, session_id, seq, sender, assistant_id, content, raw_json, created_at)
+             VALUES ('m1', 's1', 1, 'assistant', 'codex', 'hi', '{}', 30)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        let history = store.read_history("s1").unwrap();
+        assert_eq!(history.len(), 1);
+        assert!(!history[0].is_error);
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn interrupted_version_three_migration_can_be_retried() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.execute_batch(SCHEMA_V3).unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn interrupted_version_four_migration_can_be_retried() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.execute_batch(SCHEMA_V3).unwrap();
+        conn.execute("ALTER TABLE messages ADD COLUMN model TEXT", [])
+            .unwrap();
+        conn.pragma_update(None, "user_version", 3).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
+        let has_reasoning: bool = conn
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM pragma_table_info('messages') WHERE name = 'reasoning_effort'
+                 )",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(has_reasoning);
+    }
+
+    #[test]
+    fn unsent_messages_returns_all_when_nothing_marked() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        store.append_message(user_msg(&session.id, "one")).unwrap();
+        store.append_message(user_msg(&session.id, "two")).unwrap();
+
+        let unsent = store.unsent_messages(&session.id, "codex").unwrap();
+        let contents: Vec<&str> = unsent.iter().map(|m| m.content.as_str()).collect();
+        assert_eq!(contents, vec!["one", "two"]);
+    }
+
+    #[test]
+    fn unsent_messages_excludes_display_only_error_rows() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        store.append_message(user_msg(&session.id, "one")).unwrap();
+        store
+            .append_error_message(error_msg(&session.id, "Gemini failed"))
+            .unwrap();
+        store.append_message(user_msg(&session.id, "two")).unwrap();
+
+        let unsent = store.unsent_messages(&session.id, "gemini").unwrap();
+        let contents: Vec<&str> = unsent.iter().map(|m| m.content.as_str()).collect();
+        assert_eq!(contents, vec!["one", "two"]);
+    }
+
+    #[test]
+    fn marking_a_message_sent_excludes_it_from_that_providers_diff() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let first = store.append_message(user_msg(&session.id, "one")).unwrap();
+        store.append_message(user_msg(&session.id, "two")).unwrap();
+
+        store.mark_message_sent(&first.id, "codex").unwrap();
+
+        let unsent = store.unsent_messages(&session.id, "codex").unwrap();
+        let contents: Vec<&str> = unsent.iter().map(|m| m.content.as_str()).collect();
+        assert_eq!(
+            contents,
+            vec!["two"],
+            "the marked message is no longer in the diff"
+        );
+    }
+
+    #[test]
+    fn unsent_messages_are_scoped_per_provider() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store.append_message(user_msg(&session.id, "one")).unwrap();
+
+        store.mark_message_sent(&msg.id, "codex").unwrap();
+
+        // Sent to codex, but claude has not seen it yet.
+        assert!(store
+            .unsent_messages(&session.id, "codex")
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            store.unsent_messages(&session.id, "claude").unwrap().len(),
+            1
+        );
+    }
+
+    #[test]
+    fn marking_the_same_message_twice_is_idempotent() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store.append_message(user_msg(&session.id, "one")).unwrap();
+
+        store.mark_message_sent(&msg.id, "claude").unwrap();
+        store.mark_message_sent(&msg.id, "claude").unwrap();
+
+        let conn = store.lock().unwrap();
+        let rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM message_provider_sends WHERE message_id = ?1 AND provider = ?2",
+                params![msg.id, "claude"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(rows, 1, "no duplicate send rows");
+    }
+
+    #[test]
+    fn provider_sends_cascade_when_session_is_deleted() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store.append_message(user_msg(&session.id, "one")).unwrap();
+        store.mark_message_sent(&msg.id, "codex").unwrap();
+
+        store.delete_session(&session.id).unwrap();
+
+        let conn = store.lock().unwrap();
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM message_provider_sends", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 0, "send rows cascade-delete with their message");
+    }
+
+    // ---- provider native session ids (resume) -------------------------------
+
+    #[test]
+    fn set_and_get_native_session_id_round_trips() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        store
+            .set_native_session_id(&session.id, "claude", "sid-1")
+            .unwrap();
+
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("sid-1")
+        );
+    }
+
+    #[test]
+    fn native_session_id_absent_returns_none() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        assert_eq!(
+            store.native_session_id(&session.id, "claude").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn native_session_id_is_scoped_per_provider() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        store
+            .set_native_session_id(&session.id, "claude", "sid-claude")
+            .unwrap();
+
+        // Codex has not recorded a native session in this chat yet.
+        assert_eq!(store.native_session_id(&session.id, "codex").unwrap(), None);
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("sid-claude")
+        );
+    }
+
+    #[test]
+    fn set_native_session_id_overwrites_previous() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        store
+            .set_native_session_id(&session.id, "claude", "old")
+            .unwrap();
+        store
+            .set_native_session_id(&session.id, "claude", "new")
+            .unwrap();
+
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("new"),
+            "the latest native session id wins so a forking resume chain stays current"
+        );
+    }
+
+    #[test]
+    fn clear_session_clears_native_session_ids() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        store
+            .set_native_session_id(&session.id, "claude", "sid-1")
+            .unwrap();
+
+        store.clear_session(&session.id).unwrap();
+
+        assert_eq!(
+            store.native_session_id(&session.id, "claude").unwrap(),
+            None,
+            "a cleared chat must not resume a stale native session"
+        );
+    }
+
+    #[test]
+    fn native_session_ids_cascade_when_session_deleted() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        store
+            .set_native_session_id(&session.id, "claude", "sid-1")
+            .unwrap();
+
+        store.delete_session(&session.id).unwrap();
+
+        let conn = store.lock().unwrap();
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM provider_sessions", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 0, "native session ids cascade-delete with their session");
+    }
+
+    #[test]
+    fn version_four_database_migrates_to_v5_preserving_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.execute_batch(SCHEMA_V3).unwrap();
+        conn.execute("ALTER TABLE messages ADD COLUMN model TEXT", [])
+            .unwrap();
+        conn.execute("ALTER TABLE messages ADD COLUMN reasoning_effort TEXT", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at, codex_session_id)
+             VALUES ('s1', 'Existing', 10, 20, NULL)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 4).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        // Data preserved and the new per-provider resume store is usable.
+        assert_eq!(store.list_sessions().unwrap().len(), 1);
+        store.set_native_session_id("s1", "claude", "sid-1").unwrap();
+        assert_eq!(
+            store.native_session_id("s1", "claude").unwrap().as_deref(),
+            Some("sid-1")
+        );
         let conn = store.lock().unwrap();
         assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
     }

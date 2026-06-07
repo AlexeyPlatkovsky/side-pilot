@@ -78,3 +78,77 @@ test("the rail shows a spinner while replying, then an unread dot in the backgro
   await page.locator(".chat-row__select", { hasText: "Refactor auth module" }).click();
   await expect(page.locator(".chat-row__unread")).toHaveCount(0);
 });
+
+test("All-provider thinking labels survive chat switches and collapse", async ({ page }) => {
+  await page.goto("/e2e/seeded.html?initial=collapsed&routeDelay=3000");
+  await page.getByRole("button", { name: "Open side-pilot" }).click();
+  await page.getByRole("button", { name: /choose ai provider/i }).click();
+  await page.getByRole("menuitemradio", { name: /^All/ }).click();
+  await page.getByLabel("Ask side-pilot").fill("How do I add passkey login?");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByTestId("thinking")).toHaveCount(3);
+
+  await page.getByRole("button", { name: "Show chat history" }).click();
+  await page.locator(".chat-row__select", { hasText: "Fix login bug" }).click();
+  await page.locator(".chat-row__select", { hasText: "Refactor auth module" }).click();
+  await expect(page.getByTestId("thinking")).toHaveCount(3);
+  await expect(page.getByText("How do I add passkey login?")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Collapse" }).click();
+  await page.getByRole("button", { name: "Open side-pilot" }).click();
+  await expect(page.getByTestId("thinking")).toHaveCount(3);
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await page.getByRole("button", { name: "Back to panel" }).click();
+  await expect(page.getByTestId("thinking")).toHaveCount(3);
+  await expect(page.getByText("How do I add passkey login?")).toHaveCount(2);
+  await expect(page.getByTestId("thinking").nth(0)).toHaveAttribute(
+    "data-provider",
+    "codex",
+  );
+  await expect(page.getByTestId("thinking").nth(1)).toHaveAttribute(
+    "data-provider",
+    "claude",
+  );
+  await expect(page.getByTestId("thinking").nth(2)).toHaveAttribute(
+    "data-provider",
+    "gemini",
+  );
+
+  await page.screenshot({ path: "e2e/.artifacts/all-thinking-restored.png" });
+});
+
+test("the latest rapid chat selection wins when an earlier history read is slow", async ({
+  page,
+}) => {
+  await page.goto("/e2e/seeded.html?slowHistory=s2&historyDelay=1000");
+  await expect(page.getByTestId("panel")).toBeVisible();
+  await page.getByRole("button", { name: "Show chat history" }).click();
+
+  await page.locator(".chat-row__select", { hasText: "Fix login bug" }).click();
+  await page.locator(".chat-row__select", { hasText: "Refactor auth module" }).click();
+
+  await page.waitForTimeout(1200);
+  await expect(page.locator(".chat__active-title")).toHaveText("Refactor auth module");
+  await expect(page.getByText("How do I add passkey login?")).toBeVisible();
+  await page.screenshot({ path: "e2e/.artifacts/latest-chat-selection-wins.png" });
+});
+
+test("deleting a chat invalidates its slow pending selection", async ({ page }) => {
+  await page.goto("/e2e/seeded.html?slowHistory=s2&historyDelay=1000");
+  await expect(page.getByTestId("panel")).toBeVisible();
+  await page.getByRole("button", { name: "Show chat history" }).click();
+
+  await page.locator(".chat-row__select", { hasText: "Fix login bug" }).click();
+  await page.getByRole("button", { name: "Options for Fix login bug" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await page
+    .getByRole("dialog", { name: "Delete chat" })
+    .getByRole("button", { name: "Delete" })
+    .click();
+
+  await page.waitForTimeout(1200);
+  await expect(page.locator(".chat__active-title")).toHaveText("Refactor auth module");
+  await expect(page.locator(".chat-row__select", { hasText: "Fix login bug" })).toHaveCount(0);
+  await expect(page.getByText("How do I add passkey login?")).toBeVisible();
+});

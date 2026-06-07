@@ -13,6 +13,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type { Sender } from "../state/chat";
+import { describeCliExit } from "./providers";
 
 // IPC types generated from the Rust contract by ts-rs (SP-065). These files in
 // `./generated/` are the single source of truth for the wire shape: regenerate
@@ -23,6 +24,11 @@ import type { AdapterResult as RustAdapterResult } from "./generated/AdapterResu
 import type { Session as RustSession } from "./generated/Session";
 import type { Message as RustMessage } from "./generated/Message";
 import type { NewMessage as RustNewMessage } from "./generated/NewMessage";
+import type { RouteRequest as RustRouteRequest } from "./generated/RouteRequest";
+import type { RouteRunResult as RustRouteRunResult } from "./generated/RouteRunResult";
+import type { ProviderRunOutcome as RustProviderRunOutcome } from "./generated/ProviderRunOutcome";
+import type { ProviderPreferences } from "./generated/ProviderPreferences";
+import type { AssistantId } from "./generated/AssistantId";
 
 /**
  * The request the UI sends to `run_adapter`. Projected from the Rust
@@ -50,8 +56,44 @@ export type PersistedSession = RustSession;
 export type PersistedMessage = RustMessage;
 export type NewMessage = RustNewMessage;
 
+/**
+ * The request the UI sends to `run_route` (SP-016/SP-017). The UI supplies the
+ * route, prompt, and active providers. The backend snapshots the fixed global
+ * provider preferences. `timeoutMs` falls back to the backend's serde default
+ * when omitted.
+ */
+export type RouteRequest = Pick<
+  RustRouteRequest,
+  "sessionId" | "route" | "prompt" | "activeProviders"
+>;
+export type RouteRunResult = RustRouteRunResult;
+export type ProviderRunOutcome = RustProviderRunOutcome;
+
+/** The request the UI sends to `retry_route`. */
+export interface RetryRouteRequest {
+  sessionId: string;
+  errorMessageId: string;
+  provider: AssistantId;
+  prompt: string;
+}
+
 export interface ChatApi {
   runAdapter(request: AdapterRequest): Promise<AdapterResult>;
+  /**
+   * Route a prompt to one provider or to all active providers (SP-016). Persists
+   * the prompt and each successful response server-side and returns one outcome
+   * per provider; per-provider failures arrive inside the outcomes, not as a
+   * rejection.
+   */
+  runRoute(request: RouteRequest): Promise<RouteRunResult>;
+  /**
+   * Retry a prompt for a single provider after a failure. Deletes the old error
+   * message from history, dispatches a fresh adapter run, and returns the
+   * outcome.
+   */
+  retryRoute(request: RetryRouteRequest): Promise<ProviderRunOutcome>;
+  getProviderPreferences(): Promise<ProviderPreferences>;
+  updateProviderPreferences(value: ProviderPreferences): Promise<ProviderPreferences>;
   createSession(title?: string | null): Promise<PersistedSession>;
   appendMessage(message: NewMessage): Promise<PersistedMessage>;
   readHistory(sessionId: string): Promise<PersistedMessage[]>;
@@ -74,6 +116,10 @@ export interface ChatApi {
 /** The real backend, wired to the registered Tauri commands. */
 export const tauriChatApi: ChatApi = {
   runAdapter: (request) => invoke("run_adapter", { request }),
+  runRoute: (request) => invoke("run_route", { request }),
+  retryRoute: (request) => invoke("retry_route", { ...request }),
+  getProviderPreferences: () => invoke("get_provider_preferences"),
+  updateProviderPreferences: (value) => invoke("update_provider_preferences", { value }),
   createSession: (title = null) => invoke("create_session", { title }),
   appendMessage: (message) => invoke("append_message", { message }),
   readHistory: (sessionId) => invoke("read_history", { sessionId }),
@@ -93,6 +139,10 @@ export const tauriChatApi: ChatApi = {
  */
 export const inertChatApi: ChatApi = {
   runAdapter: () => Promise.reject(new Error("chat backend unavailable")),
+  runRoute: () => Promise.reject(new Error("chat backend unavailable")),
+  retryRoute: () => Promise.reject(new Error("chat backend unavailable")),
+  getProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
+  updateProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   createSession: () =>
     Promise.resolve({
       id: "inert-session",
@@ -108,8 +158,11 @@ export const inertChatApi: ChatApi = {
       seq: 0,
       sender: message.sender,
       assistantId: message.assistantId ?? null,
+      model: message.model ?? null,
+      reasoningEffort: message.reasoningEffort ?? null,
       content: message.content,
       rawJson: message.rawJson ?? null,
+      isError: false,
       createdAt: 0,
     }),
   readHistory: () => Promise.resolve([]),
@@ -140,15 +193,21 @@ export function toChatMessage(row: PersistedMessage): {
   id: string;
   sender: Sender;
   assistantId?: string;
+  model?: string;
+  reasoningEffort?: string;
   content: string;
   createdAt: number;
+  error?: boolean;
 } {
   return {
     id: row.id,
     sender: row.sender,
     assistantId: row.assistantId ?? undefined,
+    model: row.model ?? undefined,
+    reasoningEffort: row.reasoningEffort ?? undefined,
     content: row.content,
     createdAt: row.createdAt,
+    error: row.isError || undefined,
   };
 }
 
@@ -170,7 +229,7 @@ export function describeError(err: unknown): string {
       case "cancelled":
         return "The request was cancelled.";
       case "nonZeroExit":
-        return `GPT exited with an error${tagged.stderr ? `: ${tagged.stderr}` : ""}.`;
+        return describeCliExit("GPT", tagged.stderr);
       case "outputParseFailure":
         return "GPT returned output that could not be read.";
       case "notFound":

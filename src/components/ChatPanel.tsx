@@ -1,4 +1,6 @@
 import {
+  type Dispatch,
+  type SetStateAction,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -25,12 +27,22 @@ import {
 } from "../chat/history";
 import { useChatStatus } from "../chat/useChatStatus";
 import { useSessionList } from "../chat/useSessionList";
-import { ASSISTANT_MODEL, assistantModelLabel } from "../chat/config";
+import {
+  ALL_PROVIDER_IDS,
+  DEFAULT_ROUTE,
+  describeProviderError,
+  messageLabel,
+  routeTargets,
+  type ActiveRoute,
+} from "../chat/providers";
+import type { AssistantId } from "../chat/generated/AssistantId";
+import { AiSwitcher } from "./AiSwitcher";
 import { ChatHistory } from "./ChatHistory";
 import { Dialog } from "./Dialog";
 import { RenameDialog } from "./RenameDialog";
 
 const COMPOSER_INPUT_MIN_HEIGHT = 32;
+type RoutesBySession = Record<string, ActiveRoute>;
 
 /** Stable id for an optimistic (not-yet-persisted) message row. */
 function newId(): string {
@@ -46,16 +58,40 @@ interface ActiveSession {
   title: string | null;
 }
 
+interface PendingTurn {
+  userMessage: ChatMessage;
+  slots: ChatMessage[];
+  knownMessageIds: Set<string>;
+}
+
+function mergePendingTurn(history: ChatMessage[], pending?: PendingTurn): ChatMessage[] {
+  if (!pending) return history;
+  const last = history.at(-1);
+  const userAlreadyPersisted =
+    last?.sender === "user" &&
+    last.content === pending.userMessage.content &&
+    !pending.knownMessageIds.has(last.id);
+  return [
+    ...history,
+    ...(userAlreadyPersisted ? [] : [pending.userMessage]),
+    ...pending.slots,
+  ];
+}
+
 /**
- * Chat logic hook (SP-006, SP-048–051). Owns the transcript reducer plus the
- * session list and the active session, and wires every chat operation through
- * the injected [`ChatApi`]: prompt submission (persist user turn, run the
- * blocking Codex call, persist + display the reply, record the native resume
- * id, and title an untitled chat from its first prompt), session switching,
- * new/rename/delete, and clear. The local store is the display source of truth,
- * so the transcript and list are (re)loaded from it.
+ * Chat logic hook (SP-006, SP-048–051, SP-017). Owns the transcript reducer plus
+ * the session list and the active session, and wires every chat operation through
+ * the injected [`ChatApi`]: prompt submission via the multi-provider route
+ * (`run_route` persists the prompt and each provider's reply server-side and
+ * returns one outcome per target; the client shows an optimistic user message
+ * plus one labeled pending slot per provider, then swaps in replies or inline
+ * error cards), titling an untitled chat from its first prompt, session
+ * switching, new/rename/delete, and clear. Multi-provider continuity is carried
+ * by app-owned transcript replay (§6), not native session resume. The local
+ * store is the display source of truth, so the transcript and list are
+ * (re)loaded from it.
  */
-export function useChat(api: ChatApi) {
+export function useChat(api: ChatApi, enabled = true) {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   // Session list (reactive + ref read) and per-session rail status (pending /
@@ -75,9 +111,19 @@ export function useChat(api: ChatApi) {
   // Ref mirrors the active session so async callbacks read the current one
   // without a stale closure.
   const activeRef = useRef<ActiveSession | null>(null);
+  // Pending turns are session-scoped UI state. Keep their optimistic prompt and
+  // provider slots outside the active transcript so switching chats can
+  // reconstruct the complete in-flight turn.
+  const pendingTurnsRef = useRef<Map<string, PendingTurn>>(new Map());
+  const knownMessageIdsRef = useRef<Map<string, Set<string>>>(new Map());
+  // A session history read may finish after a later selection. Only the latest
+  // selection intent may activate a chat.
+  const selectionRequestRef = useRef(0);
+  const selectionTargetRef = useRef<string | null>(null);
 
   const setActive = useCallback(
     (session: PersistedSession, messages: ChatMessage[]) => {
+      knownMessageIdsRef.current.set(session.id, new Set(messages.map((message) => message.id)));
       activeRef.current = {
         id: session.id,
         codexSessionId: session.codexSessionId,
@@ -88,7 +134,7 @@ export function useChat(api: ChatApi) {
       // switching back to it shows "Thinking…" instead of an idle transcript.
       dispatch({
         type: "loaded",
-        messages,
+        messages: mergePendingTurn(messages, pendingTurnsRef.current.get(session.id)),
         pending: isPending(session.id),
       });
     },
@@ -96,6 +142,7 @@ export function useChat(api: ChatApi) {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     (async () => {
       try {
@@ -113,10 +160,10 @@ export function useChat(api: ChatApi) {
     return () => {
       cancelled = true;
     };
-  }, [api, applySessions, setActive]);
+  }, [api, applySessions, enabled, setActive]);
 
   const submit = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, route: ActiveRoute) => {
       const trimmed = prompt.trim();
       const session = activeRef.current;
       if (!trimmed || !session) return;
@@ -124,6 +171,7 @@ export function useChat(api: ChatApi) {
       // which the user may switch to another chat; the late reply must land in
       // (and only re-render) its originating chat, never whichever is now active.
       const originId = session.id;
+      const targets = routeTargets(route);
 
       const userMessage: ChatMessage = {
         id: newId(),
@@ -131,19 +179,30 @@ export function useChat(api: ChatApi) {
         content: trimmed,
         createdAt: Date.now(),
       };
-      // Show the user's message immediately and enter the pending state, and
-      // mark this chat in-flight so the rail shows a spinner (SP-056).
-      dispatch({ type: "submit", message: userMessage });
+      // One labeled pending slot per target provider so the user sees each
+      // provider "loading" until the route settles (SP-017).
+      const slots: ChatMessage[] = targets.map((provider) => ({
+        id: `pending-${provider}-${newId()}`,
+        sender: "assistant",
+        assistantId: provider,
+        content: "",
+        createdAt: Date.now(),
+        pending: true,
+      }));
+      // Show the user's message + provider slots immediately, enter the pending
+      // state, and mark this chat in-flight so the rail shows a spinner (SP-056).
+      dispatch({ type: "routeSubmit", userMessage, slots });
+      pendingTurnsRef.current.set(originId, {
+        userMessage,
+        slots,
+        knownMessageIds: new Set(knownMessageIdsRef.current.get(originId) ?? []),
+      });
       markPending(originId);
 
       try {
-        // Persist the user turn first so it survives a failed/late reply.
-        await api.appendMessage({
-          sessionId: session.id,
-          sender: "user",
-          content: trimmed,
-        });
-        // Name a still-untitled chat from its first prompt (SP-049).
+        // Name a still-untitled chat from its first prompt (SP-049). `run_route`
+        // persists the user prompt and each successful reply server-side, so the
+        // client no longer appends them itself.
         if (!session.title || !session.title.trim()) {
           const generated = generateTitle(trimmed);
           if (generated) {
@@ -151,38 +210,51 @@ export function useChat(api: ChatApi) {
             session.title = updated.title;
           }
         }
-        const result = await api.runAdapter({
-          assistant: "codex",
-          prompt: trimmed,
-          model: ASSISTANT_MODEL.id,
-          reasoningEffort: ASSISTANT_MODEL.effort,
-          resumeSessionId: session.codexSessionId ?? undefined,
-        });
-        const persisted = await api.appendMessage({
+        const result = await api.runRoute({
           sessionId: session.id,
-          sender: "assistant",
-          assistantId: "codex",
-          content: result.assistantText,
-          rawJson: result.rawJson,
+          route,
+          prompt: trimmed,
+          activeProviders: ALL_PROVIDER_IDS as AssistantId[],
         });
+        knownMessageIdsRef.current.set(
+          originId,
+          new Set([
+            ...(knownMessageIdsRef.current.get(originId) ?? []),
+            result.userMessage.id,
+            ...result.outcomes.flatMap((outcome) =>
+              outcome.message ? [outcome.message.id] : [],
+            ),
+          ]),
+        );
         // This turn is no longer in flight.
+        pendingTurnsRef.current.delete(originId);
         clearPending(originId);
+        // Map each provider outcome to a transcript entry: a persisted reply, or
+        // an inline error card under that provider's label.
+        const results: ChatMessage[] = result.outcomes.map((outcome) =>
+          outcome.message
+            ? toChatMessage(outcome.message)
+            : {
+                id: `error-${outcome.provider}-${newId()}`,
+                sender: "assistant",
+                assistantId: outcome.provider,
+                content: outcome.error
+                  ? describeProviderError(outcome.error, outcome.provider)
+                  : "The request failed.",
+                createdAt: Date.now(),
+                error: true,
+              },
+        );
         if (activeRef.current?.id === originId) {
-          // Still viewing this chat — show the reply.
-          dispatch({ type: "success", message: toChatMessage(persisted) });
+          // Still viewing this chat — swap the pending slots for their results.
+          dispatch({ type: "routeSettled", results });
         } else if (getSessions().some((s) => s.id === originId)) {
           // Replied in the background — flag it unread until the user opens it.
           // Skip if the chat was deleted meanwhile, so no phantom dot lingers.
           markUnread(originId);
         }
-
-        // Capture the native Codex session for future resume (§6).
-        const native = result.nativeSessionId;
-        if (native && session.codexSessionId !== native) {
-          session.codexSessionId = native;
-          await api.updateCodexSessionId(session.id, native);
-        }
       } catch (err) {
+        pendingTurnsRef.current.delete(originId);
         clearPending(originId);
         // Same guard: don't surface this turn's error in a chat the user moved to.
         if (activeRef.current?.id === originId) {
@@ -202,26 +274,41 @@ export function useChat(api: ChatApi) {
 
   const selectSession = useCallback(
     async (id: string) => {
-      if (activeRef.current?.id === id) return;
+      const request = ++selectionRequestRef.current;
+      selectionTargetRef.current = id;
+      if (activeRef.current?.id === id) {
+        selectionTargetRef.current = null;
+        return;
+      }
       const session = getSessions().find((s) => s.id === id);
-      if (!session) return;
-      // Opening a chat clears its unread flag (SP-056).
-      clearUnread(id);
+      if (!session) {
+        selectionTargetRef.current = null;
+        return;
+      }
       try {
         const history = await api.readHistory(id);
+        if (request !== selectionRequestRef.current) return;
+        selectionTargetRef.current = null;
+        // Opening a chat clears its unread flag (SP-056).
+        clearUnread(id);
         setActive(session, history.map(toChatMessage));
       } catch (err) {
-        dispatch({ type: "error", message: describeError(err) });
+        if (request === selectionRequestRef.current) {
+          selectionTargetRef.current = null;
+          dispatch({ type: "error", message: describeError(err) });
+        }
       }
     },
     [api, setActive, getSessions, clearUnread],
   );
 
   const newChat = useCallback(async () => {
+    const request = ++selectionRequestRef.current;
+    selectionTargetRef.current = null;
     try {
       const created = await api.createSession();
       applySessions([...getSessions(), created]);
-      setActive(created, []);
+      if (request === selectionRequestRef.current) setActive(created, []);
     } catch (err) {
       dispatch({ type: "error", message: describeError(err) });
     }
@@ -243,12 +330,19 @@ export function useChat(api: ChatApi) {
   const deleteSession = useCallback(
     async (id: string) => {
       const wasActive = activeRef.current?.id === id;
+      let activationRequest: number | null = null;
+      if (wasActive || selectionTargetRef.current === id) {
+        activationRequest = ++selectionRequestRef.current;
+        selectionTargetRef.current = null;
+      }
       const nextId = pickNextActiveSession(getSessions(), id);
       try {
         await api.deleteSession(id);
         // The chat is gone — drop any in-flight/unread status it held so the
         // sets don't leak ids for a session that no longer exists.
         forget(id);
+        pendingTurnsRef.current.delete(id);
+        knownMessageIdsRef.current.delete(id);
         const remaining = getSessions().filter((s) => s.id !== id);
         if (!wasActive) {
           applySessions(remaining);
@@ -258,12 +352,14 @@ export function useChat(api: ChatApi) {
           const next = remaining.find((s) => s.id === nextId)!;
           applySessions(remaining);
           const history = await api.readHistory(nextId);
-          setActive(next, history.map(toChatMessage));
+          if (activationRequest === selectionRequestRef.current) {
+            setActive(next, history.map(toChatMessage));
+          }
         } else {
           // No chats remain — start a fresh empty one (session model).
           const created = await api.createSession();
           applySessions([created]);
-          setActive(created, []);
+          if (activationRequest === selectionRequestRef.current) setActive(created, []);
         }
       } catch (err) {
         dispatch({ type: "error", message: describeError(err) });
@@ -281,12 +377,59 @@ export function useChat(api: ChatApi) {
       session.title = cleared.title;
       // A cleared chat is emptied, so it carries no in-flight/unread status.
       forget(cleared.id);
+      pendingTurnsRef.current.delete(cleared.id);
+      knownMessageIdsRef.current.set(cleared.id, new Set());
       dispatch({ type: "loaded", messages: [] });
       applySessions(getSessions().map((s) => (s.id === cleared.id ? cleared : s)));
     } catch (err) {
       dispatch({ type: "error", message: describeError(err) });
     }
   }, [api, applySessions, getSessions, forget]);
+
+  const retry = useCallback(
+    async (errorMessageId: string, provider: string, userContent: string) => {
+      const session = activeRef.current;
+      if (!session) return;
+      const originId = session.id;
+
+      const pendingSlot: ChatMessage = {
+        id: `pending-retry-${newId()}`,
+        sender: "assistant",
+        assistantId: provider,
+        content: "",
+        createdAt: Date.now(),
+        pending: true,
+      };
+      if (activeRef.current?.id === originId) {
+        dispatch({ type: "retryReplace", errorMessageId, slot: pendingSlot });
+      }
+
+      try {
+        const outcome = await api.retryRoute({
+          sessionId: originId,
+          errorMessageId,
+          provider: provider as AssistantId,
+          prompt: userContent,
+        });
+        if (activeRef.current?.id !== originId) return;
+        const result: ChatMessage = outcome.message
+          ? toChatMessage(outcome.message)
+          : {
+              id: `error-retry-${newId()}`,
+              sender: "assistant",
+              assistantId: provider,
+              content: "The retry request failed.",
+              createdAt: Date.now(),
+              error: true,
+            };
+        dispatch({ type: "routeSettled", results: [result] });
+      } catch (err) {
+        if (activeRef.current?.id !== originId) return;
+        dispatch({ type: "error", message: describeError(err) });
+      }
+    },
+    [api, dispatch],
+  );
 
   return {
     state,
@@ -300,23 +443,49 @@ export function useChat(api: ChatApi) {
     renameSession,
     deleteSession,
     clearActive,
+    retry,
   };
 }
 
-export interface ChatPanelProps {
+interface ChatPanelBaseProps {
   /** Backend seam; defaults to the no-IPC stub so shell tests stay offline. */
   api?: ChatApi;
+  /** Optional controller retained by a shell that may unmount the chat panel. */
+  chat?: ChatController;
 }
 
+interface RetainedRouteProps {
+  /** Route state retained by a shell that may unmount the chat panel. */
+  routesBySession: RoutesBySession;
+  /** Updates shell-retained route state. */
+  setRoutesBySession: Dispatch<SetStateAction<RoutesBySession>>;
+}
+
+interface LocalRouteProps {
+  routesBySession?: never;
+  setRoutesBySession?: never;
+}
+
+export type ChatPanelProps = ChatPanelBaseProps & (RetainedRouteProps | LocalRouteProps);
+export type ChatController = ReturnType<typeof useChat>;
+
 /**
- * The expanded panel's chat body (SP-006, SP-048–051): a collapsible history
- * rail, a toolbar (rail toggle + active chat title + Clear), an ordered
- * transcript with safe Markdown rendering for assistant replies, a visible
- * blocking ("thinking") state, an error banner that keeps the user's message,
- * and the prompt composer. Each assistant reply is badged with the model and
- * reasoning effort (e.g. "GPT-5.5-medium"); user messages are unlabeled.
+ * The expanded panel's chat body (SP-006, SP-048–051, SP-017): a collapsible
+ * history rail, a toolbar (rail toggle + active chat title + Clear), an ordered
+ * transcript with safe Markdown rendering for assistant replies, per-provider
+ * blocking ("thinking") slots, inline error cards for failed provider slots
+ * (plus a residual error banner for infrastructure/storage failures from the
+ * catch path), the prompt composer, and the AI switcher beside Send for choosing
+ * a single provider or All. Each settled assistant reply keeps its persisted
+ * model+effort badge; user messages are unlabeled.
  */
-export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
+export function ChatPanel({
+  api = inertChatApi,
+  chat: retainedChat,
+  routesBySession: retainedRoutesBySession,
+  setRoutesBySession: setRetainedRoutesBySession,
+}: ChatPanelProps) {
+  const localChat = useChat(api, !retainedChat);
   const {
     state,
     sessions,
@@ -329,8 +498,12 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
     renameSession,
     deleteSession,
     clearActive,
-  } = useChat(api);
+    retry,
+  } = retainedChat ?? localChat;
   const [draft, setDraft] = useState("");
+  const [localRoutesBySession, setLocalRoutesBySession] = useState<RoutesBySession>({});
+  const routesBySession = retainedRoutesBySession ?? localRoutesBySession;
+  const setRoutesBySession = setRetainedRoutesBySession ?? setLocalRoutesBySession;
   const [railOpen, setRailOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [renamingActive, setRenamingActive] = useState(false);
@@ -368,11 +541,68 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
   const activeTitle = activeSession?.title?.trim() || "New chat";
+  const route = activeSessionId
+    ? (routesBySession[activeSessionId] ?? DEFAULT_ROUTE)
+    : DEFAULT_ROUTE;
   const canClear = !isPending && state.messages.length > 0;
   // A background reply landed in some non-active chat. Surface it on the toggle
   // while the rail is collapsed, so the in-row dot isn't the only indicator.
   const hasUnread = unreadIds.size > 0;
   const showUnreadBadge = !railOpen && hasUnread;
+
+  // Provider selection belongs to a chat, not the panel. Chats without an
+  // explicit selection (including newly created chats) use the GPT default.
+  const setActiveRoute = useCallback(
+    (next: ActiveRoute) => {
+      if (!activeSessionId) return;
+      setRoutesBySession((current) => ({ ...current, [activeSessionId]: next }));
+    },
+    [activeSessionId, setRoutesBySession],
+  );
+
+  // Retry button: only the last error message in a single-provider chat where
+  // the currently selected AI matches the error's provider gets a Retry button.
+  const retryErrorId = useMemo(() => {
+    if (route.kind !== "single") return null;
+    const lastError = [...state.messages].reverse().find((m) => m.error);
+    if (!lastError || lastError.assistantId !== route.provider) return null;
+    return lastError.id;
+  }, [route, state.messages]);
+
+  const handleRetry = useCallback(
+    (errorMessageId: string, provider: string) => {
+      // Find the user message immediately before the error.
+      const idx = state.messages.findIndex((m) => m.id === errorMessageId);
+      if (idx === -1) return;
+      let userContent: string | undefined;
+      for (let i = idx - 1; i >= 0; i--) {
+        if (state.messages[i].sender === "user") {
+          userContent = state.messages[i].content;
+          break;
+        }
+      }
+      if (!userContent) return;
+      void retry(errorMessageId, provider, userContent);
+    },
+    [state.messages, retry],
+  );
+
+  // Drop retained UI state after a chat is deleted.
+  useEffect(() => {
+    // A remounted panel starts with an empty session list while history loads.
+    // Do not mistake that transient state for every chat having been deleted.
+    if (sessions.length === 0) return;
+    const sessionIds = new Set(sessions.map((session) => session.id));
+    if (Object.keys(routesBySession).every((sessionId) => sessionIds.has(sessionId)))
+      return;
+    setRoutesBySession(
+      Object.fromEntries(
+        Object.entries(routesBySession).filter(([sessionId]) =>
+          sessionIds.has(sessionId),
+        ),
+      ),
+    );
+  }, [routesBySession, sessions, setRoutesBySession]);
 
   // Keep the latest turn in view as the transcript grows. Guarded because
   // `scrollIntoView` is not implemented in the jsdom test environment.
@@ -406,7 +636,7 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (isPending || !draft.trim()) return;
-    void submit(draft);
+    void submit(draft, route);
     setDraft("");
   };
 
@@ -415,7 +645,7 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!isPending && draft.trim()) {
-        void submit(draft);
+        void submit(draft, route);
         setDraft("");
       }
     }
@@ -482,13 +712,81 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
         </div>
 
         <div className="conversation" aria-live="polite">
-          {state.messages.map((message) =>
-            message.sender === "assistant" ? (
+          {state.messages.map((message) => {
+            if (message.sender !== "assistant") {
+              // User messages carry only a timestamp; bubble alignment marks the
+              // sender.
+              return (
+                <article key={message.id} className="message message--user">
+                  <div className="message__meta">
+                    <time className="message__time">
+                      {formatMessageTimestamp(message.createdAt, now)}
+                    </time>
+                  </div>
+                  <p>{message.content}</p>
+                </article>
+              );
+            }
+            const label = messageLabel(
+              message.assistantId,
+              message.model,
+              message.reasoningEffort,
+            );
+            // A per-provider slot still awaiting its reply (SP-017).
+            if (message.pending) {
+              return (
+                <article
+                  key={message.id}
+                  className="message message--assistant message--thinking"
+                  data-testid="thinking"
+                  data-provider={message.assistantId}
+                >
+                  <span className="message__label">{label}</span>
+                  <p className="message__thinking" role="status">
+                    Thinking…
+                  </p>
+                </article>
+              );
+            }
+            // A failed provider slot renders as an inline error card in-thread.
+            if (message.error) {
+              const showRetry = retryErrorId === message.id;
+              return (
+                <article
+                  key={message.id}
+                  className="message message--assistant message--error"
+                  data-testid="provider-error"
+                  data-provider={message.assistantId}
+                >
+                  <div className="message__meta">
+                    <span className="message__label">{label}</span>
+                    <time className="message__time">
+                      {formatMessageTimestamp(message.createdAt, now)}
+                    </time>
+                  </div>
+                  <p className="message__error" role="alert">
+                    {message.content}
+                  </p>
+                  {showRetry && (
+                    <button
+                      type="button"
+                      className="message__retry"
+                      onClick={() =>
+                        void handleRetry(message.id, message.assistantId ?? "")
+                      }
+                    >
+                      Retry
+                    </button>
+                  )}
+                </article>
+              );
+            }
+            return (
               <article key={message.id} className="message message--assistant">
-                {/* One-row meta: model+effort badge then the timestamp. Kept on a
-                    single line (nowrap) so a narrow panel never wraps it. */}
+                {/* One-row meta: provider/model label then the timestamp. Kept on
+                    a single line (nowrap) so a narrow panel never wraps it. */}
                 <div className="message__meta">
-                  <span className="message__label">{assistantModelLabel}</span>
+                  <span className="message__label">{label}</span>
                   <time className="message__time">
                     {formatMessageTimestamp(message.createdAt, now)}
                   </time>
@@ -502,25 +800,15 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
                   </ReactMarkdown>
                 </div>
               </article>
-            ) : (
-              // User messages carry only a timestamp; bubble alignment marks the
-              // sender.
-              <article key={message.id} className="message message--user">
-                <div className="message__meta">
-                  <time className="message__time">
-                    {formatMessageTimestamp(message.createdAt, now)}
-                  </time>
-                </div>
-                <p>{message.content}</p>
-              </article>
-            ),
-          )}
-          {isPending && (
+            );
+          })}
+          {/* Defensive fallback for a pending session without recoverable
+              provider-slot metadata (for example, state from an older client). */}
+          {isPending && !state.messages.some((m) => m.pending) && (
             <article
               className="message message--assistant message--thinking"
               data-testid="thinking"
             >
-              <span className="message__label">{assistantModelLabel}</span>
               <p className="message__thinking" role="status">
                 Thinking…
               </p>
@@ -544,6 +832,7 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
           />
+          <AiSwitcher route={route} disabled={isPending} onSelect={setActiveRoute} />
           <button
             type="submit"
             className="composer__send"

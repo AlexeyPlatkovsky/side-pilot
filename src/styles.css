@@ -440,6 +440,20 @@ body {
   font-style: italic;
 }
 
+/* A failed provider slot rendered inline in the thread (SP-017): the assistant
+   bubble takes the danger border/tint so a partial All-route failure reads as an
+   error without removing it from the conversation flow. */
+.message--error {
+  border-color: var(--color-danger);
+  background: var(--surface-danger);
+}
+
+.message__error {
+  margin: var(--space-1) 0 0;
+  color: var(--color-danger);
+  font-size: var(--font-sm);
+}
+
 /* Failure banner — keeps the transcript intact while surfacing the error. */
 .conversation__error {
   margin: 0;
@@ -523,6 +537,125 @@ body {
 .composer__send:disabled {
   cursor: default;
   opacity: 0.76;
+}
+
+/* --- AI switcher (SP-017) -------------------------------------------------- */
+/* The provider switcher sits between the input and Send. `position: relative`
+   anchors the picker, which opens upward above the composer. */
+.ai-switcher {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ai-switcher__toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.ai-switcher__toggle:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ai-switcher__toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Vertical picker, opened upward so it never spills below the pinned composer.
+   Anchored to the switcher's right edge (the switcher sits near the panel's
+   right edge, beside Send) so the menu opens inward and never clips the panel. */
+.ai-switcher__menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-1));
+  right: 0;
+  left: auto;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 132px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-popup);
+}
+
+.ai-switcher__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-switcher__option:hover {
+  background: var(--overlay-hover);
+}
+
+.ai-switcher__option:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+/* The currently active route has a distinct background (Scenario 2). */
+.ai-switcher__option--active {
+  background: var(--tint-honey);
+  font-weight: var(--font-weight-bold);
+}
+
+.ai-switcher__option-label {
+  letter-spacing: 0;
+}
+
+/* Provider logo used in the toggle face and picker rows. Image-based icons
+   use `provider-icon--logo`; the All glyph keeps the 2×2 dot grid. */
+.provider-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+}
+
+.provider-icon--logo {
+  object-fit: contain;
+}
+
+/* The All icon: a 2×2 grid of dots suggesting every provider at once. */
+.provider-icon--all {
+  background: var(--ink);
+  border-radius: var(--radius-pill);
+}
+
+.provider-icon__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  width: 14px;
+  height: 14px;
+}
+
+.provider-icon__grid i {
+  border-radius: 1px;
+  background: var(--color-on-accent);
 }
 
 /* =============================================================================

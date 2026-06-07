@@ -88,6 +88,17 @@ mod tests {
         ));
         let pid_path = pid_file.to_string_lossy().to_string();
 
+        // The child backgrounds a long `sleep` (the descendant we expect the
+        // group kill to reach) and records its pid before `wait`ing on it.
+        //
+        // The timeout is deliberately generous (2s) rather than a tight 100ms:
+        // under heavy parallel-test load the shell's fork/exec can take well over
+        // 100ms, and if the timeout fired *before* the child wrote the pid file,
+        // the descendant would be killed before we could capture its pid — the
+        // race behind this test's historical flakiness. The pid write itself is
+        // sub-millisecond, so 2s clears that margin by a wide factor while the
+        // timeout still fires (the child `wait`s on a 10s sleep), keeping this a
+        // genuine timeout-terminates-the-group test.
         let outcome = SystemCommandRunner
             .run(CommandSpec {
                 program: PathBuf::from("/bin/sh"),
@@ -100,7 +111,7 @@ mod tests {
                 cwd: std::env::temp_dir(),
                 env: Vec::new(),
                 stdin: None,
-                timeout: Duration::from_millis(100),
+                timeout: Duration::from_secs(2),
                 cancel: CancellationToken::new(),
             })
             .await
@@ -108,10 +119,13 @@ mod tests {
 
         assert_eq!(outcome, RunOutcome::TimedOut);
 
+        // The pid was written long before the 2s timeout fired, so this resolves
+        // immediately. Then poll for the descendant to disappear instead of
+        // sleeping a fixed window: SIGTERM→SIGKILL terminates it promptly, but the
+        // exact moment varies with load, so wait deterministically for it to die.
         let child_pid = read_pid_file(&pid_file).await;
-        tokio::time::sleep(Duration::from_millis(200)).await;
         assert!(
-            !process_exists(child_pid),
+            wait_until_gone(child_pid).await,
             "descendant process {child_pid} survived process-group termination"
         );
 
@@ -154,6 +168,20 @@ mod tests {
     #[cfg(unix)]
     fn process_exists(pid: libc::pid_t) -> bool {
         unsafe { libc::kill(pid, 0) == 0 }
+    }
+
+    /// Poll (up to ~2s) for `pid` to be gone. Returns as soon as it disappears,
+    /// so a healthy group kill resolves fast while a slow teardown still has room
+    /// — no fixed sleep, no race with scheduling under load.
+    #[cfg(unix)]
+    async fn wait_until_gone(pid: libc::pid_t) -> bool {
+        for _ in 0..100 {
+            if !process_exists(pid) {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        !process_exists(pid)
     }
 }
 

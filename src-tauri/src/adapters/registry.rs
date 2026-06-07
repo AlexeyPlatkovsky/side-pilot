@@ -2,9 +2,9 @@
 //!
 //! The [`AdapterRegistry`] maps an [`AssistantId`] to its registered
 //! [`CliAdapter`] and dispatches an [`AdapterRequest`] to the right one. This is
-//! the "thin routing seam" of the MVP (`docs/idea.md` §MVP Scope): only Codex is
-//! registered today, but the seam is shaped to take Claude/Gemini later without
-//! changing the `run_adapter` command.
+//! the "thin routing seam" (`docs/idea.md` §MVP Scope): Codex and Claude are
+//! registered today, and the seam is shaped to take Gemini next without changing
+//! the `run_adapter` command.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,10 +12,12 @@ use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 use super::binary::SystemBinaryResolver;
+use super::claude::ClaudeAdapter;
 use super::codex::CodexAdapter;
 use super::contract::{AdapterRequest, AdapterResult};
 use super::environment::SystemEnvironmentProvider;
 use super::error::AdapterError;
+use super::gemini::GeminiAdapter;
 use super::process::SystemCommandRunner;
 use super::{AssistantId, CliAdapter};
 
@@ -33,14 +35,26 @@ impl AdapterRegistry {
         }
     }
 
-    /// The production registry: a Codex adapter backed by the real binary
-    /// resolver and command runner. The only registered adapter in the MVP.
+    /// The production registry, backed by the real binary resolver, command
+    /// runner, and environment provider. Codex, Claude, and Gemini are all
+    /// registered; the resolver and env provider cache per [`AssistantId`], so a
+    /// single instance is shared across adapters.
     pub fn with_default_adapters() -> Self {
         let resolver = Arc::new(SystemBinaryResolver::new());
         let runner = Arc::new(SystemCommandRunner);
         let env_provider = Arc::new(SystemEnvironmentProvider::new());
         let mut registry = Self::new();
-        registry.register(Arc::new(CodexAdapter::new(resolver, runner, env_provider)));
+        registry.register(Arc::new(CodexAdapter::new(
+            resolver.clone(),
+            runner.clone(),
+            env_provider.clone(),
+        )));
+        registry.register(Arc::new(ClaudeAdapter::new(
+            resolver.clone(),
+            runner.clone(),
+            env_provider.clone(),
+        )));
+        registry.register(Arc::new(GeminiAdapter::new(resolver, runner, env_provider)));
         registry
     }
 
@@ -54,7 +68,7 @@ impl AdapterRegistry {
     /// An assistant with no registered adapter is surfaced as
     /// [`AdapterError::BinaryNotFound`]: from the UI's perspective an assistant
     /// the app cannot drive is indistinguishable from one whose binary is
-    /// unavailable. (The MVP only registers Codex.)
+    /// unavailable. (Gemini is not yet registered.)
     pub async fn run(
         &self,
         request: AdapterRequest,
@@ -123,6 +137,14 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(result.assistant_text, "routed");
+    }
+
+    #[test]
+    fn default_registry_registers_all_three_assistants() {
+        let registry = AdapterRegistry::with_default_adapters();
+        assert!(registry.adapters.contains_key(&AssistantId::Codex));
+        assert!(registry.adapters.contains_key(&AssistantId::Claude));
+        assert!(registry.adapters.contains_key(&AssistantId::Gemini));
     }
 
     #[tokio::test]
