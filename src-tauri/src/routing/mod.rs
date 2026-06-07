@@ -393,6 +393,15 @@ pub async fn execute_route_with_preferences(
     })
 }
 
+/// A request to retry a single provider after its slot failed in a prior route.
+pub struct RetryRequest {
+    pub session_id: String,
+    pub error_message_id: String,
+    pub provider: AssistantId,
+    pub prompt: String,
+    pub cancel: CancellationToken,
+}
+
 /// Retry a single-provider prompt after a failure. Deletes the old error
 /// message from history, dispatches the prompt to the same provider, and returns
 /// the outcome. On success the adapter result is persisted and returned; on
@@ -401,21 +410,17 @@ pub async fn retry_result(
     store: &Store,
     registry: &AdapterRegistry,
     preferences: &ProviderPreferences,
-    session_id: String,
-    error_message_id: String,
-    provider: AssistantId,
-    prompt: String,
-    cancel: CancellationToken,
+    request: RetryRequest,
 ) -> Result<ProviderRunOutcome, StorageError> {
-    store.delete_message(&error_message_id)?;
+    store.delete_message(&request.error_message_id)?;
 
-    let preference = preferences.for_provider(provider).clone();
-    let request = AdapterRequest {
-        assistant: provider,
-        prompt,
+    let preference = preferences.for_provider(request.provider).clone();
+    let adapter_request = AdapterRequest {
+        assistant: request.provider,
+        prompt: request.prompt,
         working_directory: None,
         model: Some(preference.model.clone()),
-        reasoning_effort: if provider == AssistantId::Gemini {
+        reasoning_effort: if request.provider == AssistantId::Gemini {
             None
         } else {
             preference.reasoning_argument()
@@ -426,38 +431,38 @@ pub async fn retry_result(
         run_id: None,
     };
 
-    match registry.run(request, cancel).await {
+    match registry.run(adapter_request, request.cancel).await {
         Ok(adapter_result) => {
             if let Some(native) = &adapter_result.native_session_id {
-                store.set_native_session_id(&session_id, provider.as_str(), native)?;
+                store.set_native_session_id(&request.session_id, request.provider.as_str(), native)?;
             }
             let message = store.append_message(NewMessage {
-                session_id,
+                session_id: request.session_id,
                 sender: Sender::Assistant,
-                assistant_id: Some(provider.as_str().to_string()),
+                assistant_id: Some(request.provider.as_str().to_string()),
                 model: Some(preference.model.clone()),
                 reasoning_effort: Some(preference.reasoning.clone()),
                 content: adapter_result.assistant_text,
                 raw_json: Some(adapter_result.raw_json),
             })?;
             Ok(ProviderRunOutcome {
-                provider,
+                provider: request.provider,
                 message: Some(message),
                 error: None,
             })
         }
         Err(error) => {
             let message = store.append_error_message(NewMessage {
-                session_id,
+                session_id: request.session_id,
                 sender: Sender::Assistant,
-                assistant_id: Some(provider.as_str().to_string()),
+                assistant_id: Some(request.provider.as_str().to_string()),
                 model: Some(preference.model.clone()),
                 reasoning_effort: Some(preference.reasoning.clone()),
-                content: provider_error_message(provider, &error),
+                content: provider_error_message(request.provider, &error),
                 raw_json: serde_json::to_string(&error).ok(),
             })?;
             Ok(ProviderRunOutcome {
-                provider,
+                provider: request.provider,
                 message: Some(message),
                 error: Some(error),
             })
@@ -1479,11 +1484,13 @@ mod tests {
             &store,
             &registry,
             &ProviderPreferences::default(),
-            session.id.clone(),
-            error_msg.id,
-            AssistantId::Gemini,
-            "retried prompt".to_string(),
-            CancellationToken::new(),
+            RetryRequest {
+                session_id: session.id.clone(),
+                error_message_id: error_msg.id,
+                provider: AssistantId::Gemini,
+                prompt: "retried prompt".to_string(),
+                cancel: CancellationToken::new(),
+            },
         )
         .await
         .unwrap();
@@ -1526,11 +1533,13 @@ mod tests {
             &store,
             &registry,
             &ProviderPreferences::default(),
-            session.id.clone(),
-            error_msg.id,
-            AssistantId::Gemini,
-            "retried prompt".to_string(),
-            CancellationToken::new(),
+            RetryRequest {
+                session_id: session.id.clone(),
+                error_message_id: error_msg.id,
+                provider: AssistantId::Gemini,
+                prompt: "retried prompt".to_string(),
+                cancel: CancellationToken::new(),
+            },
         )
         .await
         .unwrap();

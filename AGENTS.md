@@ -30,7 +30,9 @@ Proceed directly. State the classification.
 
 When unsure, treat as non-trivial.
 
-When a session begins as discussion and the user signals readiness to proceed ("go ahead", "do it", "implement it", "fix it", or equivalent), this classification gate fires again. That signal is not permission to skip it.
+Any user request to create, modify, or delete a file is an implicit "proceed" signal — classify it before acting, regardless of phrasing. A direct imperative ("modify ci.yml", "fix the test", "update the docs") carries the same obligation as "go ahead" or "implement it."
+
+After a `Skill: task-complete` closure, every subsequent action request in the same session re-triggers the classification gate. A prior closure does not authorize skipping classification for the next request.
 
 Requirements discovery, scoping, feature refinement, and re-scoping an existing Beads item are non-trivial tasks in their own right. Load the manager immediately for this work — do not wait for an implementation signal.
 
@@ -38,15 +40,7 @@ Requirements discovery, scoping, feature refinement, and re-scoping an existing 
 
 ## Beads Planning Gate
 
-For applicable non-trivial work (after the classification gate has loaded the manager), the manager must route through `.claude/skills/work-with-bead/SKILL.md` before implementation starts.
-
-The Beads gate applies to non-trivial product or engineering work unless the task is one of these exempt categories:
-- documentation-only work
-- AI staff work, including instruction artifacts, skills, pipelines, agents, manager routing, root contracts, and AI-tool governance
-- bug triage
-- bug fixes
-
-**Important: exemption from the Beads gate does not exempt a task from the classification gate above.** All non-trivial work — including documentation-only work — must still stop, load MANAGER.md, and wait for the manager's routing plan. The manager will handle Beads-exempt tasks appropriately.
+For applicable non-trivial work, the manager routes through `.claude/skills/work-with-bead/SKILL.md` before implementation starts. The manager owns the exempt categories list.
 
 When the Beads gate applies:
 - check whether a relevant Beads item already exists
@@ -60,44 +54,25 @@ When the Beads gate applies:
 
 These apply to all non-trivial work and may not be skipped:
 
-- **TDD is required** for all non-trivial logic (CLI adapters, routing layer, session model, local storage). Write tests before writing implementation code: Red → Green → Refactor. Front-end: Vitest + React Testing Library; Rust core: cargo-nextest (`#[tokio::test]`, `mockall`). A feature is not done until tests pass.
-- **Interaction contract first (UI):** before implementing a UI surface, state its interaction contract and treat it as acceptance criteria — drag surfaces and click-vs-drag behavior, keyboard (Enter/Shift+Enter/Esc/focus moves), sizing (default rows, max, scroll vs. pin, reflow on window resize), empty/loading/error states, and any known WebKit quirks. The contract must also name the **default/initial state the user first encounters** (e.g. panel collapsed, rail hidden, no message selected) and state the success criterion as a **user-visible outcome, not a mechanism** — "the user can notice an unread answer from the default view," not "render a dot." Write the acceptance test to assert that outcome **from the default state**. A feature whose only indicator lives in a non-default state has not met its contract. Discovering these in the running app after the fact is the failure mode this gate exists to prevent.
-- **Runtime UI validation is required** for any UI or interaction change — it is a blocker, not a footnote. The change must be exercised in the real Tauri window (WKWebView), or in the WebKit end-to-end harness (planned, Phase 2) once it exists, with captured evidence (screenshot or recording, plus measured sizes/positions where relevant). The evidence must exercise the change **from the default/initial state a user actually reaches it through** (panels collapsed, nothing pre-opened or pre-seeded into a convenient state) and as a user would operate it — not only a contrived setup that assumes the feature is already on screen. Evidence that passes only in a non-default state is not acceptance; reproduce the user's normal path. Passing `npm run test` is necessary but **not sufficient**: Vitest + jsdom does not render layout, cannot measure element size/scroll, cannot exercise `data-tauri-drag-region` or window dragging, and does not reproduce WebKit-specific rendering. A Chromium-only preview does not satisfy this for WebKit-sensitive changes. State the runtime evidence explicitly; if it could not be produced, say so and treat the work as unvalidated.
-- Documentation maintenance required after any change that affects behavior, interfaces, commands, architecture, or domain facts.
-- Local validation required before a feature closes: the touched layers build and all tests pass (`npm run test` for the front-end, `cargo nextest run` for the Rust core).
-- For non-trivial routed work, testing/validation evidence must come from the dedicated `test-runner` agent. Directly running a single command is allowed only for trivial requests such as "run npm test".
-- Non-trivial UI or icon work must be reviewed by the dedicated `design-reviewer` agent in addition to code review.
+- **TDD required** for non-trivial logic. Red → Green → Refactor. Front-end: Vitest + React Testing Library; Rust: cargo-nextest + tokio + mockall.
+- **Interaction contract first (UI):** state the contract before writing component code. Name the default/initial state and define success as a user-visible outcome.
+- **Runtime UI validation required** for any UI or interaction change. Exercise in the real Tauri window (WKWebView) or the WebKit E2E harness. Captured evidence (screenshot, measured sizes). Vitest + jsdom is not sufficient.
+- **Documentation maintenance** after any change that affects behavior, interfaces, commands, architecture, or domain facts.
+- **Local validation** before a feature closes: touched layers must build and tests must pass.
+- **test-runner agent** for non-trivial routed validation. Direct command execution is allowed only for trivial requests.
+- **design-reviewer agent** for non-trivial UI or icon work.
 
 ---
 
 ## Agent Execution Mode
 
-Dedicated agents are first-class executors, not optional helpers. Every registered agent — `test-runner`, `code-reviewer`, `design-reviewer`, `instruction-evaluator`, `artifact-acceptance-tester`, and any agent added later — MUST be run as a real spawned subagent through the Agent/Task tool whenever work routes to it or a gate requires it.
-
-- The project owner grants standing authorization for AI tools working in this
-  repository to spawn any registered project subagent whenever this root
-  contract, the manager, a pipeline, a skill, or a quality gate requires that
-  agent. Treat this as an explicit user request for the required subagent
-  delegation; do not pause for additional per-agent permission unless the
-  Agent/Task tool is unavailable or the current runtime enforces a
-  non-bypassable approval or tool-use restriction. In that case, stop and
-  report the blocker.
-- Inline substitution is prohibited: the main thread must not simulate, paraphrase, or stand in for an agent's validation or review in its own voice.
-- This holds even when a tool-specific adapter or runtime default discourages spawning subagents. As the root contract, this rule overrides those defaults (see `CLAUDE.md`).
-- An `Agent: <name> - output below` artifact asserts that the named subagent was actually spawned via the Agent/Task tool. Emitting that artifact for work the main thread performed inline is a prohibited substitution, not compliance. If a subagent could not be spawned, do not emit its artifact — report the blocker instead.
-- Single exception: the user explicitly directs inline execution for a specific task (for example "review this inline" or "don't spawn a subagent"). A general request to do the work is not such a direction. An inline run permitted under this exception must still emit the agent's labeled output artifact and be disclosed as inline in the response.
-- If an agent genuinely cannot be spawned in the current environment, stop and report it as a blocker rather than silently substituting an inline result.
+Dedicated agents are first-class executors. They MUST be spawned as real subagents when a gate requires them. Inline substitution is prohibited. See `.claude/manager/MANAGER.md` for enforcement.
 
 ---
 
 ## Platform Asset Boundary
 
-side-pilot is a desktop app targeting **macOS and Windows only**.
-
-- Do not create, keep, or commit iOS or Android generated assets unless the user explicitly changes the target platform scope.
-- `src-tauri/icons/ios/` and `src-tauri/icons/android/` are not valid desktop deliverables.
-- App icon generation must keep the source asset plus desktop-relevant outputs for macOS and Windows packaging.
-- If a generator creates mobile assets by default, remove them before validation and make the cleanup visible in the task report.
+side-pilot targets **macOS and Windows only**. No iOS/Android assets. Desktop icons must keep the source asset plus macOS/Windows outputs only.
 
 ---
 
@@ -107,76 +82,21 @@ When creating or materially changing any instruction artifact:
 - Use `instruction-evaluator` before accepting the artifact.
 - Use `artifact-acceptance-tester` before accepting any skill, pipeline, agent, manager routing, validation gate, or output contract.
 
-The `instruction-evaluator` and `artifact-acceptance-tester` agents read their review rubric from the committed `.manifesto/` framework files (`MANIFEST.md`, `IMPLEMENTATION.md`, and `conventions/`). Keep `.manifesto/` tracked in git — do not add it to `.gitignore`, or these mandatory agents lose their authority source.
-
 ---
 
 ## Final Response Gate
 
-For non-trivial routed work, the final response must include the required closure artifacts, not merely summarize them or rely on earlier commentary messages.
+For non-trivial routed work, the final response must include:
 
-At minimum include compact versions of:
 - `Skill: task-complete - output below`
 - `Agent: test-runner - output below` when validation was required
-- `Agent: instruction-evaluator - output below` and `Agent: artifact-acceptance-tester - output below` when instruction artifacts, routing, validation gates, or output contracts changed
+- `Agent: instruction-evaluator - output below` and `Agent: artifact-acceptance-tester - output below` when instruction artifacts changed
 
-Compact artifacts must preserve the label, status/verdict, and required table shape. If any required final artifact is missing from the final response draft, revise the final response before sending.
-
-Each required `Agent:` artifact must originate from an actually spawned subagent (see "Agent Execution Mode"); a main-thread-authored stand-in does not satisfy this gate.
+Compact artifacts must preserve the label, status/verdict, and required table shape. Each `Agent:` artifact must originate from an actually spawned subagent.
 
 ---
 
-## Capability Registry
+## References
 
-### Manager
-- `.claude/manager/MANAGER.md` — classifies and routes non-trivial work; enforces documentation maintenance and task-complete
-
-### Skills
-- `.claude/skills/discover-requirements/SKILL.md` — structured Q&A to elicit complete, unambiguous requirements for a feature, epic, or task; never guesses; outputs a draft spec ready for scope-verifier and work-with-bead
-- `.claude/skills/brainstorm/SKILL.md` — open design decisions with meaningful trade-offs
-- `.claude/skills/design/SKILL.md` — apply and maintain the design system (CSS tokens) and keep `docs/design-book.md` in sync
-- `.claude/skills/implement-tauri-feature/SKILL.md` — implement a Tauri/React/Rust feature with tests
-- `.claude/skills/react-tauri-expert/SKILL.md` — review, improve, and implement React + TypeScript + Tauri v2 code; Topic Router over windowing, IPC/permissions, state, performance, accessibility, cross-platform conventions
-- `.claude/skills/testing-pro/SKILL.md` — write and improve tests across both layers (Vitest front-end + cargo-nextest Rust core)
-- `.claude/skills/triage-bug/SKILL.md` — investigate a reported bug: gather, reproduce, root-cause, classify severity, decide disposition; produces triage report; writes no production code
-- `.claude/skills/verify-cli-adapter/SKILL.md` — verify CLI adapter correctness after implementation
-- `.claude/skills/work-with-bead/SKILL.md` — check, create, update, and maintain Beads work items for applicable non-trivial work
-- `.claude/skills/work-with-git/SKILL.md` — select or create the appropriate task branch and enforce commit/push boundaries
-- `.claude/skills/documentation-maintenance/SKILL.md` — post-change documentation updates
-- `.claude/skills/task-complete/SKILL.md` — closure reporting for non-trivial routed work
-
-### Pipelines
-- `.claude/pipelines/discover-feature.md` — requirements discovery, scope verification, user approval, and Beads item creation before implementation
-- `.claude/pipelines/implement-feature.md` — Tauri/React/Rust feature implementation
-- `.claude/pipelines/implement-design-variant.md` — UI design variants, visual redesigns, desktop icon work, and visual validation
-- `.claude/pipelines/design-system.md` — design-system token work (spacing, radius, color, icon, type) and `docs/design-book.md` maintenance
-- `.claude/pipelines/implement-cli-adapter.md` — CLI adapter (Rust core) implementation
-- `.claude/pipelines/triage-bug.md` — bug investigation, classification, and disposition routing
-- `.claude/pipelines/fix-bug.md` — TDD-ordered bug fix for confirmed, root-caused defects
-
-### Agents
-- `.claude/agents/scope-verifier.md` — checks a draft requirements spec for structural completeness; returns "No gaps" or a numbered gap list with targeted questions; does not write code
-- `.claude/agents/instruction-evaluator.md` — review instruction artifacts for quality and compliance
-- `.claude/agents/artifact-acceptance-tester.md` — acceptance-test new or changed instruction artifacts
-- `.claude/agents/code-reviewer.md` — review implementation diffs for correctness, TDD adherence, and project conventions
-- `.claude/agents/test-runner.md` — execute and report validation commands/checks for non-trivial routed work
-- `.claude/agents/design-reviewer.md` — review non-trivial UI design variants, visual changes, and desktop icon work
-
-### Conventions
-- `.claude/conventions/react-tauri/` — project-wide React + TypeScript + Tauri v2 conventions for windowing, IPC/permissions, state, performance, accessibility, cross-platform behavior, and change hygiene (`change-hygiene.md`: state-lifecycle, refactor-invariant, adversarial-input, and integration audits)
-- `.claude/conventions/react-tauri/desktop-platform-scope.md` — macOS/Windows-only platform scope, desktop icon outputs, and design-variant port hygiene
-
----
-
-## Authoritative Sources
-
-| Source | Purpose |
-|---|---|
-| `docs/idea.md` | Primary design specification — single source of truth for features, MVP scope, architecture intent |
-| `docs/architecture/README.md` | Implemented architecture index — read first, then only the focused architecture sub-file needed for UI, IPC, Rust core, or database work |
-| `.claude/docs/project_specification.md` | Project profile — role, duties, quality expectations, domain vocabulary |
-| `README.md` | Developer guide — prerequisites, build/dev/test commands, source layout, cross-platform notes |
-| `docs/design-book.md` | Design system reference — spacing, radius, color, icon, and type tokens defined in `src/styles.css` |
-| `src-tauri/src/main.rs` | Tauri/Rust core entry point — calls `side_pilot_lib::run()` |
-| `src-tauri/src/lib.rs` | Tauri core library — builder, command registration, module map (`commands`, `adapters`, `storage`) |
-| `src/App.tsx` | React UI root — renders the floating `Bubble` |
+- Full capability registry: `.claude/docs/capabilities.md`
+- Authoritative sources: `.claude/docs/project_specification.md` §Authoritative Local Sources

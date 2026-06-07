@@ -20,11 +20,13 @@ npm install
 ## Run
 
 Desktop app:
+
 ```bash
 npm run tauri dev
 ```
 
 React UI only in browser (Vite port `5175`; Tauri points at `http://localhost:5175`):
+
 ```bash
 npm run dev
 ```

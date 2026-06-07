@@ -15,6 +15,9 @@ App
      ├─ injects ChatApi           # tauriChatApi | inertChatApi
      ├─ Escape handler            # steps back one level
      ├─ click-vs-drag discriminator  # wasDragged() threshold
+     ├─ Settings (Settings.tsx)
+     │   ├─ section rail          # 7 tabs (tablist pattern, keyboard nav)
+     │   └─ content pane          # active section placeholder
      └─ ChatPanel (ChatPanel.tsx)
          ├─ uses chatReducer      # messages[] (incl. pending/error slots), status
          ├─ uses useChat(api)     # session list, active session, pending/unread sets
@@ -78,6 +81,7 @@ selection target invalidates the pending activation.
 | `src/App.tsx` | Root — renders `<Bubble>` with `tauriChatApi` |
 | `src/main.tsx` | Vite entry point |
 | `src/components/Bubble.tsx` | Floating bubble shell: collapsed dot → expanded panel |
+| `src/components/Settings.tsx` | Settings view: section rail (tablist) + placeholder panes (SP-031) |
 | `src/components/ChatPanel.tsx` | Chat transcript, toolbar, composer, AI switcher, route submission, session management |
 | `src/components/AiSwitcher.tsx` | Provider-logo switcher button + vertical picker (All + GPT/Claude/Gemini) |
 | `src/components/ProviderIcon.tsx` | Provider logo images + the All grid glyph |

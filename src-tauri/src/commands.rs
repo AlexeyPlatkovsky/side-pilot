@@ -15,7 +15,8 @@ use tokio_util::sync::CancellationToken;
 use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult, AssistantId};
 use crate::preferences::{PreferencesError, PreferencesStore, ProviderPreferences};
 use crate::routing::{
-    execute_route_with_preferences, retry_result, ProviderRunOutcome, RouteRequest, RouteRunResult,
+    execute_route_with_preferences, retry_result, ProviderRunOutcome, RetryRequest, RouteRequest,
+    RouteRunResult,
 };
 use crate::storage::{Message, NewMessage, Session, StorageError, Store};
 
@@ -195,11 +196,13 @@ pub async fn retry_route(
         &store,
         &state.registry,
         &snapshot,
-        session_id,
-        error_message_id,
-        provider,
-        prompt,
-        cancel,
+        RetryRequest {
+            session_id,
+            error_message_id,
+            provider,
+            prompt,
+            cancel,
+        },
     )
     .await
 }

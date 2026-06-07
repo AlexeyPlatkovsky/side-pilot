@@ -36,9 +36,13 @@ Classification must be stated before any file is created, edited, or deleted.
 
 For each non-trivial task, decide whether the Beads planning gate applies before selecting the execution route.
 
-Exempt categories are listed in AGENTS.md §Beads Planning Gate.
+Exempt categories (Beads gate does not apply):
+- documentation-only work
+- AI staff work, including instruction artifacts, skills, pipelines, agents, manager routing, root contracts, and AI-tool governance
+- bug triage
+- bug fixes
 
-**Important: Beads exemption does not exempt a task from the manager itself.** The manager is still loaded for all non-trivial work (per AGENTS.md §Task Classification). Beads-exempt tasks still receive a routing plan from the manager; the exemption only means the manager will not route through the Beads skill.
+**Important: exemption from the Beads gate does not exempt a task from the manager itself.** The manager is still loaded for all non-trivial work (per AGENTS.md §Task Classification). Beads-exempt tasks still receive a routing plan from the manager; the exemption only means the manager will not route through the Beads skill.
 
 For all other non-trivial work, route `.claude/skills/work-with-bead/SKILL.md` before implementation. The skill must check for a relevant existing Beads item. If none exists, it must stop and ask the user whether to create the relevant epic, feature, or task before implementation continues.
 
