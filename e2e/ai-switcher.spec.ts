@@ -111,11 +111,20 @@ test("a background provider error is visible when its unread chat is reopened", 
   await page.getByRole("button", { name: /choose ai provider/i }).click();
   await page.getByRole("menuitemradio", { name: "Gemini" }).click();
   await page.getByLabel("Ask side-pilot").fill("check this");
+  // Wait for React to re-render after the fill so Send is no longer disabled
+  // before clicking. On slow CI runners the stale disabled state swallows the
+  // click and the route never fires.
+  await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await page.getByRole("button", { name: "Send" }).click();
 
   await page.getByRole("button", { name: "Show chat history" }).click();
   await page.getByRole("button", { name: "Fix login bug", exact: true }).click();
-  await page.getByRole("button", { name: /Refactor auth module, unread answer/ }).click();
+  // The background route resolves after ~600ms (seeded fixture routeDelay).
+  // Use a shorter wait + longer action timeout so the test doesn't hang for
+  // 30s if the route silently fails, but gives it enough room on slow CI.
+  await page
+    .getByRole("button", { name: /Refactor auth module, unread answer/ })
+    .click({ timeout: 10_000 });
 
   const error = page.getByRole("alert");
   await expect(error).toHaveText(
