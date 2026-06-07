@@ -109,9 +109,7 @@ test("a background provider error is visible when its unread chat is reopened", 
   // Use a longer routeDelay on CI so the 600ms default seeded timeout doesn't
   // resolve the route before the test can switch to another chat. The route
   // must land *while* a different chat is active to trigger the unread dot.
-  await page.goto(
-    "/e2e/seeded.html?initial=collapsed&route=error&routeDelay=3000",
-  );
+  await page.goto("/e2e/seeded.html?initial=collapsed&route=error&routeDelay=3000");
   await page.getByRole("button", { name: "Open side-pilot" }).click();
   await page.getByRole("button", { name: /choose ai provider/i }).click();
   await page.getByRole("menuitemradio", { name: "Gemini" }).click();
@@ -130,9 +128,7 @@ test("a background provider error is visible when its unread chat is reopened", 
   await expect(
     page.getByRole("button", { name: /Refactor auth module, unread answer/ }),
   ).toBeVisible({ timeout: 10_000 });
-  await page
-    .getByRole("button", { name: /Refactor auth module, unread answer/ })
-    .click();
+  await page.getByRole("button", { name: /Refactor auth module, unread answer/ }).click();
 
   const error = page.getByRole("alert");
   await expect(error).toHaveText(

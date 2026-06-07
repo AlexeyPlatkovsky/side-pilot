@@ -74,39 +74,48 @@ jobs:
 
       - name: Lint frontend
         id: lint
+        if: ${{ !cancelled() }}
         run: npm run lint
 
       - name: Check formatting
         id: format
+        if: ${{ !cancelled() }}
         run: npm run format:check
 
       - name: Test frontend
         id: test-fe
+        if: ${{ !cancelled() }}
         run: npm run test
 
       - name: Install Playwright WebKit
+        if: ${{ !cancelled() }}
         run: npx playwright install --with-deps webkit
 
       - name: Test WebKit runtime harness
         id: e2e
+        if: ${{ !cancelled() }}
         run: npm run test:e2e
 
       - name: Build frontend
         id: build-fe
+        if: ${{ !cancelled() }}
         run: npm run build
 
       - name: Test Rust core
         id: test-rust
+        if: ${{ !cancelled() }}
         run: cargo nextest run --manifest-path src-tauri/Cargo.toml
 
       - name: Check IPC bindings are up to date
         id: ipc
+        if: ${{ !cancelled() }}
         run: |
           cargo test --manifest-path src-tauri/Cargo.toml export_bindings
           git diff --exit-code src/chat/generated
 
       - name: Lint Rust core
         id: clippy
+        if: ${{ !cancelled() }}
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
       - name: Post PR comment
