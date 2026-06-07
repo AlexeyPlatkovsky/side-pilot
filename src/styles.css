@@ -632,46 +632,33 @@ body {
   letter-spacing: 0;
 }
 
-/* Provider monogram chip used in the toggle face and picker rows. */
+/* Provider logo used in the toggle face and picker rows. Image-based icons
+   use `provider-icon--logo`; the All glyph keeps the 2×2 dot grid. */
 .provider-icon {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
-  border-radius: var(--radius-pill);
-  background: var(--provider-gpt);
-  color: var(--color-on-accent);
-  font-size: var(--font-xs);
-  font-weight: var(--font-weight-bold);
-  line-height: 1;
+  border-radius: var(--radius-sm);
 }
 
-.provider-icon--gpt {
-  background: var(--provider-gpt);
-}
-
-.provider-icon--claude {
-  background: var(--provider-claude);
-}
-
-.provider-icon--gemini {
-  background: var(--provider-gemini);
-  /* Honey is a light accent, so the monogram uses ink for AA contrast (~9:1). */
-  color: var(--ink);
+.provider-icon--logo {
+  object-fit: contain;
 }
 
 /* The All icon: a 2×2 grid of dots suggesting every provider at once. */
 .provider-icon--all {
   background: var(--ink);
+  border-radius: var(--radius-pill);
 }
 
 .provider-icon__grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 2px;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .provider-icon__grid i {

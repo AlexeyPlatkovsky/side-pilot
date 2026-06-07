@@ -1,26 +1,34 @@
 /**
  * Provider icons for the AI switcher (SP-017).
  *
- * Each provider is shown as a small accent-colored monogram chip; the `All`
- * route is a 2×2 grid glyph. These are lightweight CSS/text marks (not brand
- * SVG logos) so there is no trademarked-asset dependency; the accent color is
- * tokenized in `styles.css`.
+ * Each provider is shown as its brand logo PNG; the `All` route is a 2×2 grid
+ * glyph. Icons live in `src/assets/` with transparent backgrounds.
  */
 
 import type { AssistantId } from "../chat/generated/AssistantId";
-import { type ActiveRoute, providerInfo } from "../chat/providers";
+import { type ActiveRoute } from "../chat/providers";
 
-/** A single provider's monogram chip. */
+import gptIcon from "../assets/chatgpt-128-transparent.png";
+import claudeIcon from "../assets/claude-128-transparent.png";
+import geminiIcon from "../assets/gemini-128-transparent.png";
+
+const PROVIDER_ICONS: Record<string, string> = {
+  codex: gptIcon,
+  claude: claudeIcon,
+  gemini: geminiIcon,
+};
+
+/** A single provider's logo image. */
 export function ProviderGlyph({ provider }: { provider: AssistantId }) {
-  const info = providerInfo(provider);
+  const src = PROVIDER_ICONS[provider];
   return (
-    <span
-      className={`provider-icon provider-icon--${info.accent}`}
+    <img
+      className="provider-icon provider-icon--logo"
+      src={src}
+      alt=""
       aria-hidden="true"
-      data-provider={info.id}
-    >
-      {info.glyph}
-    </span>
+      data-provider={provider}
+    />
   );
 }
 
