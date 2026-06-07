@@ -168,6 +168,6 @@ jobs:
             -q '.comments[] | select(.author.login == "github-actions[bot]") | select(.body | startswith("## CI")) | .id' \
             | while read -r id; do
                 gh api --silent -X DELETE "/repos/${{ github.repository }}/issues/comments/$id" || true
-              done
+              done || true
 
           gh pr comment "$PR" --repo "${{ github.repository }}" --body "$body"
