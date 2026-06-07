@@ -86,6 +86,11 @@ trace/report/structured-dump noise, normalizes whitespace, and caps the detail
 at 240 characters. The typed `AdapterError` stored in `raw_json` retains the
 original diagnostic for internal troubleshooting.
 
+When a provider fails, the diff messages are marked as sent to that provider so
+retries do not compound — each retry replays only the new prompt. The
+`retry_route` IPC command deletes the old error row, dispatches a fresh adapter
+run, and persists the outcome (success or new error).
+
 Binary resolution is cached per assistant. On Unix/macOS it uses `/bin/zsh -lc 'command -v <tool>'`; on Windows it uses `where`. Environment resolution is also cached per assistant: Unix/macOS reads a login-shell `env`, while Windows currently uses the process environment inherited by the app.
 
 ### Adapter Source Files

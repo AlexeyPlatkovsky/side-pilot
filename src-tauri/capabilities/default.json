@@ -14,6 +14,7 @@
     "allow-app-version",
     "allow-run-adapter",
     "allow-run-route",
+    "allow-retry-route",
     "allow-get-provider-preferences",
     "allow-update-provider-preferences",
     "allow-cancel-adapter-run",

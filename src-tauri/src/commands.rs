@@ -14,7 +14,9 @@ use tokio_util::sync::CancellationToken;
 
 use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult, AssistantId};
 use crate::preferences::{PreferencesError, PreferencesStore, ProviderPreferences};
-use crate::routing::{execute_route_with_preferences, RouteRequest, RouteRunResult};
+use crate::routing::{
+    execute_route_with_preferences, retry_result, ProviderRunOutcome, RouteRequest, RouteRunResult,
+};
 use crate::storage::{Message, NewMessage, Session, StorageError, Store};
 
 pub struct AppState {
@@ -168,6 +170,38 @@ async fn run_route_with_state(
         state.finish_run(&run_id);
     }
     result
+}
+
+/// Retry a prompt for a specific provider after a failure (e.g. timeout).
+/// Deletes the old error message, dispatches fresh, and returns the outcome.
+#[tauri::command]
+pub async fn retry_route(
+    state: State<'_, AppState>,
+    store: State<'_, Store>,
+    preferences: State<'_, PreferencesStore>,
+    session_id: String,
+    error_message_id: String,
+    provider: AssistantId,
+    prompt: String,
+) -> Result<ProviderRunOutcome, StorageError> {
+    let run_id = format!("{}-{}", state.next_run_id(), provider.as_str());
+    let cancel = state.register_run(run_id.clone());
+    let _active_run = ActiveRunGuard {
+        state: &state,
+        run_id,
+    };
+    let snapshot = preferences.snapshot();
+    retry_result(
+        &store,
+        &state.registry,
+        &snapshot,
+        session_id,
+        error_message_id,
+        provider,
+        prompt,
+        cancel,
+    )
+    .await
 }
 
 /// Return the in-memory provider preference snapshot.

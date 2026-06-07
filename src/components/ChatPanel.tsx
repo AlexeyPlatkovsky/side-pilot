@@ -386,6 +386,51 @@ export function useChat(api: ChatApi, enabled = true) {
     }
   }, [api, applySessions, getSessions, forget]);
 
+  const retry = useCallback(
+    async (errorMessageId: string, provider: string, userContent: string) => {
+      const session = activeRef.current;
+      if (!session) return;
+      const originId = session.id;
+
+      const pendingSlot: ChatMessage = {
+        id: `pending-retry-${newId()}`,
+        sender: "assistant",
+        assistantId: provider,
+        content: "",
+        createdAt: Date.now(),
+        pending: true,
+      };
+      if (activeRef.current?.id === originId) {
+        dispatch({ type: "retryReplace", errorMessageId, slot: pendingSlot });
+      }
+
+      try {
+        const outcome = await api.retryRoute({
+          sessionId: originId,
+          errorMessageId,
+          provider: provider as AssistantId,
+          prompt: userContent,
+        });
+        if (activeRef.current?.id !== originId) return;
+        const result: ChatMessage = outcome.message
+          ? toChatMessage(outcome.message)
+          : {
+              id: `error-retry-${newId()}`,
+              sender: "assistant",
+              assistantId: provider,
+              content: "The retry request failed.",
+              createdAt: Date.now(),
+              error: true,
+            };
+        dispatch({ type: "routeSettled", results: [result] });
+      } catch (err) {
+        if (activeRef.current?.id !== originId) return;
+        dispatch({ type: "error", message: describeError(err) });
+      }
+    },
+    [api, dispatch],
+  );
+
   return {
     state,
     sessions,
@@ -398,6 +443,7 @@ export function useChat(api: ChatApi, enabled = true) {
     renameSession,
     deleteSession,
     clearActive,
+    retry,
   };
 }
 
@@ -452,6 +498,7 @@ export function ChatPanel({
     renameSession,
     deleteSession,
     clearActive,
+    retry,
   } = retainedChat ?? localChat;
   const [draft, setDraft] = useState("");
   const [localRoutesBySession, setLocalRoutesBySession] = useState<RoutesBySession>({});
@@ -511,6 +558,33 @@ export function ChatPanel({
       setRoutesBySession((current) => ({ ...current, [activeSessionId]: next }));
     },
     [activeSessionId, setRoutesBySession],
+  );
+
+  // Retry button: only the last error message in a single-provider chat where
+  // the currently selected AI matches the error's provider gets a Retry button.
+  const retryErrorId = useMemo(() => {
+    if (route.kind !== "single") return null;
+    const lastError = [...state.messages].reverse().find((m) => m.error);
+    if (!lastError || lastError.assistantId !== route.provider) return null;
+    return lastError.id;
+  }, [route, state.messages]);
+
+  const handleRetry = useCallback(
+    (errorMessageId: string, provider: string) => {
+      // Find the user message immediately before the error.
+      const idx = state.messages.findIndex((m) => m.id === errorMessageId);
+      if (idx === -1) return;
+      let userContent: string | undefined;
+      for (let i = idx - 1; i >= 0; i--) {
+        if (state.messages[i].sender === "user") {
+          userContent = state.messages[i].content;
+          break;
+        }
+      }
+      if (!userContent) return;
+      void retry(errorMessageId, provider, userContent);
+    },
+    [state.messages, retry],
   );
 
   // Drop retained UI state after a chat is deleted.
@@ -676,6 +750,7 @@ export function ChatPanel({
             }
             // A failed provider slot renders as an inline error card in-thread.
             if (message.error) {
+              const showRetry = retryErrorId === message.id;
               return (
                 <article
                   key={message.id}
@@ -692,6 +767,17 @@ export function ChatPanel({
                   <p className="message__error" role="alert">
                     {message.content}
                   </p>
+                  {showRetry && (
+                    <button
+                      type="button"
+                      className="message__retry"
+                      onClick={() =>
+                        void handleRetry(message.id, message.assistantId ?? "")
+                      }
+                    >
+                      Retry
+                    </button>
+                  )}
                 </article>
               );
             }

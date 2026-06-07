@@ -234,6 +234,28 @@ const api: ChatApi = {
     return Promise.resolve();
   },
   openExternal: () => Promise.resolve(),
+  retryRoute: (request) => {
+    // Delete the error message, then produce a fresh reply.
+    const list = messages[request.sessionId] ?? [];
+    const idx = list.findIndex((m) => m.id === request.errorMessageId);
+    if (idx >= 0) list.splice(idx, 1);
+    const row: PersistedMessage = {
+      id: `m${nextSeq++}`,
+      sessionId: request.sessionId,
+      seq:
+        (messages[request.sessionId]?.length ?? 0) + 1,
+      sender: "assistant",
+      assistantId: request.provider,
+      model: providerPreference[request.provider].model,
+      reasoningEffort: providerPreference[request.provider].reasoningEffort,
+      content: `A retried **${request.provider}** reply.`,
+      rawJson: "{}",
+      isError: false,
+      createdAt: Date.now(),
+    };
+    list.push(row);
+    return Promise.resolve({ provider: request.provider, message: row });
+  },
 };
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

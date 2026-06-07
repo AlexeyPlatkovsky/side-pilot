@@ -78,6 +78,7 @@ function makeApi(
     sessions?: PersistedSession[];
     runRoute?: ChatApi["runRoute"];
     readHistory?: ChatApi["readHistory"];
+    retryRoute?: ChatApi["retryRoute"];
   } = {},
 ): ChatApi {
   return {
@@ -96,6 +97,14 @@ function makeApi(
       opts.runRoute ??
       vi.fn((req: RouteRequest) =>
         Promise.resolve(routeResult(req.prompt, [{ provider: "codex", content: "ok" }])),
+      ),
+    retryRoute:
+      opts.retryRoute ??
+      vi.fn(() =>
+        Promise.resolve({
+          provider: "codex" as AssistantId,
+          message: persisted({ sender: "assistant", content: "retried" }),
+        }),
       ),
     getProviderPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
     updateProviderPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
@@ -1154,5 +1163,192 @@ describe("ChatPanel", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(api.renameSession).toHaveBeenCalledWith("s1", "Renamed"));
+  });
+
+  // ---- Retry button ---------------------------------------------------------
+
+  it("shows Retry button on the last single-provider error when AI matches", async () => {
+    const user = userEvent.setup();
+    const api = makeApi({
+      runRoute: vi.fn((req: RouteRequest) =>
+        Promise.resolve(
+          routeResult(req.prompt, [
+            { provider: "gemini", error: { kind: "timedOut" } },
+          ]),
+        ),
+      ),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Switch to Gemini single mode.
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Gemini" }));
+
+    await send(user, "weather in Antalya");
+
+    // The error card and the Retry button must be visible.
+    const errorCard = await screen.findByTestId("provider-error");
+    expect(errorCard).toHaveAttribute("data-provider", "gemini");
+    expect(errorCard).toHaveTextContent(/timed out/i);
+    expect(
+      within(errorCard).getByRole("button", { name: "Retry" }),
+    ).toBeInTheDocument();
+  });
+
+  it("hides Retry button when the AI does not match the error provider", async () => {
+    const api = makeApi({
+      history: [
+        persisted({
+          id: "err-1",
+          sender: "assistant",
+          assistantId: "gemini",
+          content: "Gemini timed out before responding.",
+          isError: true,
+          seq: 1,
+        }),
+      ],
+      runRoute: vi.fn(() => new Promise<RouteRunResult>(() => {})),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Default route is Codex (GPT), error is from Gemini → no Retry.
+    const errorCard = screen.getByTestId("provider-error");
+    expect(errorCard).toHaveAttribute("data-provider", "gemini");
+    expect(errorCard).toHaveTextContent(/timed out/i);
+    expect(
+      errorCard.querySelector('[role="button"]'),
+    ).toBeNull();
+  });
+
+  it("hides Retry button in All mode even when error matches a provider", async () => {
+    const user = userEvent.setup();
+    const api = makeApi({
+      runRoute: vi.fn((req: RouteRequest) =>
+        Promise.resolve(
+          routeResult(req.prompt, [
+            { provider: "codex", content: "gpt reply" },
+            { provider: "gemini", error: { kind: "timedOut" } },
+          ]),
+        ),
+      ),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Switch to All mode.
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+
+    await send(user, "to all");
+
+    const errorCard = await screen.findByTestId("provider-error");
+    expect(errorCard).toHaveAttribute("data-provider", "gemini");
+    // Retry button must not appear in All mode.
+    expect(errorCard.querySelector('[role="button"]')).toBeNull();
+  });
+
+  it("hides Retry button after a successful response pushes error out of last position", async () => {
+    const user = userEvent.setup();
+    const api = makeApi({
+      history: [
+        persisted({
+          id: "err-1",
+          sender: "assistant",
+          assistantId: "gemini",
+          content: "Gemini timed out before responding.",
+          isError: true,
+          seq: 1,
+        }),
+      ],
+      runRoute: vi.fn((req: RouteRequest) =>
+        Promise.resolve(
+          routeResult(req.prompt, [
+            { provider: "gemini", content: "here is the weather" },
+          ]),
+        ),
+      ),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Switch to Gemini.
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Gemini" }));
+
+    // Error is last → Retry visible.
+    expect(
+      within(screen.getByTestId("provider-error")).getByRole("button", {
+        name: "Retry",
+      }),
+    ).toBeInTheDocument();
+
+    // Send a new message that succeeds — error is no longer last.
+    await send(user, "retry prompt");
+
+    // Wait for the success message to appear. The old error should now have no
+    // Retry button (it's no longer last).
+    await screen.findByText("here is the weather");
+    expect(
+      screen.getByTestId("provider-error").querySelector('[role="button"]'),
+    ).toBeNull();
+  });
+
+  it("clicking Retry removes the error and dispatches retryRoute", async () => {
+    const user = userEvent.setup();
+    const errorMessage = persisted({
+      id: "err-gemini",
+      sender: "assistant",
+      assistantId: "gemini",
+      content: "Gemini timed out before responding.",
+      isError: true,
+      seq: 2,
+    });
+    const userMessage = persisted({
+      id: "user-1",
+      sender: "user",
+      content: "weather in Antalya",
+      seq: 1,
+    });
+    let retryCalled = false;
+    const api = makeApi({
+      history: [userMessage, errorMessage],
+      runRoute: vi.fn(() => new Promise<RouteRunResult>(() => {})),
+      retryRoute: vi.fn(() => {
+        retryCalled = true;
+        return Promise.resolve({
+          provider: "gemini" as AssistantId,
+          message: persisted({
+            id: "a-retry",
+            sender: "assistant",
+            assistantId: "gemini",
+            content: "fresh answer",
+            seq: 3,
+          }),
+          error: undefined,
+        });
+      }),
+    });
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Switch to Gemini so the Retry button is visible.
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Gemini" }));
+
+    const errorCard = screen.getByTestId("provider-error");
+    const retryButton = within(errorCard).getByRole("button", { name: "Retry" });
+    await user.click(retryButton);
+
+    await waitFor(() => expect(retryCalled).toBe(true));
+    expect(api.retryRoute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: "s1",
+        errorMessageId: "err-gemini",
+        provider: "gemini",
+        prompt: "weather in Antalya",
+      }),
+    );
   });
 });

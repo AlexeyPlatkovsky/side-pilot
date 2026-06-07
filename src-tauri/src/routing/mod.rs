@@ -364,8 +364,11 @@ pub async fn execute_route_with_preferences(
             }
             Err(error) => {
                 // Failed slots are display history, but never provider context:
-                // the store excludes error rows from transcript replay while
-                // leaving the original diff unsent so a retry re-delivers it.
+                // the store excludes error rows from transcript replay. Mark the
+                // diff as sent so retries do not compound (feedback loop fix).
+                for id in &prep.diff_ids {
+                    store.mark_message_sent(id, prep.provider.as_str())?;
+                }
                 let message = store.append_error_message(NewMessage {
                     session_id: request.session_id.clone(),
                     sender: Sender::Assistant,
@@ -388,6 +391,78 @@ pub async fn execute_route_with_preferences(
         user_message,
         outcomes,
     })
+}
+
+/// Retry a single-provider prompt after a failure. Deletes the old error
+/// message from history, dispatches the prompt to the same provider, and returns
+/// the outcome. On success the adapter result is persisted and returned; on
+/// failure a new error message is appended.
+pub async fn retry_result(
+    store: &Store,
+    registry: &AdapterRegistry,
+    preferences: &ProviderPreferences,
+    session_id: String,
+    error_message_id: String,
+    provider: AssistantId,
+    prompt: String,
+    cancel: CancellationToken,
+) -> Result<ProviderRunOutcome, StorageError> {
+    store.delete_message(&error_message_id)?;
+
+    let preference = preferences.for_provider(provider).clone();
+    let request = AdapterRequest {
+        assistant: provider,
+        prompt,
+        working_directory: None,
+        model: Some(preference.model.clone()),
+        reasoning_effort: if provider == AssistantId::Gemini {
+            None
+        } else {
+            preference.reasoning_argument()
+        },
+        permission_mode: PermissionMode::ReadOnly,
+        timeout_ms: DEFAULT_TIMEOUT_MS,
+        resume_session_id: None,
+        run_id: None,
+    };
+
+    match registry.run(request, cancel).await {
+        Ok(adapter_result) => {
+            if let Some(native) = &adapter_result.native_session_id {
+                store.set_native_session_id(&session_id, provider.as_str(), native)?;
+            }
+            let message = store.append_message(NewMessage {
+                session_id,
+                sender: Sender::Assistant,
+                assistant_id: Some(provider.as_str().to_string()),
+                model: Some(preference.model.clone()),
+                reasoning_effort: Some(preference.reasoning.clone()),
+                content: adapter_result.assistant_text,
+                raw_json: Some(adapter_result.raw_json),
+            })?;
+            Ok(ProviderRunOutcome {
+                provider,
+                message: Some(message),
+                error: None,
+            })
+        }
+        Err(error) => {
+            let message = store.append_error_message(NewMessage {
+                session_id,
+                sender: Sender::Assistant,
+                assistant_id: Some(provider.as_str().to_string()),
+                model: Some(preference.model.clone()),
+                reasoning_effort: Some(preference.reasoning.clone()),
+                content: provider_error_message(provider, &error),
+                raw_json: serde_json::to_string(&error).ok(),
+            })?;
+            Ok(ProviderRunOutcome {
+                provider,
+                message: Some(message),
+                error: Some(error),
+            })
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1060,11 +1135,11 @@ mod tests {
             assert!(o.error.is_none());
         }
 
-        // Sends recorded only for successful providers; the user prompt was not
-        // marked sent to the failed gemini slot.
+        // Diff messages are marked sent even on failure so retries do not
+        // compound (feedback-loop fix).
         assert_eq!(sends_count(&store, &result.user_message.id, "codex"), 1);
         assert_eq!(sends_count(&store, &result.user_message.id, "claude"), 1);
-        assert_eq!(sends_count(&store, &result.user_message.id, "gemini"), 0);
+        assert_eq!(sends_count(&store, &result.user_message.id, "gemini"), 1);
     }
 
     #[tokio::test]
@@ -1127,8 +1202,75 @@ mod tests {
                 .unwrap()
                 .raw_json
                 .as_deref(),
-            Some("first try\n\nretry"),
-            "the persisted error card must not be replayed to Gemini"
+            Some("retry"),
+            "retry must not replay old context after failure marks diff as sent"
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_slot_marks_diff_as_sent_so_retry_does_not_replay_old_context() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        // First attempt: Gemini times out.
+        let failing_registry = registry_with(vec![(
+            AssistantId::Gemini,
+            Err(AdapterError::TimedOut),
+        )]);
+        execute_route(
+            &store,
+            &failing_registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Gemini,
+                },
+                prompt: "long query".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        // The user prompt must be marked sent to the failing provider so retry
+        // does not compound (root cause: feedback loop, see triage report).
+        let history = store.read_history(&session.id).unwrap();
+        assert_eq!(
+            sends_count(&store, &history[0].id, "gemini"),
+            1,
+            "user prompt must be marked sent on failure"
+        );
+
+        // Retry with a new prompt. The composed prompt must only carry the new
+        // prompt — the old context must not be replayed.
+        let retry_registry = registry_with(vec![(AssistantId::Gemini, ok_result("recovered"))]);
+        let result = execute_route(
+            &store,
+            &retry_registry,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Gemini,
+                },
+                prompt: "retry".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            result.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
+            Some("retry"),
+            "retry must not replay old context that was marked sent on failure"
         );
     }
 
@@ -1289,5 +1431,104 @@ mod tests {
             "codex unaffected by claude timeout"
         );
         assert_eq!(claude.error, Some(AdapterError::TimedOut));
+    }
+
+    // ---- retry_result -------------------------------------------------------
+
+    #[tokio::test]
+    async fn retry_result_deletes_error_and_returns_success_outcome() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        // Pre-seed an error message.
+        let error_msg = store
+            .append_error_message(NewMessage {
+                session_id: session.id.clone(),
+                sender: Sender::Assistant,
+                assistant_id: Some("gemini".to_string()),
+                model: Some("gemini-3-flash-preview".to_string()),
+                reasoning_effort: Some("none".to_string()),
+                content: "Gemini timed out before responding.".to_string(),
+                raw_json: Some(r#"{"kind":"timedOut"}"#.to_string()),
+            })
+            .unwrap();
+
+        let mut registry = AdapterRegistry::new();
+        registry.register(Arc::new(StubAdapter {
+            id: AssistantId::Gemini,
+            result: ok_result("fresh answer"),
+        }));
+
+        let outcome = retry_result(
+            &store,
+            &registry,
+            &ProviderPreferences::default(),
+            session.id.clone(),
+            error_msg.id,
+            AssistantId::Gemini,
+            "retried prompt".to_string(),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.provider, AssistantId::Gemini);
+        assert_eq!(
+            outcome.message.as_ref().unwrap().content,
+            "fresh answer"
+        );
+        assert!(outcome.error.is_none());
+        // The old error must be gone.
+        let history = store.read_history(&session.id).unwrap();
+        assert_eq!(history.len(), 1, "error message must be deleted");
+        assert!(!history[0].is_error);
+    }
+
+    #[tokio::test]
+    async fn retry_result_on_failure_deletes_old_error_and_appends_new_error() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let error_msg = store
+            .append_error_message(NewMessage {
+                session_id: session.id.clone(),
+                sender: Sender::Assistant,
+                assistant_id: Some("gemini".to_string()),
+                model: Some("gemini-3-flash-preview".to_string()),
+                reasoning_effort: Some("none".to_string()),
+                content: "Gemini timed out before responding.".to_string(),
+                raw_json: Some(r#"{"kind":"timedOut"}"#.to_string()),
+            })
+            .unwrap();
+
+        let mut registry = AdapterRegistry::new();
+        registry.register(Arc::new(StubAdapter {
+            id: AssistantId::Gemini,
+            result: Err(AdapterError::TimedOut),
+        }));
+
+        let outcome = retry_result(
+            &store,
+            &registry,
+            &ProviderPreferences::default(),
+            session.id.clone(),
+            error_msg.id,
+            AssistantId::Gemini,
+            "retried prompt".to_string(),
+            CancellationToken::new(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.provider, AssistantId::Gemini);
+        assert!(outcome.message.is_some());
+        assert!(outcome.message.unwrap().is_error);
+        assert_eq!(outcome.error, Some(AdapterError::TimedOut));
+        // Old error deleted, new error appended. Only one message remains.
+        let history = store.read_history(&session.id).unwrap();
+        assert_eq!(history.len(), 1);
+        assert!(history[0].is_error);
+        assert_eq!(
+            history[0].content,
+            "Gemini timed out before responding."
+        );
     }
 }

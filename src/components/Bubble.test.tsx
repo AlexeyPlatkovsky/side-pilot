@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Bubble } from "./Bubble";
-import { inertChatApi, type ChatApi, type RouteRunResult } from "../chat/api";
+import { inertChatApi, type ChatApi, type ProviderRunOutcome, type RouteRunResult } from "../chat/api";
 
 function pendingChatApi(): ChatApi {
   const session = {
@@ -18,6 +18,7 @@ function pendingChatApi(): ChatApi {
     createSession: vi.fn(() => Promise.resolve(session)),
     readHistory: vi.fn(() => Promise.resolve([])),
     runRoute: vi.fn(() => new Promise<RouteRunResult>(() => {})),
+    retryRoute: vi.fn(() => new Promise<ProviderRunOutcome>(() => {})),
   };
 }
 

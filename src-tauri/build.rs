@@ -4,6 +4,7 @@ fn main() {
             "app_version",
             "run_adapter",
             "run_route",
+            "retry_route",
             "get_provider_preferences",
             "update_provider_preferences",
             "cancel_adapter_run",

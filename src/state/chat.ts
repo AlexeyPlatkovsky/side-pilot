@@ -77,7 +77,13 @@ export type ChatAction =
    * Replace the route's pending slots with their settled results (replies and/or
    * inline error cards) and return to idle.
    */
-  | { type: "routeSettled"; results: ChatMessage[] };
+  | { type: "routeSettled"; results: ChatMessage[] }
+  /**
+   * Replace a failed provider message (by id) with a pending slot for a retry.
+   * The error card is swapped for a loading indicator so the transcript stays
+   * clean (no duplicate user prompt).
+   */
+  | { type: "retryReplace"; errorMessageId: string; slot: ChatMessage };
 
 export const initialChatState: ChatState = {
   messages: [],
@@ -119,6 +125,14 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         messages: [...state.messages.filter((m) => !m.pending), ...action.results],
         status: { kind: "idle" },
+      };
+    case "retryReplace":
+      // Replace a failed provider slot with a pending slot for a retry.
+      return {
+        messages: state.messages.map((m) =>
+          m.id === action.errorMessageId ? action.slot : m,
+        ),
+        status: { kind: "pending" },
       };
   }
 }

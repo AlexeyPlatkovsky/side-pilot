@@ -38,6 +38,7 @@ pub fn run() {
             commands::app_version,
             commands::run_adapter,
             commands::run_route,
+            commands::retry_route,
             commands::get_provider_preferences,
             commands::update_provider_preferences,
             commands::cancel_adapter_run,

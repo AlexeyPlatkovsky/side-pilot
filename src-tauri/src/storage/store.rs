@@ -361,6 +361,23 @@ impl Store {
         Ok(())
     }
 
+    /// Delete a single message by id. The message is removed along with any
+    /// `message_provider_sends` rows (cascade). Returns `NotFound` when the id
+    /// does not exist.
+    pub fn delete_message(&self, message_id: &str) -> Result<(), StorageError> {
+        let conn = self.lock()?;
+        let deleted = conn.execute(
+            "DELETE FROM messages WHERE id = ?1",
+            params![message_id],
+        )?;
+        if deleted == 0 {
+            return Err(StorageError::NotFound {
+                entity: format!("message {message_id}"),
+            });
+        }
+        Ok(())
+    }
+
     /// Return the messages in `session_id` that have **not** yet been sent to
     /// `provider`, ordered by `seq` (SP-016). This is the per-provider diff: the
     /// transcript slice that provider has not seen and must receive on its next
@@ -766,6 +783,22 @@ mod tests {
     fn delete_session_for_unknown_session_is_not_found() {
         let store = Store::in_memory().unwrap();
         let err = store.delete_session("missing").unwrap_err();
+        assert!(matches!(err, StorageError::NotFound { .. }));
+    }
+
+    #[test]
+    fn delete_message_removes_message_returns_not_found_for_unknown_id() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let msg = store
+            .append_message(user_msg(&session.id, "hello"))
+            .unwrap();
+        // Delete existing message.
+        store.delete_message(&msg.id).unwrap();
+        let history = store.read_history(&session.id).unwrap();
+        assert!(history.is_empty());
+        // Delete non-existent id.
+        let err = store.delete_message("missing-id").unwrap_err();
         assert!(matches!(err, StorageError::NotFound { .. }));
     }
 

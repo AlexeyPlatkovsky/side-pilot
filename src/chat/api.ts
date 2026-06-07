@@ -26,7 +26,9 @@ import type { Message as RustMessage } from "./generated/Message";
 import type { NewMessage as RustNewMessage } from "./generated/NewMessage";
 import type { RouteRequest as RustRouteRequest } from "./generated/RouteRequest";
 import type { RouteRunResult as RustRouteRunResult } from "./generated/RouteRunResult";
+import type { ProviderRunOutcome as RustProviderRunOutcome } from "./generated/ProviderRunOutcome";
 import type { ProviderPreferences } from "./generated/ProviderPreferences";
+import type { AssistantId } from "./generated/AssistantId";
 
 /**
  * The request the UI sends to `run_adapter`. Projected from the Rust
@@ -65,6 +67,15 @@ export type RouteRequest = Pick<
   "sessionId" | "route" | "prompt" | "activeProviders"
 >;
 export type RouteRunResult = RustRouteRunResult;
+export type ProviderRunOutcome = RustProviderRunOutcome;
+
+/** The request the UI sends to `retry_route`. */
+export interface RetryRouteRequest {
+  sessionId: string;
+  errorMessageId: string;
+  provider: AssistantId;
+  prompt: string;
+}
 
 export interface ChatApi {
   runAdapter(request: AdapterRequest): Promise<AdapterResult>;
@@ -75,6 +86,12 @@ export interface ChatApi {
    * rejection.
    */
   runRoute(request: RouteRequest): Promise<RouteRunResult>;
+  /**
+   * Retry a prompt for a single provider after a failure. Deletes the old error
+   * message from history, dispatches a fresh adapter run, and returns the
+   * outcome.
+   */
+  retryRoute(request: RetryRouteRequest): Promise<ProviderRunOutcome>;
   getProviderPreferences(): Promise<ProviderPreferences>;
   updateProviderPreferences(value: ProviderPreferences): Promise<ProviderPreferences>;
   createSession(title?: string | null): Promise<PersistedSession>;
@@ -100,6 +117,7 @@ export interface ChatApi {
 export const tauriChatApi: ChatApi = {
   runAdapter: (request) => invoke("run_adapter", { request }),
   runRoute: (request) => invoke("run_route", { request }),
+  retryRoute: (request) => invoke("retry_route", { ...request }),
   getProviderPreferences: () => invoke("get_provider_preferences"),
   updateProviderPreferences: (value) => invoke("update_provider_preferences", { value }),
   createSession: (title = null) => invoke("create_session", { title }),
@@ -122,6 +140,7 @@ export const tauriChatApi: ChatApi = {
 export const inertChatApi: ChatApi = {
   runAdapter: () => Promise.reject(new Error("chat backend unavailable")),
   runRoute: () => Promise.reject(new Error("chat backend unavailable")),
+  retryRoute: () => Promise.reject(new Error("chat backend unavailable")),
   getProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   updateProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   createSession: () =>
