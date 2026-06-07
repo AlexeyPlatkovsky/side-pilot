@@ -106,7 +106,12 @@ test("each chat keeps its selected provider after collapse and reopen", async ({
 test("a background provider error is visible when its unread chat is reopened", async ({
   page,
 }) => {
-  await page.goto("/e2e/seeded.html?initial=collapsed&route=error");
+  // Use a longer routeDelay on CI so the 600ms default seeded timeout doesn't
+  // resolve the route before the test can switch to another chat. The route
+  // must land *while* a different chat is active to trigger the unread dot.
+  await page.goto(
+    "/e2e/seeded.html?initial=collapsed&route=error&routeDelay=3000",
+  );
   await page.getByRole("button", { name: "Open side-pilot" }).click();
   await page.getByRole("button", { name: /choose ai provider/i }).click();
   await page.getByRole("menuitemradio", { name: "Gemini" }).click();
@@ -117,14 +122,17 @@ test("a background provider error is visible when its unread chat is reopened", 
   await expect(page.getByRole("button", { name: "Send" })).toBeEnabled();
   await page.getByRole("button", { name: "Send" }).click();
 
+  // Switch to another chat *before* the route resolves (routeDelay=3000ms) so
+  // the reply lands in the background and marks the original chat as unread.
   await page.getByRole("button", { name: "Show chat history" }).click();
   await page.getByRole("button", { name: "Fix login bug", exact: true }).click();
-  // The background route resolves after ~600ms (seeded fixture routeDelay).
-  // Use a shorter wait + longer action timeout so the test doesn't hang for
-  // 30s if the route silently fails, but gives it enough room on slow CI.
+  // Wait for the background route to complete and the unread badge to appear.
+  await expect(
+    page.getByRole("button", { name: /Refactor auth module, unread answer/ }),
+  ).toBeVisible({ timeout: 10_000 });
   await page
     .getByRole("button", { name: /Refactor auth module, unread answer/ })
-    .click({ timeout: 10_000 });
+    .click();
 
   const error = page.getByRole("alert");
   await expect(error).toHaveText(
