@@ -19,12 +19,13 @@
 //!   are refused (and `--approval-mode` is silently downgraded) unless
 //!   `--skip-trust` is passed. The adapter always passes it; combined with the
 //!   read-only `plan` approval mode the tool still cannot edit or execute.
-//! - `gemini -r/--resume` takes `"latest"` or an **index**, not a session UUID
-//!   (`--session-id` *starts* a new session). UUID-based native resume is
-//!   therefore unavailable, so `resume_session_id` does not affect command
-//!   construction. Multi-tool conversation continuity is carried by app-owned
-//!   transcript replay (§6, SP-016); the native `session_id` is still captured
-//!   from output for persistence as a per-tool optimization.
+//! - `gemini --resume <id>` resumes a previous session **by its UUID** (verified
+//!   gemini 0.45.2: a resumed run remembers prior turns and keeps the same
+//!   `session_id`), even though `--help` only documents `"latest"`/index. The
+//!   adapter therefore wires `resume_session_id` into `--resume` like Claude/
+//!   Codex (§6), targeting gemini 0.45.2+. Older builds (≤0.44.1) only accepted
+//!   `"latest"`/index and would reject a UUID; the per-provider diff is always
+//!   composed regardless, so context is never lost on a build that resumes.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -92,8 +93,9 @@ impl GeminiAdapter {
     /// (§4) survives in the untrusted neutral cwd (§3); without it Gemini
     /// refuses headless runs and downgrades the approval mode (verified gemini
     /// 0.44.1). The prompt is the value of the trailing `-p` flag. Reasoning
-    /// effort has no Gemini equivalent, and native UUID resume is unavailable,
-    /// so neither affects the command.
+    /// effort has no Gemini equivalent, so it never affects the command; a
+    /// resumed session (`--resume <id>`) inherits the model of its originating
+    /// session, so `-m` applies on fresh runs only (§6).
     fn build_args(req: &AdapterRequest) -> Vec<String> {
         let mut args: Vec<String> = vec!["-o".to_string(), "json".to_string()];
 
@@ -104,7 +106,13 @@ impl GeminiAdapter {
         args.push("plan".to_string());
         args.push("--skip-trust".to_string());
 
-        if let Some(model) = &req.model {
+        // Native session resume by UUID (`--resume <id>`, verified gemini 0.45.2).
+        // A resumed session inherits the model of its originating session, so
+        // model selection applies on fresh runs only (mirrors Claude/Codex, §6).
+        if let Some(session_id) = &req.resume_session_id {
+            args.push("--resume".to_string());
+            args.push(session_id.clone());
+        } else if let Some(model) = &req.model {
             args.push("-m".to_string());
             args.push(model.clone());
         }
@@ -396,21 +404,31 @@ mod tests {
     }
 
     #[test]
-    fn build_args_ignores_resume_session_id_because_gemini_resume_is_index_based() {
+    fn build_args_resume_carries_session_id_and_omits_model() {
         let mut req = request("again");
         req.resume_session_id = Some("f261c437-db40-4f5f-8e73-c48216de393d".to_string());
+        req.model = Some("gemini-3-pro".to_string());
         let args = GeminiAdapter::build_args(&req);
-        // gemini -r is index/"latest", not a UUID; --session-id starts a NEW
-        // session. Native UUID resume is unavailable, so neither flag is emitted.
-        assert!(!args.contains(&"-r".to_string()), "must not pass -r");
-        assert!(
-            !args.contains(&"--session-id".to_string()),
-            "must not pass --session-id"
-        );
-        assert!(!args.iter().any(|a| a.contains("f261c437")));
+        // gemini 0.45.2 resumes a session by its UUID via `--resume <id>`; the
+        // read-only posture flags are still enforced on resume.
         assert_eq!(
             args,
-            vec!["-o", "json", "--approval-mode", "plan", "--skip-trust", "-p", "again"]
+            vec![
+                "-o",
+                "json",
+                "--approval-mode",
+                "plan",
+                "--skip-trust",
+                "--resume",
+                "f261c437-db40-4f5f-8e73-c48216de393d",
+                "-p",
+                "again",
+            ]
+        );
+        // A resumed session inherits its model, so the flag must not appear.
+        assert!(
+            !args.contains(&"-m".to_string()),
+            "resume must not set -m"
         );
     }
 

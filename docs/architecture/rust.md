@@ -36,11 +36,12 @@ Gemini has two verified divergences from the `docs/idea.md` §1 contract table
   refused (and `--approval-mode` is silently downgraded) unless `--skip-trust` is
   passed. The adapter always passes it; combined with `--approval-mode plan` the
   read-only posture (§4) is preserved — the tool still cannot edit or execute.
-- `gemini -r/--resume` takes `"latest"` or an **index**, not a session UUID
-  (`--session-id` *starts* a new session), so UUID-based native resume is
-  unavailable. `resume_session_id` therefore does not affect command construction;
-  multi-tool continuity is carried by app-owned transcript replay (§6, SP-016) and
-  the native `session_id` is still captured from output as a per-tool optimization.
+- `gemini --resume <id>` resumes a previous session **by its UUID** (verified
+  gemini 0.45.2: it remembers prior turns and keeps the same `session_id`), even
+  though `--help` only documents `"latest"`/index. The adapter wires
+  `resume_session_id` into `--resume` like Claude/Codex (§6). On builds that
+  predate UUID resume (≤0.44.1) continuity degrades gracefully to app-owned
+  transcript replay, since the per-provider diff is always sent.
 
 `gemini -o json` emits a single result object (`response`, `session_id`,
 `stats.models.<name>.tokens`); token usage is summed across models onto the
@@ -60,6 +61,18 @@ Gemini receives its configured model and never receives reasoning.
 Settings seam. Updates validate models, atomically replace the app-data file,
 and refresh the in-memory snapshot immediately. Manual file edits require an
 app restart.
+
+The route path resumes each provider's own native CLI session across turns
+(SP-011). Before dispatch it reads the `native_session_id` previously recorded
+for `(session, provider)` (`provider_sessions`, see `db.md`) and passes it as
+`resume_session_id`; after a successful turn it persists the id the adapter
+returned (latest wins). A provider therefore remembers its prior turns natively
+and is replayed only its per-provider diff (the messages it has not yet seen).
+All three adapters resume by UUID — Claude (`-r <id>`), Codex
+(`codex exec resume <id>`), and Gemini (`--resume <id>`, verified gemini 0.45.2;
+older Gemini builds ≤0.44.1 would reject a UUID). Failed slots persist no native
+id, so a retry runs fresh; a provider that returns no id relies on app-owned
+transcript replay (the per-provider diff is always sent).
 
 Each adapter constructs a `CommandSpec` (program, args, cwd, env, timeout, cancel token) and hands it to the injected `CommandRunner`. The runner uses `tokio::process::Command` with:
 - **Process group isolation**: Unix `process_group(0)` / Windows `CREATE_NEW_PROCESS_GROUP`

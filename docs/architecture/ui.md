@@ -10,6 +10,7 @@ See `docs/architecture/README.md` for the source tree overview and file routing 
 App
  └─ Bubble (Bubble.tsx)
      ├─ uses bubbleReducer       # collapsed / expanded / settings
+     ├─ retains per-session routes across ChatPanel unmounts
      ├─ injects ChatApi           # tauriChatApi | inertChatApi
      ├─ Escape handler            # steps back one level
      ├─ click-vs-drag discriminator  # wasDragged() threshold
@@ -36,7 +37,7 @@ App
 | Active session id | `useState` in `useChat` | `string \| null` |
 | Pending set | `useState` in `useChat` | `Set<sessionId>` |
 | Unread set | `useState` in `useChat` | `Set<sessionId>` |
-| Active routes | `useState` in `ChatPanel` | Session-id keyed `ActiveRoute` values (`{single, provider}` \| `{all}`); each chat defaults to GPT |
+| Active routes | `useState` in `Bubble`, passed into `ChatPanel` | Session-id keyed `ActiveRoute` values (`{single, provider}` \| `{all}`); retained across collapse/reopen, each chat defaults to GPT |
 | Picker open | `useState` in `AiSwitcher` | `boolean` (rendered only while not in flight) |
 
 ### Data Flow for Prompt Submission (SP-017 multi-provider route)

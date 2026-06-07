@@ -63,6 +63,44 @@ test("each chat restores its own selected provider", async ({ page }) => {
   await page.screenshot({ path: "e2e/.artifacts/ai-switcher-per-chat.png" });
 });
 
+test("each chat keeps its selected provider after collapse and reopen", async ({ page }) => {
+  await page.goto("/e2e/seeded.html?initial=collapsed");
+  await page.getByRole("button", { name: "Open side-pilot" }).click();
+
+  await page.getByRole("button", { name: "Show chat history" }).click();
+  await page.getByRole("button", { name: "Fix login bug", exact: true }).click();
+  await page.getByRole("button", { name: /choose ai provider/i }).click();
+  await page.getByRole("menuitemradio", { name: "Gemini" }).click();
+
+  await page.getByRole("button", { name: "Refactor auth module", exact: true }).click();
+  await page.getByRole("button", { name: /choose ai provider/i }).click();
+  await page.getByRole("menuitemradio", { name: "Claude" }).click();
+
+  await page.getByRole("button", { name: "Collapse" }).click();
+  await page.getByRole("button", { name: "Open side-pilot" }).click();
+  await expect(
+    page.getByRole("button", { name: /choose ai provider \(current: Claude\)/i }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Show chat history" }).click();
+  await page.getByRole("button", { name: "Fix login bug", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: /choose ai provider \(current: Gemini\)/i }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: /choose ai provider/i }).click();
+  await page.getByRole("menuitemradio", { name: /^All/ }).click();
+  await page.getByRole("button", { name: "Collapse" }).click();
+  await page.getByRole("button", { name: "Open side-pilot" }).click();
+  await page.getByRole("button", { name: "Show chat history" }).click();
+  await page.getByRole("button", { name: "Fix login bug", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: /choose ai provider \(current: All\)/i }),
+  ).toBeVisible();
+
+  await page.screenshot({ path: "e2e/.artifacts/ai-switcher-collapse-retained.png" });
+});
+
 test("a background provider error is visible when its unread chat is reopened", async ({
   page,
 }) => {

@@ -20,7 +20,7 @@ use uuid::Uuid;
 use super::error::StorageError;
 use super::model::{Message, NewMessage, Sender, Session};
 
-const CURRENT_SCHEMA_VERSION: i64 = 4;
+const CURRENT_SCHEMA_VERSION: i64 = 5;
 
 /// Schema for version 1, applied through `PRAGMA user_version` migrations.
 const SCHEMA: &str = "
@@ -64,6 +64,20 @@ CREATE INDEX IF NOT EXISTS idx_provider_sends_provider
 /// Schema added in version 3: persisted display-only provider failure rows.
 const SCHEMA_V3: &str = "
 ALTER TABLE messages ADD COLUMN is_error INTEGER NOT NULL DEFAULT 0;
+";
+
+/// Schema added in version 5 (SP-011): per-provider native CLI session ids, so
+/// the route path can resume a provider's own session across turns instead of
+/// starting a fresh, context-less process every time (`docs/idea.md` §6 resume).
+/// One row per (session, provider); rows cascade-delete with their session.
+const SCHEMA_V5: &str = "
+CREATE TABLE IF NOT EXISTS provider_sessions (
+    session_id        TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    provider          TEXT NOT NULL,
+    native_session_id TEXT NOT NULL,
+    updated_at        INTEGER NOT NULL,
+    PRIMARY KEY (session_id, provider)
+);
 ";
 
 /// Local SQLite store for chat sessions and messages.
@@ -276,7 +290,9 @@ impl Store {
     }
 
     /// Clear a session's contents (SP-051): delete every message and reset the
-    /// native Codex resume id so future prompts do not resume stale context.
+    /// native resume ids (both the legacy `codex_session_id` and every
+    /// per-provider `provider_sessions` row) so future prompts do not resume
+    /// stale context.
     /// The session row survives so it stays selectable as an empty chat.
     /// `updated_at` is left untouched: clearing is not a message, so (like
     /// rename, SP-049) it must not reorder the latest-message-ordered rail.
@@ -298,6 +314,10 @@ impl Store {
         }
         conn.execute(
             "DELETE FROM messages WHERE session_id = ?1",
+            params![session_id],
+        )?;
+        conn.execute(
+            "DELETE FROM provider_sessions WHERE session_id = ?1",
             params![session_id],
         )?;
         conn.execute(
@@ -368,6 +388,49 @@ impl Store {
             messages.push(row?);
         }
         Ok(messages)
+    }
+
+    /// Return the native CLI session id recorded for `provider` in `session_id`,
+    /// if any. Used by the route path to resume a provider's own native session
+    /// so prior turns are remembered without re-sending them (§6 resume).
+    pub fn native_session_id(
+        &self,
+        session_id: &str,
+        provider: &str,
+    ) -> Result<Option<String>, StorageError> {
+        let conn = self.lock()?;
+        let native = conn
+            .query_row(
+                "SELECT native_session_id FROM provider_sessions
+                 WHERE session_id = ?1 AND provider = ?2",
+                params![session_id, provider],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        Ok(native)
+    }
+
+    /// Record (insert or replace) the native CLI session id for `provider` in
+    /// `session_id`. Idempotent per (session, provider): the latest id wins so a
+    /// forking resume chain always resumes from the most recent native session.
+    pub fn set_native_session_id(
+        &self,
+        session_id: &str,
+        provider: &str,
+        native_session_id: &str,
+    ) -> Result<(), StorageError> {
+        let conn = self.lock()?;
+        // ON CONFLICT keeps one row per (session, provider) and refreshes it, so
+        // a resumed turn that forks the native session id always wins.
+        conn.execute(
+            "INSERT INTO provider_sessions (session_id, provider, native_session_id, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT (session_id, provider)
+             DO UPDATE SET native_session_id = excluded.native_session_id,
+                           updated_at = excluded.updated_at",
+            params![session_id, provider, native_session_id, now_millis()],
+        )?;
+        Ok(())
     }
 }
 
@@ -477,6 +540,14 @@ fn migrate_schema(conn: &Connection) -> Result<(), StorageError> {
         }
         migration.push_str("PRAGMA user_version = 4;\nCOMMIT;");
         conn.execute_batch(&migration)?;
+    }
+    if version < 5 {
+        conn.execute_batch(&format!(
+            "BEGIN IMMEDIATE;
+             {SCHEMA_V5}
+             PRAGMA user_version = 5;
+             COMMIT;"
+        ))?;
     }
 
     Ok(())
@@ -1020,6 +1091,146 @@ mod tests {
             })
             .unwrap();
         assert_eq!(rows, 0, "send rows cascade-delete with their message");
+    }
+
+    // ---- provider native session ids (resume) -------------------------------
+
+    #[test]
+    fn set_and_get_native_session_id_round_trips() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        store
+            .set_native_session_id(&session.id, "claude", "sid-1")
+            .unwrap();
+
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("sid-1")
+        );
+    }
+
+    #[test]
+    fn native_session_id_absent_returns_none() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        assert_eq!(
+            store.native_session_id(&session.id, "claude").unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn native_session_id_is_scoped_per_provider() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        store
+            .set_native_session_id(&session.id, "claude", "sid-claude")
+            .unwrap();
+
+        // Codex has not recorded a native session in this chat yet.
+        assert_eq!(store.native_session_id(&session.id, "codex").unwrap(), None);
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("sid-claude")
+        );
+    }
+
+    #[test]
+    fn set_native_session_id_overwrites_previous() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        store
+            .set_native_session_id(&session.id, "claude", "old")
+            .unwrap();
+        store
+            .set_native_session_id(&session.id, "claude", "new")
+            .unwrap();
+
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("new"),
+            "the latest native session id wins so a forking resume chain stays current"
+        );
+    }
+
+    #[test]
+    fn clear_session_clears_native_session_ids() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        store
+            .set_native_session_id(&session.id, "claude", "sid-1")
+            .unwrap();
+
+        store.clear_session(&session.id).unwrap();
+
+        assert_eq!(
+            store.native_session_id(&session.id, "claude").unwrap(),
+            None,
+            "a cleared chat must not resume a stale native session"
+        );
+    }
+
+    #[test]
+    fn native_session_ids_cascade_when_session_deleted() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        store
+            .set_native_session_id(&session.id, "claude", "sid-1")
+            .unwrap();
+
+        store.delete_session(&session.id).unwrap();
+
+        let conn = store.lock().unwrap();
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM provider_sessions", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 0, "native session ids cascade-delete with their session");
+    }
+
+    #[test]
+    fn version_four_database_migrates_to_v5_preserving_data() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        conn.execute_batch(SCHEMA_V2).unwrap();
+        conn.execute_batch(SCHEMA_V3).unwrap();
+        conn.execute("ALTER TABLE messages ADD COLUMN model TEXT", [])
+            .unwrap();
+        conn.execute("ALTER TABLE messages ADD COLUMN reasoning_effort TEXT", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, title, created_at, updated_at, codex_session_id)
+             VALUES ('s1', 'Existing', 10, 20, NULL)",
+            [],
+        )
+        .unwrap();
+        conn.pragma_update(None, "user_version", 4).unwrap();
+
+        let store = Store::from_connection(conn).unwrap();
+
+        // Data preserved and the new per-provider resume store is usable.
+        assert_eq!(store.list_sessions().unwrap().len(), 1);
+        store.set_native_session_id("s1", "claude", "sid-1").unwrap();
+        assert_eq!(
+            store.native_session_id("s1", "claude").unwrap().as_deref(),
+            Some("sid-1")
+        );
+        let conn = store.lock().unwrap();
+        assert_eq!(schema_version(&conn), CURRENT_SCHEMA_VERSION);
     }
 
     #[test]

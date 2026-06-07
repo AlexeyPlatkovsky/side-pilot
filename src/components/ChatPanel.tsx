@@ -1,4 +1,6 @@
 import {
+  type Dispatch,
+  type SetStateAction,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -40,6 +42,7 @@ import { Dialog } from "./Dialog";
 import { RenameDialog } from "./RenameDialog";
 
 const COMPOSER_INPUT_MIN_HEIGHT = 32;
+type RoutesBySession = Record<string, ActiveRoute>;
 
 /** Stable id for an optimistic (not-yet-persisted) message row. */
 function newId(): string {
@@ -327,6 +330,10 @@ export function useChat(api: ChatApi) {
 export interface ChatPanelProps {
   /** Backend seam; defaults to the no-IPC stub so shell tests stay offline. */
   api?: ChatApi;
+  /** Optional route state retained by a shell that may unmount the chat panel. */
+  routesBySession?: RoutesBySession;
+  /** Updates shell-retained route state when provided with `routesBySession`. */
+  setRoutesBySession?: Dispatch<SetStateAction<RoutesBySession>>;
 }
 
 /**
@@ -339,7 +346,11 @@ export interface ChatPanelProps {
  * a single provider or All. Each settled assistant reply keeps its persisted
  * model+effort badge; user messages are unlabeled.
  */
-export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
+export function ChatPanel({
+  api = inertChatApi,
+  routesBySession: retainedRoutesBySession,
+  setRoutesBySession: setRetainedRoutesBySession,
+}: ChatPanelProps) {
   const {
     state,
     sessions,
@@ -354,7 +365,9 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
     clearActive,
   } = useChat(api);
   const [draft, setDraft] = useState("");
-  const [routesBySession, setRoutesBySession] = useState<Record<string, ActiveRoute>>({});
+  const [localRoutesBySession, setLocalRoutesBySession] = useState<RoutesBySession>({});
+  const routesBySession = retainedRoutesBySession ?? localRoutesBySession;
+  const setRoutesBySession = setRetainedRoutesBySession ?? setLocalRoutesBySession;
   const [railOpen, setRailOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [renamingActive, setRenamingActive] = useState(false);
@@ -408,15 +421,17 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
       if (!activeSessionId) return;
       setRoutesBySession((current) => ({ ...current, [activeSessionId]: next }));
     },
-    [activeSessionId],
+    [activeSessionId, setRoutesBySession],
   );
 
   // Drop retained UI state after a chat is deleted.
   useEffect(() => {
+    // A remounted panel starts with an empty session list while history loads.
+    // Do not mistake that transient state for every chat having been deleted.
+    if (sessions.length === 0) return;
     const sessionIds = new Set(sessions.map((session) => session.id));
     if (Object.keys(routesBySession).every((sessionId) => sessionIds.has(sessionId)))
       return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRoutesBySession(
       Object.fromEntries(
         Object.entries(routesBySession).filter(([sessionId]) =>
@@ -424,7 +439,7 @@ export function ChatPanel({ api = inertChatApi }: ChatPanelProps) {
         ),
       ),
     );
-  }, [routesBySession, sessions]);
+  }, [routesBySession, sessions, setRoutesBySession]);
 
   // Keep the latest turn in view as the transcript grows. Guarded because
   // `scrollIntoView` is not implemented in the jsdom test environment.

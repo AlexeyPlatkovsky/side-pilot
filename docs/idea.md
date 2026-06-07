@@ -151,11 +151,11 @@ Every adapter MUST use the tool's non-interactive mode with machine-readable out
 |---|---|---|---|---|---|---|
 | Claude Code | `claude -p "<prompt>"` | `--output-format json` (or `stream-json`) | inherits process `cwd`; `--add-dir <dir>` to widen | `--model <id>` | `--permission-mode <mode>` | `--session-id <uuid>`, resume `-r <id>` |
 | OpenAI Codex | `codex exec "<prompt>"` (prompt may come via stdin) | `--json` (JSONL events); `--output-last-message <file>` for final text | `-C/--cd <dir>` | `-m/--model <id>` | `-s/--sandbox <mode>` | `codex exec resume` |
-| Gemini | `gemini -p "<prompt>"` (stdin appended) | `-o/--output-format json` (or `stream-json`) | inherits process `cwd`; `--include-directories <dirs>` | `-m/--model <id>` | `--approval-mode <mode>` (+ `--skip-trust`, see note) | resume `-r latest`/`-r <index>` (not UUID); `--session-id <uuid>` starts a new session |
+| Gemini | `gemini -p "<prompt>"` (stdin appended) | `-o/--output-format json` (or `stream-json`) | inherits process `cwd`; `--include-directories <dirs>` | `-m/--model <id>` | `--approval-mode <mode>` (+ `--skip-trust`, see note) | resume `--resume <uuid>` (verified 0.45.2; `--help` only documents `latest`/index) |
 
-> **Verified CLI constraints (gemini 0.44.1, GeminiAdapter / SP-014):**
-> - A headless run in an **untrusted** directory (the neutral app-controlled `cwd`, §3) is refused and `--approval-mode` is silently downgraded. The adapter always passes **`--skip-trust`**, which restores trust for the read-only session; combined with `--approval-mode plan` the read-only posture (§4) is preserved (the tool still cannot edit or execute).
-> - `gemini -r/--resume` accepts `"latest"` or an **index**, not a session UUID, and `--session-id` *starts* a new session — so UUID-based native resume is unavailable. The adapter does not wire `resume_session_id` into the command; multi-tool continuity relies on app-owned transcript replay (§6) and the native `session_id` is captured from output only as a per-tool optimization.
+> **Verified CLI constraints (GeminiAdapter / SP-014):**
+> - A headless run in an **untrusted** directory (the neutral app-controlled `cwd`, §3) is refused and `--approval-mode` is silently downgraded (gemini 0.44.1). The adapter always passes **`--skip-trust`**, which restores trust for the read-only session; combined with `--approval-mode plan` the read-only posture (§4) is preserved (the tool still cannot edit or execute).
+> - `gemini --resume <id>` resumes a previous session **by its UUID** (verified gemini 0.45.2: a resumed run remembers prior turns and keeps the same `session_id`), even though `--help` documents only `"latest"`/index. The adapter wires `resume_session_id` into `--resume` like Claude/Codex (§6), targeting gemini 0.45.2+; older builds (≤0.44.1) only accept `"latest"`/index and would reject a UUID. The per-provider diff is always composed regardless, so context is carried independently of native resume.
 
 ### 2. Binary resolution and environment
 

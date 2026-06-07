@@ -53,6 +53,31 @@ describe("Bubble", () => {
     expect(screen.getByRole("button", { name: /open side-pilot/i })).toBeInTheDocument();
   });
 
+  it("preserves the active chat's AI route after collapsing and reopening", async () => {
+    const user = userEvent.setup();
+    render(<Bubble resizeWindow={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /open side-pilot/i }));
+    await screen.findByLabelText("Ask side-pilot");
+
+    await user.click(
+      screen.getByRole("button", { name: /choose ai provider \(current: GPT\)/i }),
+    );
+    await user.click(screen.getByRole("menuitemradio", { name: /^Gemini/ }));
+    expect(
+      screen.getByRole("button", { name: /choose ai provider \(current: Gemini\)/i }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /collapse/i }));
+    await user.click(screen.getByRole("button", { name: /open side-pilot/i }));
+
+    expect(
+      await screen.findByRole("button", {
+        name: /choose ai provider \(current: Gemini\)/i,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("renders the warm companion panel identity", async () => {
     render(<Bubble initialState="expanded" resizeWindow={vi.fn()} />);
 

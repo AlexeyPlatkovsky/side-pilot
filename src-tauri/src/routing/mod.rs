@@ -285,6 +285,12 @@ pub async fn execute_route_with_preferences(
         let diff = store.unsent_messages(&request.session_id, provider.as_str())?;
         let diff_ids = diff.iter().map(|m| m.id.clone()).collect();
         let prompt = compose_prompt(&diff);
+        // Resume the provider's own native CLI session when one was recorded for
+        // this chat, so prior turns are remembered natively and only the diff is
+        // replayed. All three adapters resume by UUID (Claude `-r`, Codex
+        // `codex exec resume`, Gemini `--resume`); any provider that records no
+        // id simply runs fresh and relies on transcript replay.
+        let resume_session_id = store.native_session_id(&request.session_id, provider.as_str())?;
         prepared.push(Prepared {
             provider,
             preference: preference.clone(),
@@ -301,7 +307,7 @@ pub async fn execute_route_with_preferences(
                 },
                 permission_mode: PermissionMode::ReadOnly,
                 timeout_ms: request.timeout_ms,
-                resume_session_id: None,
+                resume_session_id,
                 run_id: None,
             },
             cancel: make_cancel(provider),
@@ -324,6 +330,17 @@ pub async fn execute_route_with_preferences(
     for (prep, result) in prepared.into_iter().zip(results) {
         match result {
             Ok(adapter_result) => {
+                // Record the provider's native session id so its next turn
+                // resumes this session instead of starting context-less. The
+                // latest id wins (resume can fork the id); a provider that
+                // returns none simply keeps running fresh.
+                if let Some(native) = &adapter_result.native_session_id {
+                    store.set_native_session_id(
+                        &request.session_id,
+                        prep.provider.as_str(),
+                        native,
+                    )?;
+                }
                 let message = store.append_message(NewMessage {
                     session_id: request.session_id.clone(),
                     sender: Sender::Assistant,
@@ -426,6 +443,39 @@ mod tests {
 
     struct ModelEchoAdapter {
         id: AssistantId,
+    }
+
+    /// Stub adapter that reports a native session id and echoes the
+    /// `resume_session_id` it received plus the composed prompt, so tests can
+    /// assert that the route resumes a provider's own native session and only
+    /// sends the diff.
+    struct ResumeEchoAdapter {
+        id: AssistantId,
+        native_session_id: Option<String>,
+    }
+
+    #[async_trait]
+    impl CliAdapter for ResumeEchoAdapter {
+        fn id(&self) -> AssistantId {
+            self.id
+        }
+
+        async fn run(
+            &self,
+            req: AdapterRequest,
+            _cancel: CancellationToken,
+        ) -> Result<AdapterResult, AdapterError> {
+            Ok(AdapterResult {
+                assistant_text: "ok".to_string(),
+                raw_json: format!(
+                    "resume={}|prompt={}",
+                    req.resume_session_id.as_deref().unwrap_or("none"),
+                    req.prompt
+                ),
+                native_session_id: self.native_session_id.clone(),
+                usage: None,
+            })
+        }
     }
 
     #[async_trait]
@@ -1079,6 +1129,122 @@ mod tests {
                 .as_deref(),
             Some("first try\n\nretry"),
             "the persisted error card must not be replayed to Gemini"
+        );
+    }
+
+    // ---- execute_route: native session resume (SP-011 bug fix) -------------
+
+    fn resume_registry(native: Option<&str>) -> AdapterRegistry {
+        let mut registry = AdapterRegistry::new();
+        registry.register(Arc::new(ResumeEchoAdapter {
+            id: AssistantId::Claude,
+            native_session_id: native.map(str::to_string),
+        }));
+        registry
+    }
+
+    #[tokio::test]
+    async fn same_provider_followup_resumes_stored_native_session_and_sends_diff() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        let single = |prompt: &str| RouteRequest {
+            session_id: session.id.clone(),
+            route: Route::Single {
+                provider: AssistantId::Claude,
+            },
+            prompt: prompt.to_string(),
+            active_providers: vec![],
+            timeout_ms: 1000,
+        };
+
+        // Turn 1: no native session exists yet, so the provider runs fresh and
+        // receives the whole (so-far) transcript.
+        let first = execute_route(&store, &resume_registry(Some("sid-1")), single("one"), no_cancel)
+            .await
+            .unwrap();
+        assert_eq!(
+            first.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
+            Some("resume=none|prompt=one"),
+            "the first turn has no native session to resume"
+        );
+        // The native session id the adapter returned is now persisted.
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("sid-1")
+        );
+
+        // Turn 2: the route resumes the stored native session and sends only the
+        // diff (the new prompt) — prior turns are remembered natively, not replayed.
+        let second =
+            execute_route(&store, &resume_registry(Some("sid-2")), single("two"), no_cancel)
+                .await
+                .unwrap();
+        assert_eq!(
+            second.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
+            Some("resume=sid-1|prompt=two"),
+            "the follow-up resumes the native session and replays only the diff"
+        );
+        // The latest returned native session id wins (resume chains can fork).
+        assert_eq!(
+            store
+                .native_session_id(&session.id, "claude")
+                .unwrap()
+                .as_deref(),
+            Some("sid-2")
+        );
+    }
+
+    #[tokio::test]
+    async fn provider_without_native_session_id_records_no_resume() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+
+        let single = |prompt: &str| RouteRequest {
+            session_id: session.id.clone(),
+            route: Route::Single {
+                provider: AssistantId::Claude,
+            },
+            prompt: prompt.to_string(),
+            active_providers: vec![],
+            timeout_ms: 1000,
+        };
+
+        // A provider that returns no native session id (e.g. one whose CLI can't
+        // resume) records nothing to resume, so the next turn still runs fresh.
+        execute_route(&store, &resume_registry(None), single("one"), no_cancel)
+            .await
+            .unwrap();
+        assert_eq!(
+            store.native_session_id(&session.id, "claude").unwrap(),
+            None
+        );
+
+        let second = execute_route(&store, &resume_registry(None), single("two"), no_cancel)
+            .await
+            .unwrap();
+        assert_eq!(
+            second.outcomes[0]
+                .message
+                .as_ref()
+                .unwrap()
+                .raw_json
+                .as_deref(),
+            Some("resume=none|prompt=two"),
+            "with no resumable native session, the diff is still delivered fresh"
         );
     }
 
