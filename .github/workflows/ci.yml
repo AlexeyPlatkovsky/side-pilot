@@ -2,13 +2,44 @@ name: CI
 
 on:
   pull_request:
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "e2e/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci.yml"
+      - "tsconfig.json"
+      - "tsconfig.node.json"
+      - "vite.config.ts"
+      - "playwright.config.ts"
+      - "vitest.setup.ts"
+      - "eslint.config.js"
+      - "index.html"
   push:
     branches:
       - main
+    paths:
+      - "src/**"
+      - "src-tauri/**"
+      - "e2e/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/ci.yml"
+      - "tsconfig.json"
+      - "tsconfig.node.json"
+      - "vite.config.ts"
+      - "playwright.config.ts"
+      - "vitest.setup.ts"
+      - "eslint.config.js"
+      - "index.html"
 
 jobs:
   checks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -42,30 +73,92 @@ jobs:
         run: npm ci
 
       - name: Lint frontend
+        id: lint
         run: npm run lint
 
       - name: Check formatting
+        id: format
         run: npm run format:check
 
       - name: Test frontend
+        id: test-fe
         run: npm run test
 
       - name: Install Playwright WebKit
         run: npx playwright install --with-deps webkit
 
       - name: Test WebKit runtime harness
+        id: e2e
         run: npm run test:e2e
 
       - name: Build frontend
+        id: build-fe
         run: npm run build
 
       - name: Test Rust core
+        id: test-rust
         run: cargo nextest run --manifest-path src-tauri/Cargo.toml
 
       - name: Check IPC bindings are up to date
+        id: ipc
         run: |
           cargo test --manifest-path src-tauri/Cargo.toml export_bindings
           git diff --exit-code src/chat/generated
 
       - name: Lint Rust core
+        id: clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
+      - name: Post PR comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LINT: ${{ steps.lint.outcome }}
+          FORMAT: ${{ steps.format.outcome }}
+          TEST_FE: ${{ steps.test-fe.outcome }}
+          E2E: ${{ steps.e2e.outcome }}
+          BUILD_FE: ${{ steps.build-fe.outcome }}
+          TEST_RUST: ${{ steps.test-rust.outcome }}
+          IPC: ${{ steps.ipc.outcome }}
+          CLIPPY: ${{ steps.clippy.outcome }}
+        run: |
+          PR="${{ github.event.pull_request.number }}"
+          now=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+          icon() {
+            case "$1" in
+              success) echo -n "✅" ;;
+              skipped) echo -n "➖" ;;
+              failure) echo -n "❌" ;;
+              cancelled) echo -n "🚫" ;;
+              *) echo -n "❓" ;;
+            esac
+          }
+
+          table="| | Check | Result |
+          |---|---|---|
+          | $(icon "$LINT")     | Lint frontend   | $LINT     |
+          | $(icon "$FORMAT")   | Check formatting | $FORMAT   |
+          | $(icon "$TEST_FE")  | Test frontend   | $TEST_FE  |
+          | $(icon "$E2E")      | WebKit E2E      | $E2E      |
+          | $(icon "$BUILD_FE") | Build frontend  | $BUILD_FE |
+          | $(icon "$TEST_RUST")| Test Rust core  | $TEST_RUST|
+          | $(icon "$IPC")      | IPC bindings    | $IPC      |
+          | $(icon "$CLIPPY")   | Clippy (Rust lint)| $CLIPPY |"
+
+          pass=$(echo "$table" | grep -cE "✅|➖")
+          fail=$(echo "$table" | grep -cE "❌|🚫|❓")
+          total=$((pass+fail))
+          summary="$pass / $total passed"
+          [ "$fail" -gt 0 ] && summary="$summary, $fail failed"
+
+          body=$(printf "## CI — %s\n\n%s\n\n**%s**" "$now" "$table" "$summary")
+
+          # Remove previous CI comments by this bot to avoid duplicates.
+          gh pr view "$PR" --repo "${{ github.repository }}" --json comments \
+            -q '.comments[] | select(.author.login == "github-actions[bot]") | select(.body | startswith("## CI")) | .id' \
+            | while read -r id; do
+                gh api --silent -X DELETE "/repos/${{ github.repository }}/issues/comments/$id" || true
+              done
+
+          gh pr comment "$PR" --repo "${{ github.repository }}" --body "$body"
