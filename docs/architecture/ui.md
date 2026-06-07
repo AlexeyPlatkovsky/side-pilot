@@ -80,7 +80,7 @@ selection target invalidates the pending activation.
 | `src/components/Bubble.tsx` | Floating bubble shell: collapsed dot → expanded panel |
 | `src/components/ChatPanel.tsx` | Chat transcript, toolbar, composer, AI switcher, route submission, session management |
 | `src/components/AiSwitcher.tsx` | Provider-logo switcher button + vertical picker (All + GPT/Claude/Gemini) |
-| `src/components/ProviderIcon.tsx` | Provider monogram chips + the All grid glyph |
+| `src/components/ProviderIcon.tsx` | Provider logo images + the All grid glyph |
 | `src/chat/providers.ts` | Provider registry, `ActiveRoute`, route helpers, per-provider labels/errors |
 | `src/components/ChatHistory.tsx` | Session rail: list, rename, delete, new chat |
 | `src/components/Dialog.tsx` | Accessible modal dialog (focus trap, Escape) |

@@ -54,14 +54,6 @@
   /* Unread-answer indicator dot in the chat list (notable orange). */
   --color-unread: var(--orange);
 
-  /* AI provider accents for the switcher icons (SP-017). Drawn from the palette
-     so each provider reads distinctly while clearing AA contrast for the
-     monogram glyph: teal + clay carry cream text (5.6:1 / 6:1); honey is light,
-     so its chip uses ink text (~9:1) — see `.provider-icon--gemini`. */
-  --provider-gpt: var(--teal);
-  --provider-claude: var(--clay);
-  --provider-gemini: var(--honey);
-
   /* Surfaces */
   --surface-panel: rgba(255, 248, 238, 0.95);
   --surface-panel-soft: rgba(255, 248, 238, 0.82);

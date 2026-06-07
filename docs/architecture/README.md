@@ -29,7 +29,7 @@ side-pilot/
 │   │   ├── Bubble.tsx            # Floating bubble shell: collapsed dot → expanded panel
 │   │   ├── ChatPanel.tsx         # Chat transcript, toolbar, composer, AI switcher, route submission
 │   │   ├── AiSwitcher.tsx        # Provider switcher button + vertical picker (All + GPT/Claude/Gemini)
-│   │   ├── ProviderIcon.tsx      # Provider monogram chips + the All grid glyph
+│   │   ├── ProviderIcon.tsx      # Provider logo images + the All grid glyph
 │   │   ├── ChatHistory.tsx       # Session rail: list, rename, delete, new chat
 │   │   ├── Dialog.tsx            # Accessible modal dialog (focus trap, Escape)
 │   │   └── RenameDialog.tsx      # Chat rename form inside Dialog

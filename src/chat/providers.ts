@@ -17,15 +17,11 @@ import type { Route } from "./generated/Route";
 /** The active routing selection — single provider or every active provider. */
 export type ActiveRoute = Route;
 
-/** Per-provider UI presentation. `glyph` is the monogram shown in the icon. */
+/** Per-provider UI presentation. */
 export interface ProviderInfo {
   id: AssistantId;
   /** User-facing name (Codex → "GPT"). */
   label: string;
-  /** Short monogram rendered inside the provider icon. */
-  glyph: string;
-  /** CSS modifier suffix for the icon's accent color (`provider-icon--<accent>`). */
-  accent: string;
 }
 
 /**
@@ -33,9 +29,9 @@ export interface ProviderInfo {
  * making the set user-configurable is deferred to Settings (post-MVP).
  */
 export const PROVIDERS: readonly ProviderInfo[] = [
-  { id: "codex", label: "GPT", glyph: "G", accent: "gpt" },
-  { id: "claude", label: "Claude", glyph: "C", accent: "claude" },
-  { id: "gemini", label: "Gemini", glyph: "✦", accent: "gemini" },
+  { id: "codex", label: "GPT" },
+  { id: "claude", label: "Claude" },
+  { id: "gemini", label: "Gemini" },
 ] as const;
 
 /** Every active provider id, in display order. */
@@ -47,7 +43,7 @@ export const DEFAULT_ROUTE: ActiveRoute = { kind: "single", provider: "codex" };
 /** Look up a provider's presentation, falling back for unknown ids. */
 export function providerInfo(id: AssistantId): ProviderInfo {
   return (
-    PROVIDERS.find((p) => p.id === id) ?? { id, label: id, glyph: "?", accent: "gpt" }
+    PROVIDERS.find((p) => p.id === id) ?? { id, label: id }
   );
 }
 

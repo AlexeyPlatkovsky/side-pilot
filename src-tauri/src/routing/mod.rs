@@ -4,7 +4,7 @@
 //! which adapters a prompt targets, computes the per-provider **diff** (the
 //! messages a provider has not yet seen), composes that diff into a single
 //! transcript with prior responses from *other* providers labeled
-//! `[ProviderName]: …`, dispatches single-provider and `All` routes (the latter
+//! `[ProviderName said]: …`, dispatches single-provider and `All` routes (the latter
 //! concurrently), and records `message_provider_sends` rows so each provider
 //! only ever receives new context.
 //!
@@ -98,7 +98,7 @@ pub fn plan_targets(route: &Route, active: &[AssistantId]) -> Vec<AssistantId> {
 
 /// Compose a provider's diff into a single replayable transcript. User turns are
 /// rendered verbatim; assistant turns are labeled with the producing provider
-/// (`[ProviderName]: …`) so cross-provider context is unambiguous (§6).
+/// (`[ProviderName said]: …`) so cross-provider context is unambiguous (§6).
 pub fn compose_prompt(messages: &[Message]) -> String {
     messages
         .iter()
@@ -117,7 +117,7 @@ fn format_turn(message: &Message) -> String {
                 .and_then(|id| id.parse::<AssistantId>().ok())
                 .map(AssistantId::display_name)
                 .unwrap_or("Assistant");
-            format!("[{label}]: {content}", content = message.content)
+            format!("[{label} said]: {content}", content = message.content)
         }
     }
 }
@@ -871,14 +871,31 @@ mod tests {
         ]);
         assert_eq!(
             composed,
-            "first question\n\n[Codex]: codex answer\n\nfollow up"
+            "first question\n\n[Codex said]: codex answer\n\nfollow up"
+        );
+    }
+
+    #[test]
+    fn compose_labels_other_provider_responses_as_speech_not_self() {
+        let composed = compose_prompt(&[
+            msg(1, Sender::User, None, "show your session ID"),
+            msg(
+                2,
+                Sender::Assistant,
+                Some("codex"),
+                "My current session ID is abc-123",
+            ),
+        ]);
+        assert_eq!(
+            composed,
+            "show your session ID\n\n[Codex said]: My current session ID is abc-123",
         );
     }
 
     #[test]
     fn compose_labels_unknown_assistant_generically() {
         let composed = compose_prompt(&[msg(1, Sender::Assistant, Some("mystery"), "x")]);
-        assert_eq!(composed, "[Assistant]: x");
+        assert_eq!(composed, "[Assistant said]: x");
     }
 
     // ---- execute_route: Scenario 1 (first send, empty history) --------------
@@ -969,7 +986,7 @@ mod tests {
             .clone();
         assert_eq!(
             received.as_deref(),
-            Some("hello\n\n[Codex]: codex says hi\n\nand you?")
+            Some("hello\n\n[Codex said]: codex says hi\n\nand you?")
         );
         // All three prior messages + nothing missing are now marked sent to claude.
         let history = store.read_history(&session.id).unwrap();

@@ -70,7 +70,7 @@ impl AssistantId {
     }
 
     /// Human-readable provider name used for labeled transcript replay, e.g. the
-    /// `[Codex]:` prefix on a prior response from another provider (SP-016, §6).
+    /// `[Codex said]:` prefix on a prior response from another provider (SP-016, §6).
     pub fn display_name(self) -> &'static str {
         match self {
             AssistantId::Codex => "Codex",
