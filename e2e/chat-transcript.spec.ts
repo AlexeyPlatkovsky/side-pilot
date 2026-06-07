@@ -79,7 +79,9 @@ test("the rail shows a spinner while replying, then an unread dot in the backgro
   await expect(page.locator(".chat-row__unread")).toHaveCount(0);
 });
 
-test("All-provider thinking labels survive chat switches and collapse", async ({ page }) => {
+test("All-provider thinking labels survive chat switches and collapse", async ({
+  page,
+}) => {
   await page.goto("/e2e/seeded.html?initial=collapsed&routeDelay=3000");
   await page.getByRole("button", { name: "Open side-pilot" }).click();
   await page.getByRole("button", { name: /choose ai provider/i }).click();
@@ -149,6 +151,8 @@ test("deleting a chat invalidates its slow pending selection", async ({ page }) 
 
   await page.waitForTimeout(1200);
   await expect(page.locator(".chat__active-title")).toHaveText("Refactor auth module");
-  await expect(page.locator(".chat-row__select", { hasText: "Fix login bug" })).toHaveCount(0);
+  await expect(
+    page.locator(".chat-row__select", { hasText: "Fix login bug" }),
+  ).toHaveCount(0);
   await expect(page.getByText("How do I add passkey login?")).toBeVisible();
 });

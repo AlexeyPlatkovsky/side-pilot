@@ -63,7 +63,9 @@ test("each chat restores its own selected provider", async ({ page }) => {
   await page.screenshot({ path: "e2e/.artifacts/ai-switcher-per-chat.png" });
 });
 
-test("each chat keeps its selected provider after collapse and reopen", async ({ page }) => {
+test("each chat keeps its selected provider after collapse and reopen", async ({
+  page,
+}) => {
   await page.goto("/e2e/seeded.html?initial=collapsed");
   await page.getByRole("button", { name: "Open side-pilot" }).click();
 

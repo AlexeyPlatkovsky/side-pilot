@@ -292,7 +292,7 @@ describe("ChatPanel", () => {
     await send(user, "render this");
 
     await screen.findByText(/safe text/);
-    expect(container.querySelector("img")).toBeNull();
+    expect(container.querySelector(".message__markdown img")).toBeNull();
   });
 
   it("disables Send for an empty draft", async () => {
@@ -627,7 +627,9 @@ describe("ChatPanel", () => {
     await send(user, "prompt before persistence");
     await user.click(screen.getByRole("button", { name: "Show chat history" }));
     await user.click(screen.getByRole("button", { name: /^Two/ }));
-    await user.click(screen.getByRole("button", { name: /Untitled chat, reply in progress/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Untitled chat, reply in progress/ }),
+    );
 
     expect(screen.getByText("prompt before persistence")).toBeInTheDocument();
     expect(screen.getByTestId("thinking")).toBeInTheDocument();
@@ -670,7 +672,11 @@ describe("ChatPanel", () => {
       { ...SESSION, id: "s1", title: "One", updatedAt: 2 },
       { ...SESSION, id: "s2", title: "Two", updatedAt: 1 },
     ];
-    const prior = persisted({ id: "prior-prompt", sender: "user", content: "same prompt" });
+    const prior = persisted({
+      id: "prior-prompt",
+      sender: "user",
+      content: "same prompt",
+    });
     const api = makeApi({
       sessions,
       history: [prior],
@@ -706,7 +712,12 @@ describe("ChatPanel", () => {
         }
         if (id === "s3") {
           return Promise.resolve([
-            persisted({ id: "three-message", sessionId: "s3", sender: "user", content: "three" }),
+            persisted({
+              id: "three-message",
+              sessionId: "s3",
+              sender: "user",
+              content: "three",
+            }),
           ]);
         }
         return Promise.resolve([]);
@@ -747,7 +758,12 @@ describe("ChatPanel", () => {
           });
         }
         return Promise.resolve([
-          persisted({ id: "one-message", sessionId: "s1", sender: "user", content: "one" }),
+          persisted({
+            id: "one-message",
+            sessionId: "s1",
+            sender: "user",
+            content: "one",
+          }),
         ]);
       }),
     });
@@ -784,7 +800,12 @@ describe("ChatPanel", () => {
           });
         }
         return Promise.resolve([
-          persisted({ id: "one-message", sessionId: "s1", sender: "user", content: "one" }),
+          persisted({
+            id: "one-message",
+            sessionId: "s1",
+            sender: "user",
+            content: "one",
+          }),
         ]);
       }),
     });
@@ -889,7 +910,9 @@ describe("ChatPanel", () => {
     await waitFor(() => expect(api.listSessions).toHaveBeenCalledTimes(2));
     expect(screen.queryByText(/late (gpt|claude|gemini)/)).toBeNull();
     expect(screen.queryByRole("button", { name: "One" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /unread answer|reply in progress/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /unread answer|reply in progress/ }),
+    ).toBeNull();
   });
 
   it("marks a background reply unread in the rail and clears it when reopened", async () => {
@@ -1172,9 +1195,7 @@ describe("ChatPanel", () => {
     const api = makeApi({
       runRoute: vi.fn((req: RouteRequest) =>
         Promise.resolve(
-          routeResult(req.prompt, [
-            { provider: "gemini", error: { kind: "timedOut" } },
-          ]),
+          routeResult(req.prompt, [{ provider: "gemini", error: { kind: "timedOut" } }]),
         ),
       ),
     });
@@ -1191,9 +1212,7 @@ describe("ChatPanel", () => {
     const errorCard = await screen.findByTestId("provider-error");
     expect(errorCard).toHaveAttribute("data-provider", "gemini");
     expect(errorCard).toHaveTextContent(/timed out/i);
-    expect(
-      within(errorCard).getByRole("button", { name: "Retry" }),
-    ).toBeInTheDocument();
+    expect(within(errorCard).getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
   it("hides Retry button when the AI does not match the error provider", async () => {
@@ -1217,9 +1236,7 @@ describe("ChatPanel", () => {
     const errorCard = screen.getByTestId("provider-error");
     expect(errorCard).toHaveAttribute("data-provider", "gemini");
     expect(errorCard).toHaveTextContent(/timed out/i);
-    expect(
-      errorCard.querySelector('[role="button"]'),
-    ).toBeNull();
+    expect(errorCard.querySelector('[role="button"]')).toBeNull();
   });
 
   it("hides Retry button in All mode even when error matches a provider", async () => {

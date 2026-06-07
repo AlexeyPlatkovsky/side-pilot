@@ -2,7 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Bubble } from "./Bubble";
-import { inertChatApi, type ChatApi, type ProviderRunOutcome, type RouteRunResult } from "../chat/api";
+import {
+  inertChatApi,
+  type ChatApi,
+  type ProviderRunOutcome,
+  type RouteRunResult,
+} from "../chat/api";
 
 function pendingChatApi(): ChatApi {
   const session = {
@@ -123,7 +128,13 @@ describe("Bubble", () => {
 
   it("preserves every labeled All-provider thinking slot through the settings view", async () => {
     const user = userEvent.setup();
-    render(<Bubble initialState="expanded" resizeWindow={vi.fn()} chatApi={pendingChatApi()} />);
+    render(
+      <Bubble
+        initialState="expanded"
+        resizeWindow={vi.fn()}
+        chatApi={pendingChatApi()}
+      />,
+    );
     await screen.findByLabelText("Ask side-pilot");
 
     await user.click(screen.getByRole("button", { name: /choose ai provider/i }));

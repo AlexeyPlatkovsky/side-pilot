@@ -144,28 +144,55 @@ const api: ChatApi = {
   // multi-slot layout can be exercised in the WebKit harness.
   runRoute: (request) =>
     new Promise<RouteRunResult>((resolve) =>
-      setTimeout(() => {
-        const list = (messages[request.sessionId] ??= []);
-        const userMessage: PersistedMessage = {
-          id: `m${nextSeq++}`,
-          sessionId: request.sessionId,
-          seq: list.length + 1,
-          sender: "user",
-          assistantId: null,
-          model: null,
-          reasoningEffort: null,
-          content: request.prompt,
-          rawJson: null,
-          isError: false,
-          createdAt: Date.now(),
-        };
-        list.push(userMessage);
-        const targets =
-          request.route.kind === "all"
-            ? request.activeProviders
-            : [request.route.provider];
-        const outcomes = targets.map((provider) => {
-          if (fixtureParams.get("route") === "error") {
+      setTimeout(
+        () => {
+          const list = (messages[request.sessionId] ??= []);
+          const userMessage: PersistedMessage = {
+            id: `m${nextSeq++}`,
+            sessionId: request.sessionId,
+            seq: list.length + 1,
+            sender: "user",
+            assistantId: null,
+            model: null,
+            reasoningEffort: null,
+            content: request.prompt,
+            rawJson: null,
+            isError: false,
+            createdAt: Date.now(),
+          };
+          list.push(userMessage);
+          const targets =
+            request.route.kind === "all"
+              ? request.activeProviders
+              : [request.route.provider];
+          const outcomes = targets.map((provider) => {
+            if (fixtureParams.get("route") === "error") {
+              const row: PersistedMessage = {
+                id: `m${nextSeq++}`,
+                sessionId: request.sessionId,
+                seq: list.length + 1,
+                sender: "assistant",
+                assistantId: provider,
+                model: providerPreference[provider].model,
+                reasoningEffort: providerPreference[provider].reasoningEffort,
+                content: `${provider === "gemini" ? "Gemini" : provider} exited with an error: Requested entity was not found.`,
+                rawJson:
+                  '{"kind":"nonZeroExit","code":404,"stderr":"Full report available at: /tmp/gemini-error.json\\nModelNotFoundError: Requested entity was not found.\\n at classifyGoogleError (chunk.js:1)"}',
+                isError: true,
+                createdAt: Date.now(),
+              };
+              list.push(row);
+              return {
+                provider,
+                message: row,
+                error: {
+                  kind: "nonZeroExit" as const,
+                  code: 404,
+                  stderr:
+                    "Full report available at: /tmp/gemini-error.json\nModelNotFoundError: Requested entity was not found.\n at classifyGoogleError (chunk.js:1)",
+                },
+              };
+            }
             const row: PersistedMessage = {
               id: `m${nextSeq++}`,
               sessionId: request.sessionId,
@@ -174,42 +201,18 @@ const api: ChatApi = {
               assistantId: provider,
               model: providerPreference[provider].model,
               reasoningEffort: providerPreference[provider].reasoningEffort,
-              content: `${provider === "gemini" ? "Gemini" : provider} exited with an error: Requested entity was not found.`,
-              rawJson:
-                '{"kind":"nonZeroExit","code":404,"stderr":"Full report available at: /tmp/gemini-error.json\\nModelNotFoundError: Requested entity was not found.\\n at classifyGoogleError (chunk.js:1)"}',
-              isError: true,
+              content: `A short **${provider}** reply for the runtime fixture.`,
+              rawJson: "{}",
+              isError: false,
               createdAt: Date.now(),
             };
             list.push(row);
-            return {
-              provider,
-              message: row,
-              error: {
-                kind: "nonZeroExit" as const,
-                code: 404,
-                stderr:
-                  "Full report available at: /tmp/gemini-error.json\nModelNotFoundError: Requested entity was not found.\n at classifyGoogleError (chunk.js:1)",
-              },
-            };
-          }
-          const row: PersistedMessage = {
-            id: `m${nextSeq++}`,
-            sessionId: request.sessionId,
-            seq: list.length + 1,
-            sender: "assistant",
-            assistantId: provider,
-            model: providerPreference[provider].model,
-            reasoningEffort: providerPreference[provider].reasoningEffort,
-            content: `A short **${provider}** reply for the runtime fixture.`,
-            rawJson: "{}",
-            isError: false,
-            createdAt: Date.now(),
-          };
-          list.push(row);
-          return { provider, message: row };
-        });
-        resolve({ userMessage, outcomes });
-      }, Number(fixtureParams.get("routeDelay") ?? 600)),
+            return { provider, message: row };
+          });
+          resolve({ userMessage, outcomes });
+        },
+        Number(fixtureParams.get("routeDelay") ?? 600),
+      ),
     ),
   renameSession: (id, title) => {
     const s = sessions.find((x) => x.id === id)!;
@@ -242,8 +245,7 @@ const api: ChatApi = {
     const row: PersistedMessage = {
       id: `m${nextSeq++}`,
       sessionId: request.sessionId,
-      seq:
-        (messages[request.sessionId]?.length ?? 0) + 1,
+      seq: (messages[request.sessionId]?.length ?? 0) + 1,
       sender: "assistant",
       assistantId: request.provider,
       model: providerPreference[request.provider].model,

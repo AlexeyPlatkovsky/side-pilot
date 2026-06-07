@@ -42,9 +42,7 @@ export const DEFAULT_ROUTE: ActiveRoute = { kind: "single", provider: "codex" };
 
 /** Look up a provider's presentation, falling back for unknown ids. */
 export function providerInfo(id: AssistantId): ProviderInfo {
-  return (
-    PROVIDERS.find((p) => p.id === id) ?? { id, label: id }
-  );
+  return PROVIDERS.find((p) => p.id === id) ?? { id, label: id };
 }
 
 /** The user-facing label for a route ("All" or the single provider's name). */

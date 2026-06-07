@@ -2,7 +2,9 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { bubbleReducer, type BubbleState } from "../state/bubbleState";
 import { applyWindowSize } from "../state/windowResize";
 import { useClickVsDrag } from "../state/drag";
-import { ChatPanel, useChat } from "./ChatPanel";
+import { ChatPanel } from "./ChatPanel";
+import { useChat } from "../chat/useChat";
+import { Settings } from "./Settings";
 import { inertChatApi, type ChatApi } from "../chat/api";
 import type { ActiveRoute } from "../chat/providers";
 // Single source of truth for the app mark: the same artwork bundled as the
@@ -26,13 +28,14 @@ export interface BubbleProps {
 }
 
 /**
- * The floating bubble (SP-004, SP-030): a compact always-on-top dot that
- * expands into the chat panel on click. The panel has a gear control that opens
- * an in-panel settings sub-view (SP-030); the section rail itself arrives in
- * SP-031. Escape steps back one level (settings → panel, panel → bubble) and
- * the close control collapses straight to the bubble. The actual chat UI is
- * delivered later (SP-006); this owns only the shell shape, the settings
- * sub-view, and the window-size transitions.
+ * The floating bubble (SP-004, SP-030, SP-031): a compact always-on-top dot
+ * that expands into the chat panel on click. The panel has a gear control that
+ * opens an in-panel settings view with a section rail (SP-030, SP-031); the
+ * rail lists seven sections and each pane is an empty placeholder for now.
+ * Escape steps back one level (settings → panel, panel → bubble) and the close
+ * control collapses straight to the bubble. The actual chat UI is delivered
+ * later (SP-006); this owns the shell shape, the settings sub-view including
+ * the section rail, and the window-size transitions.
  */
 export function Bubble({
   initialState = "collapsed",
@@ -179,8 +182,9 @@ export function Bubble({
         </header>
         {inSettings ? (
           <div className="panel__body settings">
-            {/* Section rail and panes arrive in SP-031; this is the shell. */}
-            <p className="settings__placeholder">Settings sections arrive next.</p>
+            {/* Section rail and panes (SP-031). Empty placeholder panes arrive with
+                later tasks filling each section. */}
+            <Settings />
           </div>
         ) : (
           <ChatPanel
