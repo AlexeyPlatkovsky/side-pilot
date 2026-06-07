@@ -30,7 +30,9 @@ Proceed directly. State the classification.
 
 When unsure, treat as non-trivial.
 
-When a session begins as discussion and the user signals readiness to proceed ("go ahead", "do it", "implement it", "fix it", or equivalent), this classification gate fires again. That signal is not permission to skip it.
+Any user request to create, modify, or delete a file is an implicit "proceed" signal — classify it before acting, regardless of phrasing. A direct imperative ("modify ci.yml", "fix the test", "update the docs") carries the same obligation as "go ahead" or "implement it."
+
+After a `Skill: task-complete` closure, every subsequent action request in the same session re-triggers the classification gate. A prior closure does not authorize skipping classification for the next request.
 
 Requirements discovery, scoping, feature refinement, and re-scoping an existing Beads item are non-trivial tasks in their own right. Load the manager immediately for this work — do not wait for an implementation signal.
 
