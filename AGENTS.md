@@ -18,7 +18,7 @@ Project profile: `.claude/docs/project_specification.md`
 
 ## Task Classification
 
-Before making any tool call in response to a task request — including reads intended to understand scope — classify the task out loud:
+Before making any tool call that reads, writes, or modifies project files in response to a task request — classify the task out loud:
 
 **Trivial** — single-step, low-risk, no behavioral change.
 Proceed directly. State the classification.
