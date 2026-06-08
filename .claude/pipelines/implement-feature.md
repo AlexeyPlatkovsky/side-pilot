@@ -7,7 +7,7 @@ description: Ordered execution path for implementing a Tauri + React + TypeScrip
 
 ## Purpose
 
-Sequence the steps for implementing a non-trivial Tauri/React/Rust feature: design resolution, implementation, local validation, documentation maintenance, and closure.
+Sequence the steps for implementing a non-trivial Tauri/React/Rust feature: readiness verification, design resolution, implementation, local validation, documentation maintenance, and closure.
 
 ## Preconditions
 
@@ -17,6 +17,17 @@ Before this pipeline begins:
 - The Beads and git gates have run when required by the manager.
 
 ## Steps
+
+### Step 0 — Definition of Ready (DoR) Gate
+
+**Runs first, always — before any other step.** Confirm the routed item carries every readiness artifact an AI agent with empty context needs to implement it correctly in a single run.
+
+Skill: `.claude/skills/verify-readiness/SKILL.md`
+Required output: `Skill: verify-readiness - output below`
+
+If the verdict is `Ready`, advance to Step 1. If it is `Blocked`, do not implement: resolve each gap per the disposition the skill recorded — for a **create** disposition on a requirements/scope gap, return to the manager to re-route `discover-feature`; for an artifact-authoring gap, route `work-with-bead`; for **ignore**/**skip**, proceed under the recorded narrowing — then re-run this gate. Do not advance to Step 1 until the verdict is `Ready` or every gap carries an explicit user disposition.
+
+---
 
 ### Step 1 — Brainstorm (conditional)
 

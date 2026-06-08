@@ -38,6 +38,16 @@ Ask questions in rounds. Complete each round fully before starting the next. Do 
 
 If this is a **gap-targeted re-entry** (called from Step 3 after scope-verifier found gaps): skip to the specific rounds that address the reported gaps. Do not restart from Round 1.
 
+### Altitude Calibration (progressive elaboration)
+
+Apply the rounds at the depth the item's **altitude** warrants. Detail that belongs to a lower altitude is deferred to that level, not forced prematurely — eliciting task-level edge cases while scoping an epic produces noise, and skipping them while defining a task produces rework.
+
+- **Epic — high level.** Emphasize Round 1 (goal & user) and Round 6 (scope & child breakdown). Capture the user-visible outcome, the scope boundary, and the expected feature/child breakdown. Answer Rounds 2–5 only at a *coordinating* level (which child features carry the happy path, which own the principal failure modes) — do **not** drill into concrete scenarios, decision tables, or interaction contracts. Those belong to the children.
+- **Feature — medium level.** Emphasize Rounds 1–3 and 5: the user journey, the happy-path flow, the principal failure modes, and — for a UI surface — the **control elements and interaction contract**. In Round 4, capture the notable boundaries; defer exhaustive case enumeration to the child tasks. Identify the task breakdown.
+- **Task — full depth.** All six rounds at concrete, testable depth. Rounds 3 (failures) and 4 (edge cases & boundaries) must be exhaustive enough to derive test cases by the techniques in `.claude/conventions/testing-taxonomy.md` §Test-Design Techniques, captured in the BDD scenarios. This is the altitude for implementation detail and adversarial cases.
+
+A **standalone** item (no decomposition) is elicited at task altitude. Match the draft spec to the altitude: an epic's draft emphasizes child breakdown and omits concrete BDD scenarios (list expected child features instead); a feature's covers feature-level workflows; a task's carries the exhaustive scenarios. This mirrors `.claude/skills/work-with-bead/SKILL.md` §Item Detail Rules.
+
 ### Round 1 — Goal & User
 
 - What user problem or need does this address?
@@ -97,6 +107,8 @@ A confirmed explicit statement counts as answered. Silence or a vague "yeah" doe
 
 Do not emit the draft spec until ALL six rounds have explicit answers. An answer counts as explicit only if it directly addresses the sub-question. A single word, a restated question title, or a vague qualifier ("it should work", "normal cases") does not qualify — re-ask that sub-question before advancing. An answer of "not applicable" or "none" is valid when it was explicitly confirmed (see "None Verification" above for Rounds 3 and 4).
 
+At **epic** or **feature** altitude (see §Altitude Calibration), a *coordinating-level* answer — one that names which child feature or task owns the deferred detail — counts as an explicit answer for Rounds 2–5; the deferred detail is not a gap at this altitude. Every round still requires such an answer; altitude lowers the required depth, never the requirement to answer.
+
 ## Draft Spec Format
 
 When all rounds are complete, emit the draft spec using this structure exactly:
@@ -138,6 +150,11 @@ Proposed BDD scenarios:
 Labels: [frontend | rust | tauri | docs | cli-adapter] (pick all that apply)
 Dependencies: [SP-NNN, or "none"]
 ```
+
+The field set above is the task/standalone shape and is used in full at task altitude. Adjust depth by altitude per §Altitude Calibration — the same fields, different depth:
+- **Epic:** keep Description, Non-goals, Constraints high-level; replace *Proposed BDD scenarios* with an expected **child-feature breakdown**; DoD states epic-level outcomes.
+- **Feature:** scope *Proposed BDD scenarios* to feature-level workflows; name the **child-task breakdown**.
+- **Task / standalone:** the exhaustive scenarios and concrete DoD shown above.
 
 ## Output Contract
 

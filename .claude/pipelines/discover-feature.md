@@ -39,7 +39,7 @@ The skill performs its own context loading (Beads scan and docs check) at the st
 
 If this is a **loop re-entry** from Step 2: pass the gap list from the `scope-verifier` output as additional input context. The skill must address only the reported gaps — do not restart all six rounds.
 
-Required output: `Skill: discover-requirements - output below` with a populated draft spec (all required fields present, including BDD scenarios).
+Required output: `Skill: discover-requirements - output below` with a populated draft spec (all required fields present at the item's altitude — including BDD scenarios at task/feature altitude, or a child-feature breakdown at epic altitude, per `.claude/skills/discover-requirements/SKILL.md` §Altitude Calibration).
 
 Do not advance to Step 2 until this artifact is present and the draft spec includes all required fields.
 

@@ -18,6 +18,7 @@ Before this pipeline begins, all of the following must be present in the convers
   - reproduction steps
   - root cause location (file + line range)
   - severity and affected layer(s)
+- If the manager assigned **Lite** tier, the reduced-readiness confirmation line — `(reproduction or target identified) and DoD present` — must be present in the manager artifact (per `AGENTS.md` §Quality Tiers / `.claude/skills/task-routing/SKILL.md` §Output Contract). If it is absent, stop and report it.
 
 If any precondition is missing, stop and report which item is absent. Do not proceed to Step 1.
 
