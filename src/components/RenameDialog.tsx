@@ -2,12 +2,16 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { PersistedSession } from "../chat/api";
 import { isValidTitle, MAX_TITLE_LENGTH } from "../chat/history";
 import { Dialog } from "./Dialog";
+import type { Locale } from "../i18n/types";
+import { useI18n } from "../i18n/useI18n";
 
 export interface RenameDialogProps {
   /** Session whose title is being edited; its current title prefills the input. */
   session: PersistedSession;
   onCancel: () => void;
   onSave: (title: string) => void;
+  /** Current locale for translations. */
+  locale?: Locale;
 }
 
 /**
@@ -17,7 +21,8 @@ export interface RenameDialogProps {
  * per-row options menu and the active-chat toolbar's Edit control (SP-050/057),
  * so both entry points enforce the same title rule.
  */
-export function RenameDialog({ session, onCancel, onSave }: RenameDialogProps) {
+export function RenameDialog({ session, onCancel, onSave, locale = "en" }: RenameDialogProps) {
+  const { t } = useI18n(locale);
   const [value, setValue] = useState(session.title ?? "");
   const inputRef = useRef<HTMLInputElement | null>(null);
   // Unique ids so the rail and toolbar rename dialogs never collide on a shared
@@ -35,7 +40,7 @@ export function RenameDialog({ session, onCancel, onSave }: RenameDialogProps) {
   const showHint = value.trim().length > 0 && !canSave;
 
   return (
-    <Dialog label="Rename chat" onClose={onCancel}>
+    <Dialog label={t("rename_label")} onClose={onCancel}>
       <form
         className="dialog__body"
         onSubmit={(event) => {
@@ -44,7 +49,7 @@ export function RenameDialog({ session, onCancel, onSave }: RenameDialogProps) {
         }}
       >
         <label className="dialog__label" htmlFor={inputId}>
-          Chat title
+          {t("rename_chatTitle")}
         </label>
         <input
           id={inputId}
@@ -59,20 +64,19 @@ export function RenameDialog({ session, onCancel, onSave }: RenameDialogProps) {
         />
         {showHint && (
           <p id={hintId} className="dialog__hint" role="alert">
-            Use letters, digits, spaces, and basic punctuation (’ . , - ( )), up to{" "}
-            {MAX_TITLE_LENGTH} characters.
+            {t("rename_hint", { max: MAX_TITLE_LENGTH })}
           </p>
         )}
         <div className="dialog__actions">
           <button type="button" className="dialog__button" onClick={onCancel}>
-            Cancel
+            {t("chat_cancel")}
           </button>
           <button
             type="submit"
             className="dialog__button dialog__button--primary"
             disabled={!canSave}
           >
-            Save
+            {t("rename_save")}
           </button>
         </div>
       </form>

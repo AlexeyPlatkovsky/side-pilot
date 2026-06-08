@@ -422,6 +422,8 @@ body {
 }
 
 .settings-radio input[type="radio"] {
+  width: 16px;
+  height: 16px;
   cursor: pointer;
 }
 
@@ -437,11 +439,17 @@ body {
   align-items: center;
   gap: var(--space-3);
   flex-wrap: nowrap;
+  /* Fixed row height so the field keeps the same Y position from first paint,
+     independent of font-metric settling or label-text changes. */
+  min-height: 32px;
 }
 
 .settings-field > span {
   flex-shrink: 0;
   white-space: nowrap;
+  /* Fixed label column so switching locales (e.g. "Language" -> "Язык") does
+     not change the label width and shift the dropdown that follows it. */
+  width: 96px;
 }
 
 .settings-field select {

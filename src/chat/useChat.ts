@@ -16,6 +16,8 @@ import {
   type ActiveRoute,
 } from "../chat/providers";
 import type { AssistantId } from "../chat/generated/AssistantId";
+import { translate } from "../i18n/translations";
+import type { Locale } from "../i18n/types";
 
 export type RoutesBySession = Record<string, ActiveRoute>;
 
@@ -73,7 +75,7 @@ export function mergePendingTurn(
  * store is the display source of truth, so the transcript and list are
  * (re)loaded from it.
  */
-export function useChat(api: ChatApi, enabled = true) {
+export function useChat(api: ChatApi, enabled = true, locale: Locale = "en") {
   const [state, dispatch] = useReducer(chatReducer, initialChatState);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   // Session list (reactive + ref read) and per-session rail status (pending /
@@ -139,13 +141,13 @@ export function useChat(api: ChatApi, enabled = true) {
         applySessions(sorted.length ? sorted : [session]);
         setActive(session, history.map(toChatMessage));
       } catch (err) {
-        if (!cancelled) dispatch({ type: "error", message: describeError(err) });
+        if (!cancelled) dispatch({ type: "error", message: describeError(err, locale) });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [api, applySessions, enabled, setActive]);
+  }, [api, applySessions, enabled, setActive, locale]);
 
   const submit = useCallback(
     async (prompt: string, route: ActiveRoute) => {
@@ -224,8 +226,8 @@ export function useChat(api: ChatApi, enabled = true) {
                 sender: "assistant",
                 assistantId: outcome.provider,
                 content: outcome.error
-                  ? describeProviderError(outcome.error, outcome.provider)
-                  : "The request failed.",
+                  ? describeProviderError(outcome.error, outcome.provider, locale)
+                  : translate(locale, "error_requestFailed"),
                 createdAt: Date.now(),
                 error: true,
               },
@@ -243,7 +245,7 @@ export function useChat(api: ChatApi, enabled = true) {
         clearPending(originId);
         // Same guard: don't surface this turn's error in a chat the user moved to.
         if (activeRef.current?.id === originId) {
-          dispatch({ type: "error", message: describeError(err) });
+          dispatch({ type: "error", message: describeError(err, locale) });
         }
       } finally {
         // Refresh the rail so the active chat's new title/updated_at re-sorts it.
@@ -254,7 +256,7 @@ export function useChat(api: ChatApi, enabled = true) {
         }
       }
     },
-    [api, refresh, getSessions, markPending, clearPending, markUnread],
+    [api, refresh, getSessions, markPending, clearPending, markUnread, locale],
   );
 
   const selectSession = useCallback(
@@ -280,11 +282,11 @@ export function useChat(api: ChatApi, enabled = true) {
       } catch (err) {
         if (request === selectionRequestRef.current) {
           selectionTargetRef.current = null;
-          dispatch({ type: "error", message: describeError(err) });
+          dispatch({ type: "error", message: describeError(err, locale) });
         }
       }
     },
-    [api, setActive, getSessions, clearUnread],
+    [api, setActive, getSessions, clearUnread, locale],
   );
 
   const newChat = useCallback(async () => {
@@ -295,9 +297,9 @@ export function useChat(api: ChatApi, enabled = true) {
       applySessions([...getSessions(), created]);
       if (request === selectionRequestRef.current) setActive(created, []);
     } catch (err) {
-      dispatch({ type: "error", message: describeError(err) });
+      dispatch({ type: "error", message: describeError(err, locale) });
     }
-  }, [api, applySessions, getSessions, setActive]);
+  }, [api, applySessions, getSessions, setActive, locale]);
 
   const renameSession = useCallback(
     async (id: string, title: string) => {
@@ -306,10 +308,10 @@ export function useChat(api: ChatApi, enabled = true) {
         if (activeRef.current?.id === id) activeRef.current.title = updated.title;
         applySessions(getSessions().map((s) => (s.id === id ? updated : s)));
       } catch (err) {
-        dispatch({ type: "error", message: describeError(err) });
+        dispatch({ type: "error", message: describeError(err, locale) });
       }
     },
-    [api, applySessions, getSessions],
+    [api, applySessions, getSessions, locale],
   );
 
   const deleteSession = useCallback(
@@ -347,10 +349,10 @@ export function useChat(api: ChatApi, enabled = true) {
           if (activationRequest === selectionRequestRef.current) setActive(created, []);
         }
       } catch (err) {
-        dispatch({ type: "error", message: describeError(err) });
+        dispatch({ type: "error", message: describeError(err, locale) });
       }
     },
-    [api, applySessions, getSessions, setActive, forget],
+    [api, applySessions, getSessions, setActive, forget, locale],
   );
 
   const clearActive = useCallback(async () => {
@@ -367,9 +369,9 @@ export function useChat(api: ChatApi, enabled = true) {
       dispatch({ type: "loaded", messages: [] });
       applySessions(getSessions().map((s) => (s.id === cleared.id ? cleared : s)));
     } catch (err) {
-      dispatch({ type: "error", message: describeError(err) });
+      dispatch({ type: "error", message: describeError(err, locale) });
     }
-  }, [api, applySessions, getSessions, forget]);
+  }, [api, applySessions, getSessions, forget, locale]);
 
   const retry = useCallback(
     async (errorMessageId: string, provider: string, userContent: string) => {
@@ -403,17 +405,17 @@ export function useChat(api: ChatApi, enabled = true) {
               id: `error-retry-${newId()}`,
               sender: "assistant",
               assistantId: provider,
-              content: "The retry request failed.",
+              content: translate(locale, "error_retryRequestFailed"),
               createdAt: Date.now(),
               error: true,
             };
         dispatch({ type: "routeSettled", results: [result] });
       } catch (err) {
         if (activeRef.current?.id !== originId) return;
-        dispatch({ type: "error", message: describeError(err) });
+        dispatch({ type: "error", message: describeError(err, locale) });
       }
     },
-    [api, dispatch],
+    [api, dispatch, locale],
   );
 
   return {

@@ -3,6 +3,8 @@ import type { PersistedSession } from "../chat/api";
 import { formatRelativeTime } from "../chat/history";
 import { Dialog } from "./Dialog";
 import { RenameDialog } from "./RenameDialog";
+import type { Locale } from "../i18n/types";
+import { useI18n } from "../i18n/useI18n";
 
 const EMPTY_IDS: ReadonlySet<string> = new Set();
 
@@ -17,17 +19,12 @@ export interface ChatHistoryProps {
   pendingIds?: ReadonlySet<string>;
   /** Sessions with a reply that arrived while inactive — show an unread dot. */
   unreadIds?: ReadonlySet<string>;
+  /** Current locale for translations. */
+  locale?: Locale;
   onSelect: (sessionId: string) => void;
   onNewChat: () => void;
   onRename: (sessionId: string, title: string) => void;
   onDelete: (sessionId: string) => void;
-}
-
-const UNTITLED = "Untitled chat";
-
-function displayTitle(session: PersistedSession): string {
-  const trimmed = session.title?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : UNTITLED;
 }
 
 /**
@@ -43,21 +40,32 @@ export function ChatHistory({
   now = Date.now(),
   pendingIds = EMPTY_IDS,
   unreadIds = EMPTY_IDS,
+  locale = "en",
   onSelect,
   onNewChat,
   onRename,
   onDelete,
 }: ChatHistoryProps) {
+  const { t } = useI18n(locale);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<PersistedSession | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PersistedSession | null>(null);
 
+  const UNTITLED = t("history_untitled");
+  const displayTitle = useCallback(
+    (session: PersistedSession): string => {
+      const trimmed = session.title?.trim();
+      return trimmed && trimmed.length > 0 ? trimmed : UNTITLED;
+    },
+    [UNTITLED],
+  );
+
   const closeMenu = useCallback(() => setMenuOpenId(null), []);
 
   return (
-    <aside id="chat-history-rail" className="chat-rail" aria-label="Chat history">
+    <aside id="chat-history-rail" className="chat-rail" aria-label={t("history_label")}>
       <button type="button" className="chat-rail__new" onClick={onNewChat}>
-        New chat
+        {t("chat_newChat")}
       </button>
       <ul className="chat-rail__list">
         {sessions.map((session) => {
@@ -68,9 +76,9 @@ export function ChatHistory({
           // state); unread only shows once the reply has actually arrived.
           const unread = !pending && unreadIds.has(session.id);
           const statusLabel = pending
-            ? "reply in progress"
+            ? t("history_replyInProgress")
             : unread
-              ? "unread answer"
+              ? t("history_unreadAnswer")
               : null;
           return (
             <li
@@ -104,7 +112,7 @@ export function ChatHistory({
               <button
                 type="button"
                 className="chat-row__menu"
-                aria-label={`Options for ${title}`}
+                aria-label={t("history_optionsFor", { title })}
                 aria-haspopup="menu"
                 aria-expanded={menuOpenId === session.id}
                 aria-controls={
@@ -119,6 +127,8 @@ export function ChatHistory({
               {menuOpenId === session.id && (
                 <RowMenu
                   id={`chat-row-menu-${session.id}`}
+                  renameLabel={t("history_rename")}
+                  deleteLabel={t("history_delete")}
                   onClose={closeMenu}
                   onRename={() => {
                     closeMenu();
@@ -143,11 +153,15 @@ export function ChatHistory({
             onRename(renameTarget.id, value);
             setRenameTarget(null);
           }}
+          locale={locale}
         />
       )}
       {deleteTarget && (
         <DeleteDialog
-          title={displayTitle(deleteTarget)}
+          cancelLabel={t("chat_cancel")}
+          deleteLabel={t("history_delete")}
+          dialogLabel={t("history_deleteLabel")}
+          message={t("history_deleteConfirm", { title: displayTitle(deleteTarget) })}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => {
             onDelete(deleteTarget.id);
@@ -161,13 +175,15 @@ export function ChatHistory({
 
 interface RowMenuProps {
   id: string;
+  renameLabel: string;
+  deleteLabel: string;
   onClose: () => void;
   onRename: () => void;
   onDelete: () => void;
 }
 
 /** Small per-row options popup; closes on Escape or outside click. */
-function RowMenu({ id, onClose, onRename, onDelete }: RowMenuProps) {
+function RowMenu({ id, renameLabel, deleteLabel, onClose, onRename, onDelete }: RowMenuProps) {
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -201,7 +217,7 @@ function RowMenu({ id, onClose, onRename, onDelete }: RowMenuProps) {
         className="chat-row__option"
         onClick={onRename}
       >
-        Rename
+        {renameLabel}
       </button>
       <button
         type="button"
@@ -209,36 +225,37 @@ function RowMenu({ id, onClose, onRename, onDelete }: RowMenuProps) {
         className="chat-row__option chat-row__option--danger"
         onClick={onDelete}
       >
-        Delete
+        {deleteLabel}
       </button>
     </div>
   );
 }
 
 interface DeleteDialogProps {
-  title: string;
+  cancelLabel: string;
+  deleteLabel: string;
+  dialogLabel: string;
+  message: string;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
 /** Confirmation modal before a destructive cascade delete. */
-function DeleteDialog({ title, onCancel, onConfirm }: DeleteDialogProps) {
+function DeleteDialog({ cancelLabel, deleteLabel, dialogLabel, message, onCancel, onConfirm }: DeleteDialogProps) {
   return (
-    <Dialog label="Delete chat" onClose={onCancel}>
+    <Dialog label={dialogLabel} onClose={onCancel}>
       <div className="dialog__body">
-        <p className="dialog__message">
-          Delete this chat and all messages? “{title}” and its history can’t be recovered.
-        </p>
+        <p className="dialog__message">{message}</p>
         <div className="dialog__actions">
           <button type="button" className="dialog__button" onClick={onCancel}>
-            Cancel
+            {cancelLabel}
           </button>
           <button
             type="button"
             className="dialog__button dialog__button--danger"
             onClick={onConfirm}
           >
-            Delete
+            {deleteLabel}
           </button>
         </div>
       </div>

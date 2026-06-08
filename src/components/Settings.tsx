@@ -1,6 +1,8 @@
 import { useState, useCallback, type KeyboardEvent } from "react";
 import type { ChatApi } from "../chat/api";
 import { GeneralSettings } from "./GeneralSettings";
+import type { Locale, TranslationKey } from "../i18n/types";
+import { useI18n } from "../i18n/useI18n";
 
 export type SettingsSection =
   | "api-keys"
@@ -13,21 +15,22 @@ export type SettingsSection =
 
 interface SectionDef {
   id: SettingsSection;
-  label: string;
+  labelKey: TranslationKey;
 }
 
 const SECTIONS: SectionDef[] = [
-  { id: "api-keys", label: "API Keys" },
-  { id: "cli-integrations", label: "CLI Integrations" },
-  { id: "themes", label: "Themes" },
-  { id: "general", label: "General" },
-  { id: "keyboard-shortcuts", label: "Keyboard Shortcuts" },
-  { id: "account", label: "Account" },
-  { id: "about", label: "About" },
+  { id: "api-keys", labelKey: "settings_apiKeys" },
+  { id: "cli-integrations", labelKey: "settings_cliIntegrations" },
+  { id: "themes", labelKey: "settings_themes" },
+  { id: "general", labelKey: "settings_general" },
+  { id: "keyboard-shortcuts", labelKey: "settings_keyboardShortcuts" },
+  { id: "account", labelKey: "settings_account" },
+  { id: "about", labelKey: "settings_about" },
 ];
 
 export interface SettingsProps {
   chatApi: ChatApi;
+  locale?: Locale;
 }
 
 /**
@@ -37,7 +40,8 @@ export interface SettingsProps {
  * the ARIA Tabs pattern: Arrow Up / Down move between tabs with wrapping,
  * Home / End jump to first / last.
  */
-export function Settings({ chatApi }: SettingsProps) {
+export function Settings({ chatApi, locale = "en" }: SettingsProps) {
+  const { t } = useI18n(locale);
   const [active, setActive] = useState<SettingsSection>("api-keys");
 
   const select = useCallback((section: SettingsSection) => {
@@ -79,7 +83,7 @@ export function Settings({ chatApi }: SettingsProps) {
     <div className="settings-view">
       <div
         role="tablist"
-        aria-label="Settings sections"
+        aria-label={t("settings_sections")}
         aria-orientation="vertical"
         className="settings-rail"
       >
@@ -98,7 +102,7 @@ export function Settings({ chatApi }: SettingsProps) {
               onClick={() => select(section.id)}
               onKeyDown={handleKeyDown}
             >
-              {section.label}
+              {t(section.labelKey)}
             </button>
           );
         })}
@@ -116,12 +120,12 @@ export function Settings({ chatApi }: SettingsProps) {
               hidden={!selected}
               className="settings-pane__content"
             >
-              <h2 className="settings-pane__title">{section.label}</h2>
+              <h2 className="settings-pane__title">{t(section.labelKey)}</h2>
               {section.id === "general" ? (
-                <GeneralSettings api={chatApi} />
+                <GeneralSettings api={chatApi} locale={locale} />
               ) : (
                 <p className="settings-pane__placeholder">
-                  {section.label} settings arrive in a future update.
+                  {t("settings_futureUpdate", { section: t(section.labelKey) })}
                 </p>
               )}
             </div>

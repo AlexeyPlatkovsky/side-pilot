@@ -4,17 +4,13 @@ import type { GeneralPreferences } from "../chat/generated/GeneralPreferences";
 import type { PositionMode } from "../chat/generated/PositionMode";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useI18n } from "../i18n/useI18n";
-import type { Locale } from "../i18n/translations";
+import type { Locale } from "../i18n/types";
 
 type LanguageOption = { code: Locale; name: string };
 
-const LANGUAGES: LanguageOption[] = [
-  { code: "en" as Locale, name: "English" },
-  { code: "ru" as Locale, name: "Russian" },
-].sort((a, b) => a.name.localeCompare(b.name));
-
 export interface GeneralSettingsProps {
   api: ChatApi;
+  locale?: Locale;
 }
 
 type LoadState =
@@ -22,15 +18,15 @@ type LoadState =
   | { kind: "loaded"; prefs: GeneralPreferences }
   | { kind: "error"; message: string };
 
-export function GeneralSettings({ api }: GeneralSettingsProps) {
+export function GeneralSettings({ api, locale: propLocale }: GeneralSettingsProps) {
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [langOpen, setLangOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
 
   const langCode: Locale =
-    loadState.kind === "loaded"
+    propLocale ?? (loadState.kind === "loaded"
       ? (loadState.prefs.language as Locale)
-      : "en";
+      : "en");
   const { t } = useI18n(langCode);
 
   useEffect(() => {
@@ -119,6 +115,10 @@ export function GeneralSettings({ api }: GeneralSettingsProps) {
     return <p className="settings-pane__placeholder">{t("error")}</p>;
   }
 
+  const LANGUAGES: LanguageOption[] = [
+    { code: "en" as Locale, name: t("lang_en") },
+    { code: "ru" as Locale, name: t("lang_ru") },
+  ].sort((a, b) => a.name.localeCompare(b.name));
   const { prefs } = loadState;
   const currentLang = LANGUAGES.find((l) => l.code === prefs.language) ?? LANGUAGES[0];
 
@@ -162,14 +162,16 @@ export function GeneralSettings({ api }: GeneralSettingsProps) {
         )}
       </fieldset>
 
-      <label className="settings-field">
-        <span>{t("language")}</span>
+      <div className="settings-field">
+        <span id="lang-select-label">{t("language")}</span>
         <div className="lang-select" ref={langRef}>
           <button
             type="button"
             className="lang-select__current"
             onClick={() => setLangOpen((o) => !o)}
             aria-expanded={langOpen}
+            aria-haspopup="listbox"
+            aria-labelledby="lang-select-label"
           >
             {currentLang.name}
           </button>
@@ -190,7 +192,7 @@ export function GeneralSettings({ api }: GeneralSettingsProps) {
             </div>
           )}
         </div>
-      </label>
+      </div>
     </div>
   );
 }

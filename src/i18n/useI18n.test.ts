@@ -19,4 +19,16 @@ describe("useI18n", () => {
     const { result } = renderHook(() => useI18n("en"));
     expect(result.current.t("loading")).toBe("Loading...");
   });
+
+  it("supports interpolation with values", () => {
+    const { result } = renderHook(() => useI18n("en"));
+    expect(result.current.t("chat_clearConfirm", { title: "Test" })).toBe(
+      'Clear this chat? All messages in \u201cTest\u201d will be permanently deleted and this conversation can\u2019t be resumed.',
+    );
+  });
+
+  it("falls back to English for ru locale with missing key", () => {
+    const { result } = renderHook(() => useI18n("ru"));
+    expect(result.current.t("error")).toBe("Не удалось загрузить общие настройки.");
+  });
 });

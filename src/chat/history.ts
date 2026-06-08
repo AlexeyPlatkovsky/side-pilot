@@ -8,6 +8,8 @@
  */
 
 import type { PersistedSession } from "./api";
+import { translate } from "../i18n/translations";
+import type { Locale } from "../i18n/types";
 
 /** Longest chat title we persist, in characters (after trimming). */
 export const MAX_TITLE_LENGTH = 40;
@@ -77,10 +79,10 @@ const DAY = 24 * HOUR;
  * unit (`now`, `m`, `h`, `d`, `w`, `M`, `y`). A future timestamp clamps to
  * `now`. Units use calendar-ish divisors (week = 7d, month = 30d, year = 365d).
  */
-export function formatRelativeTime(updatedAt: number, now: number): string {
+export function formatRelativeTime(updatedAt: number, now: number, locale: Locale = "en"): string {
   const diff = Math.max(0, now - updatedAt);
   const sec = Math.floor(diff / SECOND);
-  if (sec < 60) return "now";
+  if (sec < 60) return translate(locale, "time_now");
   const min = Math.floor(diff / MINUTE);
   if (min < 60) return `${min}m`;
   const hr = Math.floor(diff / HOUR);

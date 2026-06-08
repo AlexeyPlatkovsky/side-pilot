@@ -15,8 +15,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { type ActiveRoute, PROVIDERS, routeLabel, routesEqual } from "../chat/providers";
+import { type ActiveRoute, PROVIDERS, providerInfo, routesEqual } from "../chat/providers";
 import { AllGlyph, ProviderGlyph, RouteIcon } from "./ProviderIcon";
+import type { Locale } from "../i18n/types";
+import { useI18n } from "../i18n/useI18n";
 
 export interface AiSwitcherProps {
   /** The currently selected route (single provider or All). */
@@ -25,11 +27,14 @@ export interface AiSwitcherProps {
   disabled: boolean;
   /** Called with the chosen route when the user picks an option. */
   onSelect: (route: ActiveRoute) => void;
+  /** Current locale for translations. */
+  locale?: Locale;
 }
 
 const ALL_ROUTE: ActiveRoute = { kind: "all" };
 
-export function AiSwitcher({ route, disabled, onSelect }: AiSwitcherProps) {
+export function AiSwitcher({ route, disabled, onSelect, locale = "en" }: AiSwitcherProps) {
+  const { t } = useI18n(locale);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
@@ -68,12 +73,12 @@ export function AiSwitcher({ route, disabled, onSelect }: AiSwitcherProps) {
     buttonRef.current?.focus();
   };
 
-  const activeLabel = routeLabel(route);
+  const activeLabel = route.kind === "all" ? t("ai_all") : providerInfo(route.provider).label;
 
   return (
     <div className="ai-switcher" ref={containerRef}>
       {menuOpen && (
-        <div className="ai-switcher__menu" role="menu" aria-label="Choose AI provider">
+        <div className="ai-switcher__menu" role="menu" aria-label={t("ai_chooseProvider")}>
           <button
             type="button"
             role="menuitemradio"
@@ -82,7 +87,7 @@ export function AiSwitcher({ route, disabled, onSelect }: AiSwitcherProps) {
             onClick={() => choose(ALL_ROUTE)}
           >
             <AllGlyph />
-            <span className="ai-switcher__option-label">All</span>
+            <span className="ai-switcher__option-label">{t("ai_all")}</span>
           </button>
           {PROVIDERS.map((provider) => {
             const optionRoute: ActiveRoute = { kind: "single", provider: provider.id };
@@ -109,8 +114,8 @@ export function AiSwitcher({ route, disabled, onSelect }: AiSwitcherProps) {
         className="ai-switcher__toggle"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        aria-label={`Choose AI provider (current: ${activeLabel})`}
-        title={`AI: ${activeLabel}`}
+        aria-label={t("ai_currentProvider", { label: activeLabel })}
+        title={t("ai_title", { label: activeLabel })}
         disabled={disabled}
         onClick={() => setOpen((v) => !v)}
       >

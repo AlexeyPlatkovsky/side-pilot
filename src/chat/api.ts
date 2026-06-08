@@ -14,6 +14,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Sender } from "../state/chat";
 import { describeCliExit } from "./providers";
+import { translate } from "../i18n/translations";
+import type { Locale } from "../i18n/types";
 
 // IPC types generated from the Rust contract by ts-rs (SP-065). These files in
 // `./generated/` are the single source of truth for the wire shape: regenerate
@@ -222,35 +224,35 @@ export function toChatMessage(row: PersistedMessage): {
  * Turn a rejected command (typed `AdapterError`/`StorageError`, a plain string,
  * or an `Error`) into a human-readable line for the chat's error banner.
  */
-export function describeError(err: unknown): string {
+export function describeError(err: unknown, locale: Locale = "en"): string {
   if (typeof err === "string") return err;
   if (err && typeof err === "object" && "kind" in err) {
     const tagged = err as { kind: string; stderr?: string; detail?: string };
     switch (tagged.kind) {
       case "binaryNotFound":
-        return "GPT isn't available — the CLI wasn't found on your PATH.";
+        return translate(locale, "error_binaryNotFound", { name: "GPT" });
       case "notAuthenticated":
-        return "GPT is not authenticated. Sign in to the CLI and try again.";
+        return translate(locale, "error_notAuthenticated", { name: "GPT" });
       case "timedOut":
-        return "The request timed out before GPT responded.";
+        return translate(locale, "error_timedOut", { name: "GPT" });
       case "cancelled":
-        return "The request was cancelled.";
+        return translate(locale, "error_cancelled", { name: "GPT" });
       case "nonZeroExit":
-        return describeCliExit("GPT", tagged.stderr);
+        return describeCliExit("GPT", tagged.stderr, locale);
       case "outputParseFailure":
-        return "GPT returned output that could not be read.";
+        return translate(locale, "error_outputParseFailure", { name: "GPT" });
       case "notFound":
-        return "That conversation could not be found in local history.";
+        return translate(locale, "error_notFound");
       case "query":
-        return "Local history is unavailable right now.";
+        return translate(locale, "error_storageUnavailable");
       case "storageUnavailable":
-        return "Local history is unavailable right now.";
+        return translate(locale, "error_storageUnavailable");
       case "unsupportedSchemaVersion":
-        return "Local history was created by a newer app version.";
+        return translate(locale, "error_unsupportedSchemaVersion");
       default:
-        return `Something went wrong (${tagged.kind}).`;
+        return translate(locale, "error_somethingWentWrongWithKind", { kind: tagged.kind });
     }
   }
   if (err instanceof Error) return err.message;
-  return "Something went wrong.";
+  return translate(locale, "error_somethingWentWrong");
 }

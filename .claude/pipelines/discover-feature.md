@@ -12,7 +12,7 @@ Drive requirements discovery through a structured Q&A loop with the user, verify
 ## Do Not Use This Pipeline For
 
 - Confirmed bug fixes where the root cause is already known → use `fix-bug` pipeline
-- Bug investigation where root cause is unknown → use `triage-bug` pipeline
+- Bug investigation where root cause is unknown → use `triage-bug` skill
 - Work that already has a complete, user-approved spec with populated Beads acceptance criteria → route directly to `implement-feature`
 - Pure design decisions with no behavioral change → use `brainstorm` skill
 - Post-approval spec expansion on a previously approved item → restart with a new `discover-feature` run for the addendum, then set the existing item as parent or dependency in the new Beads item per `work-with-bead` conventions

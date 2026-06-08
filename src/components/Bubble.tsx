@@ -8,6 +8,8 @@ import { useChat } from "../chat/useChat";
 import { Settings } from "./Settings";
 import { inertChatApi, type ChatApi } from "../chat/api";
 import type { ActiveRoute } from "../chat/providers";
+import type { Locale } from "../i18n/types";
+import { useI18n } from "../i18n/useI18n";
 // Single source of truth for the app mark: the same artwork bundled as the
 // macOS/Windows app (Dock) icon, reused for the collapsed bubble and the
 // panel header so all three reads identically.
@@ -45,13 +47,22 @@ export function Bubble({
 }: BubbleProps) {
   const [state, dispatch] = useReducer(bubbleReducer, initialState);
   const [routesBySession, setRoutesBySession] = useState<Record<string, ActiveRoute>>({});
-  const chat = useChat(chatApi);
+  const [locale, setLocale] = useState<Locale>("en");
+  const { t } = useI18n(locale);
+  const chat = useChat(chatApi, true, locale);
   const moveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedPos = useRef<{ x: number; y: number } | null>(null);
 
   // The collapsed dot and the panel mark are both window-drag handles and click
   // targets; this shared hook tells a click apart from a drag so dragging the
   // window doesn't spuriously expand/collapse it.
+  useEffect(() => {
+    chatApi
+      .getGeneralPreferences()
+      .then((prefs) => setLocale(prefs.language as Locale))
+      .catch(() => {});
+  }, [chatApi]);
+
   const dotHandlers = useClickVsDrag(() => dispatch("expand"));
   const markHandlers = useClickVsDrag(() => dispatch("collapse"));
 
@@ -146,7 +157,7 @@ export function Bubble({
         <button
           type="button"
           className="bubble__dot"
-          aria-label="Open side-pilot"
+          aria-label={t("bubble_open")}
           data-tauri-drag-region
           onMouseDown={dotHandlers.onMouseDown}
           onClick={dotHandlers.onClick}
@@ -167,8 +178,8 @@ export function Bubble({
             <button
               type="button"
               className="panel__mark"
-              aria-label="Minimize"
-              title="Minimize"
+              aria-label={t("bubble_minimize")}
+              title={t("bubble_minimize")}
               data-tauri-drag-region
               onMouseDown={markHandlers.onMouseDown}
               onClick={markHandlers.onClick}
@@ -183,10 +194,10 @@ export function Bubble({
             </button>
             <div>
               <h1 className="panel__title" data-tauri-drag-region>
-                {inSettings ? "Settings" : "side-pilot companion"}
+                {inSettings ? t("bubble_settingsTitle") : t("bubble_chatTitle")}
               </h1>
               <p className="panel__status" data-tauri-drag-region>
-                {inSettings ? "Tune your companion" : "Ready when you are"}
+                {inSettings ? t("bubble_settingsSubtitle") : t("bubble_chatSubtitle")}
               </p>
             </div>
           </div>
@@ -196,8 +207,8 @@ export function Bubble({
                 ref={leadControlRef}
                 type="button"
                 className="panel__control panel__back"
-                aria-label="Back to panel"
-                title="Back to panel"
+                aria-label={t("bubble_back")}
+                title={t("bubble_back")}
                 onClick={() => dispatch("closeSettings")}
               >
                 ‹
@@ -207,8 +218,8 @@ export function Bubble({
                 ref={leadControlRef}
                 type="button"
                 className="panel__control panel__settings"
-                aria-label="Open settings"
-                title="Open settings"
+                aria-label={t("bubble_openSettings")}
+                title={t("bubble_openSettings")}
                 onClick={() => dispatch("openSettings")}
               >
                 ⚙
@@ -217,8 +228,8 @@ export function Bubble({
             <button
               type="button"
               className="panel__control panel__close"
-              aria-label="Collapse"
-              title="Collapse"
+              aria-label={t("bubble_collapse")}
+              title={t("bubble_collapse")}
               onClick={() => dispatch("collapse")}
             >
               x
@@ -229,7 +240,7 @@ export function Bubble({
           <div className="panel__body settings">
             {/* Section rail and panes (SP-031). Empty placeholder panes arrive with
                 later tasks filling each section. */}
-            <Settings chatApi={chatApi} />
+            <Settings chatApi={chatApi} locale={locale} />
           </div>
         ) : (
           <ChatPanel
@@ -237,6 +248,7 @@ export function Bubble({
             chat={chat}
             routesBySession={routesBySession}
             setRoutesBySession={setRoutesBySession}
+            locale={locale}
           />
         )}
       </section>

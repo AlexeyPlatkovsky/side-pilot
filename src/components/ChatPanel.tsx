@@ -23,12 +23,16 @@ import {
   type ChatController,
   type RoutesBySession,
 } from "../chat/useChat";
+import type { Locale } from "../i18n/types";
+import { useI18n } from "../i18n/useI18n";
 
 interface ChatPanelBaseProps {
   /** Backend seam; defaults to the no-IPC stub so shell tests stay offline. */
   api?: ChatApi;
   /** Optional controller retained by a shell that may unmount the chat panel. */
   chat?: ChatController;
+  /** Current locale for translations. */
+  locale?: Locale;
 }
 
 interface RetainedRouteProps {
@@ -60,8 +64,10 @@ export function ChatPanel({
   chat: retainedChat,
   routesBySession: retainedRoutesBySession,
   setRoutesBySession: setRetainedRoutesBySession,
+  locale = "en",
 }: ChatPanelProps) {
-  const localChat = useChat(api, !retainedChat);
+  const { t } = useI18n(locale);
+  const localChat = useChat(api, !retainedChat, locale);
   const {
     state,
     sessions,
@@ -116,7 +122,7 @@ export function ChatPanel({
   );
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? null;
-  const activeTitle = activeSession?.title?.trim() || "New chat";
+  const activeTitle = activeSession?.title?.trim() || t("chat_newChatFallback");
   const route = activeSessionId
     ? (routesBySession[activeSessionId] ?? DEFAULT_ROUTE)
     : DEFAULT_ROUTE;
@@ -239,6 +245,7 @@ export function ChatPanel({
           onNewChat={() => void newChat()}
           onRename={(id, title) => void renameSession(id, title)}
           onDelete={(id) => void deleteSession(id)}
+          locale={locale}
         />
       )}
       <div className="chat__main">
@@ -248,10 +255,10 @@ export function ChatPanel({
             className="chat__rail-toggle"
             aria-label={
               railOpen
-                ? "Hide chat history"
+                ? t("chat_hideHistory")
                 : showUnreadBadge
-                  ? "Show chat history, unread answers"
-                  : "Show chat history"
+                  ? t("chat_showHistoryUnread")
+                  : t("chat_showHistory")
             }
             aria-expanded={railOpen}
             aria-controls="chat-history-rail"
@@ -268,8 +275,8 @@ export function ChatPanel({
           <button
             type="button"
             className="chat__edit"
-            aria-label="Rename chat"
-            title="Rename chat"
+            aria-label={t("chat_renameChat")}
+            title={t("chat_renameChat")}
             onClick={() => setRenamingActive(true)}
             disabled={!activeSession}
           >
@@ -279,11 +286,11 @@ export function ChatPanel({
           <button
             type="button"
             className="chat__clear"
-            aria-label="Clear chat"
+            aria-label={t("chat_clearChat")}
             onClick={() => setConfirmingClear(true)}
             disabled={!canClear}
           >
-            Clear
+            {t("chat_clear")}
           </button>
         </div>
 
@@ -319,7 +326,7 @@ export function ChatPanel({
                 >
                   <span className="message__label">{label}</span>
                   <p className="message__thinking" role="status">
-                    Thinking…
+                    {t("chat_thinking")}
                   </p>
                 </article>
               );
@@ -351,7 +358,7 @@ export function ChatPanel({
                         void handleRetry(message.id, message.assistantId ?? "")
                       }
                     >
-                      Retry
+                      {t("chat_retry")}
                     </button>
                   )}
                 </article>
@@ -386,7 +393,7 @@ export function ChatPanel({
               data-testid="thinking"
             >
               <p className="message__thinking" role="status">
-                Thinking…
+                {t("chat_thinking")}
               </p>
             </article>
           )}
@@ -397,23 +404,23 @@ export function ChatPanel({
             {state.status.message}
           </p>
         )}
-        <form className="composer" aria-label="Prompt composer" onSubmit={onSubmit}>
+        <form className="composer" aria-label={t("chat_composerLabel")} onSubmit={onSubmit}>
           <textarea
             ref={inputRef}
             className="composer__input"
-            aria-label="Ask side-pilot"
-            placeholder="Ask side-pilot"
+            aria-label={t("chat_askLabel")}
+            placeholder={t("chat_askPlaceholder")}
             rows={1}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
           />
-          <AiSwitcher route={route} disabled={isPending} onSelect={setActiveRoute} />
+          <AiSwitcher route={route} disabled={isPending} onSelect={setActiveRoute} locale={locale} />
           <button
             type="submit"
             className="composer__send"
-            aria-label="Send"
-            title="Send (Enter)"
+            aria-label={t("chat_send")}
+            title={t("chat_sendTitle")}
             disabled={isPending || !draft.trim()}
           >
             {/* Return/Enter glyph — the Enter key sends. aria-label keeps the
@@ -431,15 +438,15 @@ export function ChatPanel({
             void renameSession(activeSession.id, title);
             setRenamingActive(false);
           }}
+          locale={locale}
         />
       )}
 
       {confirmingClear && (
-        <Dialog label="Clear chat" onClose={() => setConfirmingClear(false)}>
+        <Dialog label={t("chat_clearChatLabel")} onClose={() => setConfirmingClear(false)}>
           <div className="dialog__body">
             <p className="dialog__message">
-              Clear this chat? All messages in “{activeTitle}” will be permanently deleted
-              and this conversation can’t be resumed.
+              {t("chat_clearConfirm", { title: activeTitle })}
             </p>
             <div className="dialog__actions">
               <button
@@ -447,7 +454,7 @@ export function ChatPanel({
                 className="dialog__button"
                 onClick={() => setConfirmingClear(false)}
               >
-                Cancel
+                {t("chat_cancel")}
               </button>
               <button
                 type="button"
@@ -457,7 +464,7 @@ export function ChatPanel({
                   setConfirmingClear(false);
                 }}
               >
-                Clear
+                {t("chat_clear")}
               </button>
             </div>
           </div>

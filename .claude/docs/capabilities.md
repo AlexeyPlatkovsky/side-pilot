@@ -26,7 +26,6 @@
 - `.claude/pipelines/implement-design-variant.md` — UI design variants, visual redesigns, desktop icon work, and visual validation
 - `.claude/pipelines/design-system.md` — design-system token work (spacing, radius, color, icon, type) and `docs/design-book.md` maintenance
 - `.claude/pipelines/implement-cli-adapter.md` — CLI adapter (Rust core) implementation
-- `.claude/pipelines/triage-bug.md` — bug investigation, classification, and disposition routing
 - `.claude/pipelines/fix-bug.md` — TDD-ordered bug fix for confirmed, root-caused defects
 
 ## Agents

@@ -75,13 +75,13 @@ When routing implementation, discovery, triage, or review work, include the arch
 
 | Task | Route |
 |---|---|
-| Discover, specify, scope, or refine requirements for a feature, epic, or task — including re-scoping an existing Beads item whose spec is bloated, incomplete, or poorly defined. Signal phrases: "discuss what X should do", "scope", "refine", "let's talk about requirements for". **Do not route here** if: a complete approved spec (scope-verifier returned No gaps, user gave explicit approval) already exists and no re-scoping is requested — route to `implement-feature` instead; or if the user is describing a defect, crash, or unexpected behavior — route to `triage-bug` instead. | `.claude/pipelines/discover-feature.md` |
+| Discover, specify, scope, or refine requirements for a feature, epic, or task — including re-scoping an existing Beads item whose spec is bloated, incomplete, or poorly defined. Signal phrases: "discuss what X should do", "scope", "refine", "let's talk about requirements for". **Do not route here** if: a complete approved spec (scope-verifier returned No gaps, user gave explicit approval) already exists and no re-scoping is requested — route to `implement-feature` instead; or if the user is describing a defect, crash, or unexpected behavior — route to the `triage-bug` skill instead. | `.claude/pipelines/discover-feature.md` |
 | Implement a Tauri/React/Rust feature (floating window, hotkey, chat UI, storage, etc.) | `.claude/pipelines/implement-feature.md` |
 | Implement a non-trivial UI design variant, visual redesign, theme, or matching desktop app icon | `.claude/pipelines/implement-design-variant.md` |
 | Add, change, re-snap, or audit design tokens (spacing, radius, color, icon, type) and `docs/design-book.md` | `.claude/pipelines/design-system.md` |
 | Apply a small visual/styling change through existing design tokens | `.claude/skills/design/SKILL.md` |
 | Implement a CLI adapter (ClaudeAdapter, CodexAdapter, GeminiAdapter) | `.claude/pipelines/implement-cli-adapter.md` |
-| Bug report or unexpected behavior (root cause unknown) | `.claude/pipelines/triage-bug.md` |
+| Bug report or unexpected behavior (root cause unknown) | `.claude/skills/triage-bug/SKILL.md` |
 | Fix a confirmed bug (root cause known, reproduction steps available) | `.claude/pipelines/fix-bug.md` |
 | Review, improve, or implement React/TypeScript/Tauri code against best practices | `.claude/skills/react-tauri-expert/SKILL.md` |
 | Write or improve test code (Vitest front-end or Rust core) | `.claude/skills/testing-pro/SKILL.md` |

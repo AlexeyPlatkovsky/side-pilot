@@ -13,6 +13,8 @@
 import type { AssistantId } from "./generated/AssistantId";
 import type { AdapterError } from "./generated/AdapterError";
 import type { Route } from "./generated/Route";
+import { translate } from "../i18n/translations";
+import type { Locale } from "../i18n/types";
 
 /** The active routing selection — single provider or every active provider. */
 export type ActiveRoute = Route;
@@ -46,8 +48,8 @@ export function providerInfo(id: AssistantId): ProviderInfo {
 }
 
 /** The user-facing label for a route ("All" or the single provider's name). */
-export function routeLabel(route: ActiveRoute): string {
-  return route.kind === "all" ? "All" : providerInfo(route.provider).label;
+export function routeLabel(route: ActiveRoute, locale: Locale = "en"): string {
+  return route.kind === "all" ? translate(locale, "ai_all") : providerInfo(route.provider).label;
 }
 
 /** Whether two routes select the same target(s). */
@@ -69,9 +71,10 @@ export function messageLabel(
   assistantId: string | undefined,
   model: string | undefined,
   reasoningEffort: string | undefined,
+  locale: Locale = "en",
 ): string {
   if (model) return `${model}-${reasoningEffort || "none"}`;
-  if (!assistantId) return "Assistant";
+  if (!assistantId) return translate(locale, "assistant");
   return providerInfo(assistantId as AssistantId).label;
 }
 
@@ -154,11 +157,12 @@ function asSentence(detail: string): string {
 }
 
 /** A concise user-visible message for a CLI process that exited unsuccessfully. */
-export function describeCliExit(name: string, stderr: string | undefined): string {
+export function describeCliExit(name: string, stderr: string | undefined, locale: Locale = "en"): string {
   const detail = summarizeCliStderr(stderr ?? "");
-  return detail
-    ? `${name} exited with an error: ${asSentence(detail)}`
-    : `${name} exited with an error.`;
+  if (detail) {
+    return translate(locale, "error_cliExitWithDetail", { name, detail: asSentence(detail) });
+  }
+  return translate(locale, "error_cliExit", { name });
 }
 
 /**
@@ -169,22 +173,23 @@ export function describeCliExit(name: string, stderr: string | undefined): strin
 export function describeProviderError(
   error: AdapterError,
   provider: AssistantId,
+  locale: Locale = "en",
 ): string {
   const name = providerInfo(provider).label;
   switch (error.kind) {
     case "binaryNotFound":
-      return `${name} isn't available — its CLI wasn't found on your PATH.`;
+      return translate(locale, "error_binaryNotFound", { name });
     case "notAuthenticated":
-      return `${name} is not authenticated. Sign in to its CLI and try again.`;
+      return translate(locale, "error_notAuthenticated", { name });
     case "timedOut":
-      return `${name} timed out before responding.`;
+      return translate(locale, "error_timedOut", { name });
     case "cancelled":
-      return `The ${name} request was cancelled.`;
+      return translate(locale, "error_cancelled", { name });
     case "nonZeroExit":
-      return describeCliExit(name, error.stderr);
+      return describeCliExit(name, error.stderr, locale);
     case "outputParseFailure":
-      return `${name} returned output that could not be read.`;
+      return translate(locale, "error_outputParseFailure", { name });
     default:
-      return `Something went wrong with ${name}.`;
+      return translate(locale, "error_defaultError", { name });
   }
 }
