@@ -70,7 +70,7 @@ export const en: Record<TranslationKey, string> = {
   language: "Language",
   loading: "Loading...",
   pin: "Pin",
-  pinCurrent: "Pin current position",
+  pinCurrent: "Pin the position",
   position: "Window position",
   rename_chatTitle: "Chat title",
   rename_hint:

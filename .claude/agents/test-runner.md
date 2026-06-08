@@ -39,10 +39,13 @@ If the requested validation scope or implementation artifact is missing, return 
 Run only commands relevant to touched layers:
 
 ```text
-npm run test
-npm run build
-cargo nextest run --manifest-path src-tauri/Cargo.toml
-cargo build --manifest-path src-tauri/Cargo.toml
+npm run test                                       # Front-end unit tests (Vitest)
+npm run test:e2e                                   # WebKit E2E (Playwright)
+npm run lint                                       # Front-end lint (ESLint)
+npm run format:check                               # Front-end format (Prettier)
+npm run gen:bindings                               # Regenerate typed IPC bindings
+cargo nextest run --manifest-path src-tauri/Cargo.toml                      # Rust core tests
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings  # Rust lint
 ```
 
 For a command-only request such as "run npm test", direct execution is trivial and this agent is not required. For non-trivial routed work, validation evidence must come through this agent.

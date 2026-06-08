@@ -116,6 +116,6 @@ Do not restate scenario internals the caller can read in the log.
 | `{{FIXTURES_DIR}}` | Shared fixtures directory | `.ai/tests/_shared/fixtures/` |
 | `{{RESULTS_DIR}}` | Gitignored results directory | `.ai/tests/results/` |
 | `{{STATUS_COMMAND}}` | Command that shows uncommitted workspace state | `git status --short` |
-| `{{VERIFICATION_NOTE}}` | One paragraph naming the project's verification commands for implementation-reaching scenarios, discovered during the builder discussion | "Any scenario reaching an implementation step runs `npm run typecheck`, `npm run lint`, and `npm run test:ui`." |
+| `{{VERIFICATION_NOTE}}` | One paragraph naming the project's verification commands for implementation-reaching scenarios, discovered during the builder discussion | "Any scenario reaching an implementation step runs `npm run typecheck`, `npm run lint`, and `npm run test:e2e`." |
 | `{{PREREQUISITE_NOTE}}` | Any environment prerequisite for live runs, or `(none)` | "Before browser-backed scenarios, confirm Playwright binaries are installed and the live site is reachable." |
 | `{{FAILURE_MODE}}` | The runner's failure-handling rule, chosen during the builder discussion — either continue-past-failures or halt-on-first-failure | Continue: "A `FAIL` or `SKIP` never halts the run. Every card in every requested target is executed, then results are reported together." Halt: "The first `FAIL` halts the run. Cards already passed are kept; remaining cards are recorded as `SKIP` with reason `run halted`. Results are reported together." |

@@ -133,7 +133,7 @@ describe("GeneralSettings", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("radio", { name: /track last position/i })).toBeChecked();
-      expect(screen.getByRole("radio", { name: /pin current position/i })).not.toBeChecked();
+      expect(screen.getByRole("radio", { name: /pin the position/i })).not.toBeChecked();
     });
   });
 
@@ -142,7 +142,7 @@ describe("GeneralSettings", () => {
     const user = userEvent.setup();
     render(<GeneralSettings api={api} />);
 
-    const pinRadio = await screen.findByRole("radio", { name: /pin current position/i });
+    const pinRadio = await screen.findByRole("radio", { name: /pin the position/i });
     await user.click(pinRadio);
 
     await waitFor(() => {

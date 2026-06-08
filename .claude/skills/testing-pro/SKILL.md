@@ -49,7 +49,7 @@ Follow the same rules as review but make the changes directly. Generation heuris
 
 ## Validation commands
 
-- Front-end: `npm run test` (Vitest, non-watch) — or `vitest run`
+- Front-end: `npm run test` and `npm run test:e2e` (Vitest + React Testing Library, WebKit E2E)
 - Rust: `cargo nextest run` (preferred) or `cargo test`
 
 Tests must pass before the feature closes.

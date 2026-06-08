@@ -112,6 +112,7 @@ export function Bubble({
   useEffect(() => {
     const api = chatApi;
     if (api === inertChatApi) return;
+    if (typeof (window as any).__TAURI_INTERNALS__ === "undefined") return;
     let cancelled = false;
     let unlistenFn: (() => void) | null = null;
 
