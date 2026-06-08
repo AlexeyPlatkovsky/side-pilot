@@ -18,15 +18,17 @@ Project profile: `.claude/docs/project_specification.md`
 
 ## Task Classification
 
-Before any file is created, edited, or deleted, classify the task out loud:
+Before making any tool call in response to a task request — including reads intended to understand scope — classify the task out loud:
 
 **Trivial** — single-step, low-risk, no behavioral change.
 Proceed directly. State the classification.
 
 **Non-trivial** — multi-step, or changes behavior, structure, commands, contracts, or domain facts:
 1. Stop.
-2. Load `.claude/manager/MANAGER.md`.
+2. Load `.claude/skills/task-routing/SKILL.md`.
 3. Do not implement until the manager emits its visible routing plan (`Manager: manager - output below`).
+
+Non-trivial by default (no judgment required): any numbered list of issues to fix, any change touching more than one element, any UI or interaction change.
 
 When unsure, treat as non-trivial.
 
@@ -66,7 +68,7 @@ These apply to all non-trivial work and may not be skipped:
 
 ## Agent Execution Mode
 
-Dedicated agents are first-class executors. They MUST be spawned as real subagents when a gate requires them. Inline substitution is prohibited. See `.claude/manager/MANAGER.md` for enforcement.
+Dedicated agents are first-class executors. They MUST be spawned as real subagents when a gate requires them. Inline substitution is prohibited. See `.claude/skills/task-routing/SKILL.md` for enforcement.
 
 ---
 

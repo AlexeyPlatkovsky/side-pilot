@@ -2,7 +2,7 @@
 
 ## Manager
 
-- `.claude/manager/MANAGER.md` — classifies and routes non-trivial work; enforces documentation maintenance and task-complete
+- `.claude/skills/task-routing/SKILL.md` — classifies and routes non-trivial work; enforces documentation maintenance and task-complete
 
 ## Skills
 
