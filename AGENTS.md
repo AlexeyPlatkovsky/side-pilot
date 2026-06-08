@@ -56,29 +56,15 @@ When the Beads gate applies:
 
 These apply to all non-trivial work and may not be skipped:
 
-- **TDD required** for non-trivial logic. Red → Green → Refactor. Front-end: Vitest + React Testing Library; Rust: cargo-nextest + tokio + mockall.
-- **Interaction contract first (UI):** state the contract before writing component code. Name the default/initial state and define success as a user-visible outcome.
-- **Runtime UI validation required** for any UI or interaction change. Exercise in the real Tauri window (WKWebView) or the WebKit E2E harness. Captured evidence (screenshot, measured sizes). Vitest + jsdom is not sufficient.
+- **TDD required** for non-trivial logic. Red → Green → Refactor.
+- **Interaction contract must be established** before component code is written.
+- **Runtime UI validation required** for any UI or interaction change. JSDOM-based testing alone does not satisfy this gate.
 - **Documentation maintenance** after any change that affects behavior, interfaces, commands, architecture, or domain facts.
 - **Local validation** before a feature closes: touched layers must build and tests must pass.
 - **test-runner agent** for non-trivial routed validation. Direct command execution is allowed only for trivial requests.
 - **design-reviewer agent** for non-trivial UI or icon work.
 
-### Test Pyramid and Quality Practices
-
-Test taxonomy and quality practice standards are defined in `.claude/conventions/testing-taxonomy.md` — the single authoritative source. All instruction artifacts reference it; none duplicate it.
-
-Binding policy:
-
-- **TDD required** for non-trivial logic. Red → Green → Refactor per the test pyramid levels.
-- **Coverage thresholds** must pass (80% lines, branches, functions, statements).
-- **Dependency auditing** must pass (no high/critical advisories).
-- **Smoke tests** must tag critical-path tests and pass before full suite invocation.
-- **Property-based, accessibility, and contract tests** must be present for all new features touching parsing, UI components, or IPC types respectively.
-- **Mutation testing** must pass on `feature/*` branches.
-- **Static analysis** must pass with zero errors.
-
-For non-trivial routed work, quality practice validations must be executed through the **test-runner agent** — direct command execution is allowed only for trivial requests.
+All quality practice standards are defined in the authoritative convention `.claude/conventions/testing-taxonomy.md`. For non-trivial routed work, quality practice validations must be executed through the **test-runner agent** — direct command execution is allowed only for trivial requests.
 
 ---
 
