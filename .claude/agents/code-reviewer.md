@@ -23,6 +23,7 @@ Read:
   - cross-platform: `.claude/conventions/react-tauri/cross-platform.md`
 - For Rust/adapter changes: `.claude/skills/testing-pro/references/rust.md`
 - For front-end test changes: `.claude/skills/testing-pro/references/frontend.md`
+- For any change that adds or modifies tests, `.feature` scenarios, or `--acceptance` criteria: `.claude/conventions/testing-taxonomy.md` — enforce §Spec-to-Test Traceability, §Coverage Placement (Push-Down + E2E Budget), and the §Test-Design Techniques (Case Derivation) → §Application Rules "Make the derivation visible" standard at the severities below
 
 If the diff or list of changed files is missing, return verdict `Blocked` immediately. If the required test-runner validation artifact is missing for non-trivial routed work, return verdict `Blocked` immediately.
 
@@ -32,6 +33,13 @@ If the diff or list of changed files is missing, return verdict `Blocked` immedi
 - Tests assert **behavior** (what users see/do for FE; observable outputs and errors for Rust), not implementation details or private internals
 - Every non-trivial behavior has a happy-path test **and** at least one failure-path test
 - Rust tests are isolated: no shared mutable global state, nextest-friendly (parallelism-safe)
+
+### Coverage Traceability (see `testing-taxonomy.md`)
+Apply only when the change adds or modifies tests, `.feature` scenarios, or `--acceptance` criteria.
+- **Forward coverage:** every `Scenario:` in the touched `.feature` file and every DoD bullet in `--acceptance` has at least one covering test, with a visible link (stable scenario-id tag/comment, or test named after the scenario). An uncovered scenario or DoD bullet is **Major**.
+- **Backward traceability:** every new behavioral test traces to a scenario, criterion, or recorded invariant. An orphan behavioral test that maps to nothing is **Minor** — flag it for investigation (dead, mis-scoped, or unspecified behavior); do not assume it should be deleted.
+- **Coverage placement:** a behavior verifiable at a lower level is covered there, not promoted upward. A new E2E test that duplicates a lower-level assertion without cross-engine/critical-path justification is **Major** (per §Coverage Placement).
+- **Technique visibility:** non-trivial cases derived by a named technique (EP / BVA / decision table / state-transition / pairwise) name that technique via comment or Gherkin tag, per §Test-Design Techniques (Case Derivation) → §Application Rules. Missing visibility on such derived cases is **Minor**.
 
 ### React/TypeScript Layer (if touched)
 - IPC calls use generated bindings; every call has a matching capability permission in `src-tauri/capabilities/`
@@ -61,8 +69,8 @@ If the diff or list of changed files is missing, return verdict `Blocked` immedi
 | Severity | Meaning |
 |---|---|
 | Blocking | Correctness bug; missing capability permission; build failure; untestable logic shipped without an explicit manual-test note |
-| Major | TDD violation (tests added after, or tests assert internals); missing failure-path test for non-trivial behavior; business logic in a Tauri command handler |
-| Minor | Style/naming inconsistency; missing accessible query in test; small abstraction creep |
+| Major | TDD violation (tests added after, or tests assert internals); missing failure-path test for non-trivial behavior; business logic in a Tauri command handler; uncovered `.feature` Scenario or DoD bullet; unjustified E2E duplication of a lower-level assertion |
+| Minor | Style/naming inconsistency; missing accessible query in test; small abstraction creep; orphan behavioral test; missing named-technique visibility |
 | Info | Observation with no required action |
 
 ## Output Contract

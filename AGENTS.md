@@ -54,9 +54,10 @@ When the Beads gate applies:
 
 ## Quality Gates
 
-These apply to all non-trivial work and may not be skipped:
+These apply to all non-trivial work at the level set by the assigned Quality Tier (see §Quality Tiers); none may be silently skipped:
 
 - **TDD required** for non-trivial logic. Red → Green → Refactor.
+- **Definition of Ready (DoR)** before Full-tier implementation begins — see §Definition of Ready.
 - **Interaction contract must be established** before component code is written.
 - **Runtime UI validation required** for any UI or interaction change. JSDOM-based testing alone does not satisfy this gate.
 - **Documentation maintenance** after any change that affects behavior, interfaces, commands, architecture, or domain facts.
@@ -65,6 +66,28 @@ These apply to all non-trivial work and may not be skipped:
 - **design-reviewer agent** for non-trivial UI or icon work.
 
 All quality practice standards are defined in the authoritative convention `.claude/conventions/testing-taxonomy.md`. For non-trivial routed work, quality practice validations must be executed through the **test-runner agent** — direct command execution is allowed only for trivial requests.
+
+---
+
+## Quality Tiers
+
+Every non-trivial task is assigned a **Quality Tier** by the manager at routing time and recorded on the work item (the Beads item when one exists). The tier scales how much of the quality system applies — one calibrated standard, not parallel pipelines. When a task qualifies for more than one tier, the **higher tier wins**. If implementation reveals high-risk surface area, the implementing pipeline or reviewer escalates Lite → Full by returning to the manager to re-route through the Full path, including the DoR gate.
+
+| Tier | Applies to | Enforced practices |
+|---|---|---|
+| **Full** | Features; refactors or changes touching high-risk surfaces (route planning, CLI argument construction, persistence/serialization, IPC contracts); any high or system-level risk work | All: DoR gate, progressive epic→feature→task elaboration, full `testing-taxonomy.md` §Test-Design Techniques case derivation, spec-to-test traceability, TDD (Red→Green→Refactor) |
+| **Lite** | Confirmed bug fixes with known root cause; low-risk single-surface refactors; isolated low-risk changes | TDD with a regression test mapped to the defect/behavior; §Test-Design Techniques applied to the changed behavior only; reduced DoR ((reproduction or target identified) **and** DoD present, or each missing item carries an explicit user disposition); no decomposition or altitude elaboration |
+| **Exempt** | Trivial work (per §Task Classification) | No added quality gates |
+
+The tier is selected from two dimensions already in manager classification — **task domain** and **risk**: features and any high/system-level-risk work are **Full**; trivial work is **Exempt**; every other non-trivial task (e.g. medium- or low-risk bug fixes and single-surface refactors) is **Lite**. When the surface or risk is uncertain, treat as Full. The manager records the chosen tier and its justification in its routing output, and — for Lite — emits the reduced-readiness confirmation required by `.claude/skills/task-routing/SKILL.md` §Output Contract; that visible record is the enforcement point.
+
+---
+
+## Definition of Ready
+
+Full-tier work must pass a Definition-of-Ready gate before implementation begins: the work item carries a detailed description, a linked and populated `.feature` file (relaxed for non-behavioral work), a Definition-of-Done checklist, parent context, named target surfaces, and stated constraints — or each missing artifact has an explicit user disposition (ignore / skip / create). The operational checklist and disposition handling are owned by the `verify-readiness` skill, run as Step 0 of `implement-feature`. Lite-tier work applies the reduced readiness noted in §Quality Tiers, confirmed by the manager at routing; Exempt work has no DoR gate.
+
+This keeps single ownership: AGENTS.md states the DoR policy and which tier it binds; `verify-readiness` owns how to run it.
 
 ---
 

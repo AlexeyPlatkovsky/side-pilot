@@ -14,6 +14,7 @@
 - `.claude/skills/testing-pro/SKILL.md` — write and improve tests across both layers (Vitest front-end + cargo-nextest Rust core)
 - `.claude/skills/triage-bug/SKILL.md` — investigate a reported bug: gather, reproduce, root-cause, classify severity, decide disposition; produces triage report; writes no production code
 - `.claude/skills/verify-cli-adapter/SKILL.md` — verify CLI adapter correctness after implementation
+- `.claude/skills/verify-readiness/SKILL.md` — Definition-of-Ready gate; verify a routed work item carries every readiness artifact before implementation and STOP for an explicit user disposition (ignore/skip/create) on any gap; runs as Step 0 of `implement-feature`
 - `.claude/skills/work-with-bead/SKILL.md` — check, create, update, and maintain Beads work items for applicable non-trivial work
 - `.claude/skills/work-with-git/SKILL.md` — select or create the appropriate task branch and enforce commit/push boundaries
 - `.claude/skills/documentation-maintenance/SKILL.md` — post-change documentation updates

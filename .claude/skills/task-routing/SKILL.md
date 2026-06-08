@@ -26,9 +26,13 @@ Before selecting any pipeline or capability, classify out loud:
 | Complexity | trivial / non-trivial |
 | Risk | low / medium / high / system-level |
 | Domain | Tauri/React/Rust feature / UI design variant / CLI adapter / documentation / AI staff work / instruction system / bug triage / bug fix / other |
+| Quality Tier | Full / Lite / Exempt (per `AGENTS.md` §Quality Tiers) |
 
 When unsure of complexity: treat as non-trivial.
 When unsure of risk: treat as medium.
+When unsure of Quality Tier: treat as Full.
+
+Select the Quality Tier from domain + risk per `AGENTS.md` §Quality Tiers; when a task qualifies for more than one tier, the higher tier wins. State the chosen tier and its justification, and record it on the work item (the Beads item when one exists). For Lite-tier work, confirm the reduced readiness (reproduction or target identified + DoD present) before routing.
 
 Classification must be stated before any file is created, edited, or deleted.
 
@@ -125,7 +129,9 @@ At routing time, emit:
 `Manager: manager - output below`
 
 Include:
-- task classification (complexity, risk, domain)
+- task classification (complexity, risk, domain, quality tier)
+- selected Quality Tier (Full / Lite / Exempt) and its justification, per `AGENTS.md` §Quality Tiers
+- for **Lite** tier: a visible reduced-readiness confirmation emitted before routing to implementation — `(reproduction or target identified) and DoD present`, or each missing item with the user's explicit disposition. Without this line, Lite work must not be routed to implementation. (Full tier defers readiness to the `verify-readiness` DoR gate; Exempt tier requires no readiness line.)
 - Beads planning gate requirement (required / skipped, and why)
 - git branch gate requirement
 - selected pipeline or capability

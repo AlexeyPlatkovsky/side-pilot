@@ -113,6 +113,8 @@ Maintain dependencies between items whenever execution order, blocking, or hando
 
 Every Beads item must be implementable from scratch by an AI agent with no prior conversation context.
 
+The epic → feature → task levels reflect **progressive elaboration**: epics carry high-level breakdown, features carry medium detail (user journey, control elements), and tasks carry full implementation and adversarial-case detail. This is the persistence counterpart to `.claude/skills/discover-requirements/SKILL.md` §Altitude Calibration — do not push task-level scenario detail up into an epic, nor leave a task under-specified.
+
 Epics must include:
 
 - goal and user-visible outcome
@@ -136,7 +138,7 @@ Tasks must include:
 - concrete implementation objective
 - parent feature or epic to read first when context would otherwise be duplicated
 - target files, modules, commands, or interfaces when known
-- acceptance — Definition of Done checklist in `--acceptance`, BDD scenarios in `docs/features/<feature-id>-<feature-name>/<task-id>-<task-name>.feature`; set `--spec-id` to the BDD file path so the link is visible in the Beads item (use `--spec-id` on `bd create` when creating the task, or `bd update` when the file is created after the task already exists)
+- acceptance — Definition of Done checklist in `--acceptance`, BDD scenarios in `docs/features/<feature-id>-<feature-name>/<task-id>-<task-name>.feature`; set `--spec-id` to the BDD file path so the link is visible in the Beads item (use `--spec-id` on `bd create` when creating the task, or `bd update` when the file is created after the task already exists). Derive the task's edge-case and negative scenarios using the techniques in `.claude/conventions/testing-taxonomy.md` §Test-Design Techniques, not by intuition
 - test or manual validation expectations
 - dependencies on other tasks
 - documentation updates needed, or an explicit statement that none are expected
