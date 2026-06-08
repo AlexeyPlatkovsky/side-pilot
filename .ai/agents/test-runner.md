@@ -1,9 +1,9 @@
 ---
 name: test-runner
 description: Executes and reports validation commands for non-trivial side-pilot work after implementation. Use for build/test/manual-validation evidence; do not use to design tests or review code.
-cli: claude
-model: haiku
-effort: low
+cli: opencode
+model: opencode-go/deepseek-v4-flash
+effort: high
 tools: Bash, Read
 ---
 

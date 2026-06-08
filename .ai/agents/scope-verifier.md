@@ -2,7 +2,7 @@
 name: scope-verifier
 description: Checks a draft requirements spec from discover-requirements for structural completeness. Returns "No gaps" or a numbered gap list with targeted questions. Does not write production code.
 cli: claude
-model: sonnet
+model: opus
 effort: high
 tools: Read, Bash
 ---

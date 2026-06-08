@@ -1,9 +1,9 @@
 ---
 name: design-reviewer
 description: Reviews non-trivial UI design variants and visual changes for side-pilot against desktop-app UX, design-system token adherence, accessibility, responsiveness, icon quality, and platform scope.
-cli: claude
-model: sonnet
-effort: medium
+cli: codex
+model: gpt-5.5
+effort: high
 tools: Read, Bash
 ---
 

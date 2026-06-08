@@ -1,8 +1,8 @@
 ---
 name: artifact-acceptance-tester
 description: Use when acceptance-testing new or materially changed instruction artifacts (skills, pipelines, agents, manager routing, validation gates, output contracts) before they are accepted into the project. Runs exactly 9 scenario tests per artifact.
-cli: claude
-model: sonnet
+cli: codex
+model: gpt-5.5
 effort: high
 tools: Read, Bash
 ---

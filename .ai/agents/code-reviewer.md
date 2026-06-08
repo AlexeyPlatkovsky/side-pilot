@@ -1,9 +1,9 @@
 ---
 name: code-reviewer
 description: Reviews completed implementation diffs for correctness bugs, TDD adherence, code quality, and project conventions across React/TypeScript front-end and Rust core layers. Use after implementation and local validation pass, before documentation maintenance.
-cli: codex
-model: gpt-5.5
-effort: medium
+cli: opencode
+model: opencode-go/deepseek-v4-pro
+effort: high
 tools: Read, Bash
 ---
 
