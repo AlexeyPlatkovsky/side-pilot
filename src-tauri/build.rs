@@ -21,5 +21,5 @@ fn main() {
             "open_external",
         ]),
     ))
-    .expect("failed to run Tauri build script")
+    .expect("failed to run Tauri build script");
 }

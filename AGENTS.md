@@ -64,6 +64,22 @@ These apply to all non-trivial work and may not be skipped:
 - **test-runner agent** for non-trivial routed validation. Direct command execution is allowed only for trivial requests.
 - **design-reviewer agent** for non-trivial UI or icon work.
 
+### Test Pyramid and Quality Practices
+
+Test taxonomy and quality practice standards are defined in `.claude/conventions/testing-taxonomy.md` — the single authoritative source. All instruction artifacts reference it; none duplicate it.
+
+Binding policy:
+
+- **TDD required** for non-trivial logic. Red → Green → Refactor per the test pyramid levels.
+- **Coverage thresholds** must pass (80% lines, branches, functions, statements).
+- **Dependency auditing** must pass (no high/critical advisories).
+- **Smoke tests** must tag critical-path tests and pass before full suite invocation.
+- **Property-based, accessibility, and contract tests** must be present for all new features touching parsing, UI components, or IPC types respectively.
+- **Mutation testing** must pass on `feature/*` branches.
+- **Static analysis** must pass with zero errors.
+
+For non-trivial routed work, quality practice validations must be executed through the **test-runner agent** — direct command execution is allowed only for trivial requests.
+
 ---
 
 ## Agent Execution Mode

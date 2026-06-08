@@ -30,3 +30,65 @@ Stack: **cargo-nextest** (preferred runner; process-per-test isolation, faster),
 - Shared global mutable state or test ordering dependence.
 - `#[test]` on an async fn (won't compile/await correctly) instead of `#[tokio::test]`.
 - Timeout tests that rely on real wall-clock sleeps (flaky).
+
+## Property-based tests (proptest)
+
+For parsing and stripping functions (ANSI escape removal, JSON output parsing,
+error message reduction), use `proptest` to verify invariants:
+
+```rust
+use proptest::prelude::*;
+
+proptest! {
+    #[test]
+    fn strip_never_panics(s in "\\PC*") {
+        let _ = strip_ansi(&s);
+    }
+
+    #[test]
+    fn strip_is_idempotent(s in "\\PC*") {
+        let first = strip_ansi(&s);
+        assert_eq!(strip_ansi(&first), first);
+    }
+}
+```
+
+Add `proptest = "1"` to `[dev-dependencies]`. Property tests live alongside
+existing `#[cfg(test)]` modules, inside a `proptest! { }` block.
+
+## Contract tests (round-trip serde)
+
+Every IPC struct (`#[derive(Serialize, Deserialize, TS)]`) must have a round-trip
+test: serialize → deserialize → assert equality.
+
+```rust
+#[test]
+fn adapter_request_round_trips() {
+    let original = AdapterRequest { /* ... */ };
+    let json = serde_json::to_value(&original).unwrap();
+    let round_tripped: AdapterRequest = serde_json::from_value(json).unwrap();
+    assert_eq!(round_tripped.assistant, original.assistant);
+}
+```
+
+Contract tests live in the same `#[cfg(test)]` module as the struct definition.
+
+## Integration tests
+
+For pipelines that compose store + adapter registry + routing, write integration
+tests in `src-tauri/tests/`. These use an in-memory SQLite store and stub adapters
+(no real CLI spawns):
+
+```rust
+use side_pilot_lib::storage::Store;
+use side_pilot_lib::adapters::AdapterRegistry;
+
+#[tokio::test]
+async fn full_roundtrip() {
+    let store = Store::in_memory().unwrap();
+    let registry = make_stub_registry();
+    // exercise the pipeline
+}
+```
+
+Integration tests verify the same composition the Tauri commands use at runtime.

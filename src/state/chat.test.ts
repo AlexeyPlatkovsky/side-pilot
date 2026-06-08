@@ -16,7 +16,7 @@ const assistantMsg = (content: string): ChatMessage => ({
   createdAt: 1,
 });
 
-describe("chatReducer", () => {
+describe("[smoke] chatReducer", () => {
   it("loads history, replacing the transcript and returning to idle", () => {
     const state = chatReducer(initialChatState, {
       type: "loaded",

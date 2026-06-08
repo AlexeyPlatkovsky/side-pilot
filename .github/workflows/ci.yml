@@ -59,6 +59,9 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@cargo-nextest
 
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
       - name: Install Tauri Linux dependencies
         run: |
           sudo apt-get update
@@ -72,6 +75,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Audit frontend dependencies
+        id: npm-audit
+        if: ${{ !cancelled() }}
+        run: npm audit --production --audit-level=high
+
       - name: Lint frontend
         id: lint
         if: ${{ !cancelled() }}
@@ -82,14 +90,29 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run format:check
 
+      - name: Smoke test frontend
+        id: smoke-fe
+        if: ${{ !cancelled() }}
+        run: npm run test:smoke
+
       - name: Test frontend
         id: test-fe
         if: ${{ !cancelled() }}
         run: npm run test
 
+      - name: Coverage frontend
+        id: coverage
+        if: ${{ !cancelled() }}
+        run: npm run test:coverage
+
       - name: Install Playwright WebKit
         if: ${{ !cancelled() }}
         run: npx playwright install --with-deps webkit
+
+      - name: Smoke test WebKit E2E
+        id: smoke-e2e
+        if: ${{ !cancelled() }}
+        run: npm run test:e2e:smoke
 
       - name: Test WebKit runtime harness
         id: e2e
@@ -118,18 +141,44 @@ jobs:
         if: ${{ !cancelled() }}
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 
+      - name: Audit Rust dependencies
+        id: cargo-audit
+        if: ${{ !cancelled() }}
+        run: cargo audit --no-fetch
+
+      - name: Install cargo-mutants
+        if: ${{ !cancelled() && startsWith(github.ref_name, 'feature/') }}
+        run: cargo install cargo-mutants
+
+      - name: Mutation test Rust core
+        id: mutation-rust
+        if: ${{ !cancelled() && startsWith(github.ref_name, 'feature/') }}
+        run: cargo mutants --manifest-path src-tauri/Cargo.toml --timeout 60
+
+      - name: Mutation test frontend
+        id: mutation-fe
+        if: ${{ !cancelled() && startsWith(github.ref_name, 'feature/') }}
+        run: npx stryker run
+
       - name: Post PR comment
         if: always() && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
           LINT: ${{ steps.lint.outcome }}
           FORMAT: ${{ steps.format.outcome }}
+          SMOKE_FE: ${{ steps.smoke-fe.outcome }}
+          NPM_AUDIT: ${{ steps.npm-audit.outcome }}
           TEST_FE: ${{ steps.test-fe.outcome }}
+          COVERAGE: ${{ steps.coverage.outcome }}
+          SMOKE_E2E: ${{ steps.smoke-e2e.outcome }}
           E2E: ${{ steps.e2e.outcome }}
           BUILD_FE: ${{ steps.build-fe.outcome }}
           TEST_RUST: ${{ steps.test-rust.outcome }}
           IPC: ${{ steps.ipc.outcome }}
           CLIPPY: ${{ steps.clippy.outcome }}
+          CARGO_AUDIT: ${{ steps.cargo-audit.outcome }}
+          MUTATION_RUST: ${{ steps.mutation-rust.outcome }}
+          MUTATION_FE: ${{ steps.mutation-fe.outcome }}
         run: |
           PR="${{ github.event.pull_request.number }}"
           now=$(date -u +"%Y-%m-%d %H:%M UTC")
@@ -146,14 +195,21 @@ jobs:
 
           table="| | Check | Result |
           |---|---|---|
-          | $(icon "$LINT")     | Lint frontend   | $LINT     |
-          | $(icon "$FORMAT")   | Check formatting | $FORMAT   |
-          | $(icon "$TEST_FE")  | Test frontend   | $TEST_FE  |
-          | $(icon "$E2E")      | WebKit E2E      | $E2E      |
-          | $(icon "$BUILD_FE") | Build frontend  | $BUILD_FE |
-          | $(icon "$TEST_RUST")| Test Rust core  | $TEST_RUST|
-          | $(icon "$IPC")      | IPC bindings    | $IPC      |
-          | $(icon "$CLIPPY")   | Clippy (Rust lint)| $CLIPPY |"
+           | $(icon "$LINT")     | Lint frontend   | $LINT     |
+           | $(icon "$FORMAT")   | Check formatting | $FORMAT   |
+           | $(icon "$SMOKE_FE") | Smoke test (FE)  | $SMOKE_FE |
+           | $(icon "$NPM_AUDIT")| Audit npm deps   | $NPM_AUDIT |
+           | $(icon "$TEST_FE")  | Test frontend   | $TEST_FE  |
+           | $(icon "$COVERAGE") | Coverage frontend| $COVERAGE |
+           | $(icon "$SMOKE_E2E")| Smoke test (E2E) | $SMOKE_E2E |
+           | $(icon "$E2E")      | WebKit E2E      | $E2E      |
+           | $(icon "$BUILD_FE") | Build frontend  | $BUILD_FE |
+           | $(icon "$TEST_RUST")| Test Rust core  | $TEST_RUST|
+           | $(icon "$IPC")      | IPC bindings    | $IPC      |
+           | $(icon "$CLIPPY")   | Clippy (Rust lint)| $CLIPPY |
+           | $(icon "$CARGO_AUDIT")| Audit Rust deps | $CARGO_AUDIT |
+           | $(icon "$MUTATION_RUST")| Mutation (Rust)  | $MUTATION_RUST |
+           | $(icon "$MUTATION_FE")| Mutation (FE)    | $MUTATION_FE |"
 
           pass=$(echo "$table" | grep -cE "✅|➖")
           fail=$(echo "$table" | grep -cE "❌|🚫|❓")

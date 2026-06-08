@@ -32,10 +32,11 @@ Emit status `blocked` (not `completed`) when the code cannot be unit-tested with
 
 When authoring or improving tests:
 
-1. Identify the layer and load the matching reference file.
+1. Identify the correct test level per `.claude/conventions/testing-taxonomy.md` and load the matching reference file.
 2. **Front-end:** use accessible queries (`getByRole`/`getByLabelText` over `getByTestId`), user interactions through `userEvent`, async via `findBy`/`waitFor`, and minimal mocks at the IPC boundary. See `.claude/skills/testing-pro/references/frontend.md`.
 3. **Rust:** use `#[tokio::test]` for async tests, put external effects behind traits mocked with `mockall`, assert errors by variant not string, and keep tests isolated and nextest-friendly. See `.claude/skills/testing-pro/references/rust.md`.
 4. Cover each non-trivial behavior with a happy-path test **and** at least one failure-path test.
+5. First write the test, verify it fails (Red), then implement (Green), then refactor.
 
 If doing partial work, load only the relevant reference file.
 
@@ -46,6 +47,24 @@ Follow the same rules as review but make the changes directly. Generation heuris
 - Boundary / edge inputs
 - Invalid input / error path
 - Concurrency or async-cancellation (when applicable)
+- **Property-based:** for pure parsing/stripping/transformation functions, generate random inputs and verify invariants (idempotence, no panic, no secrets leaked)
+- **A11y:** after rendering a component loaded with live data, run an axe audit before asserting user-visible state
+- **Contract:** when a Rust struct is added or changed, add a round-trip serde test and run `cargo test export_bindings` to regenerate TS types
+- **Integration (Rust):** when wiring a new pipeline (store + adapter + routing), add an `src-tauri/tests/` test with in-memory DB and stub adapters
+
+## Test Level Selection
+
+Choose the correct test level per AGENTS.md §Test Pyramid and Levels:
+
+| What's being tested | Level | Location |
+|---------------------|-------|----------|
+| Pure function (parser, reducer, helper) | Unit | `src/state/chat.test.ts`, `#[cfg(test)]` |
+| Single React component | Component | `src/components/Bubble.test.tsx` |
+| Store + adapter + routing pipeline | Integration | `src-tauri/tests/` |
+| IPC type round-trip | Contract | `src/chat/contract.test.ts` |
+| Full UI in WebKit | E2E | `e2e/composer.spec.ts` |
+| Accessibility audit | A11y | `src/components/Bubble.a11y.test.tsx` |
+| Invariant over random inputs | Property | `src/**/*.proptest.ts` (e.g. `src/chat/providers.proptest.ts`) |
 
 ## Validation commands
 

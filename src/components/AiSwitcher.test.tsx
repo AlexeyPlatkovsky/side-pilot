@@ -6,7 +6,7 @@ import type { ActiveRoute } from "../chat/providers";
 
 const SINGLE_CODEX: ActiveRoute = { kind: "single", provider: "codex" };
 
-describe("AiSwitcher", () => {
+describe("[smoke] AiSwitcher", () => {
   it("shows the active provider and keeps the picker closed by default", () => {
     render(<AiSwitcher route={SINGLE_CODEX} disabled={false} onSelect={() => {}} />);
     const toggle = screen.getByRole("button", {

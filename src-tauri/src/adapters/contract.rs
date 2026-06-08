@@ -186,4 +186,54 @@ mod tests {
         assert_eq!(json["usage"]["inputTokens"], 10);
         assert_eq!(json["usage"]["cachedInputTokens"], 0);
     }
+
+    #[test]
+    fn request_round_trips_through_json() {
+        let original = AdapterRequest {
+            assistant: AssistantId::Codex,
+            prompt: "hello world".to_string(),
+            working_directory: Some("/tmp/project".to_string()),
+            model: Some("gpt-5.5".to_string()),
+            reasoning_effort: Some("high".to_string()),
+            permission_mode: PermissionMode::ReadOnly,
+            timeout_ms: 90_000,
+            resume_session_id: Some("sid-42".to_string()),
+            run_id: Some("run-99".to_string()),
+        };
+        let json = serde_json::to_value(&original).unwrap();
+        let round_tripped: AdapterRequest = serde_json::from_value(json).unwrap();
+        assert_eq!(round_tripped.assistant, original.assistant);
+        assert_eq!(round_tripped.prompt, original.prompt);
+        assert_eq!(round_tripped.working_directory, original.working_directory);
+        assert_eq!(round_tripped.model, original.model);
+        assert_eq!(round_tripped.reasoning_effort, original.reasoning_effort);
+        assert_eq!(round_tripped.timeout_ms, original.timeout_ms);
+        assert_eq!(round_tripped.resume_session_id, original.resume_session_id);
+        assert_eq!(round_tripped.run_id, original.run_id);
+    }
+
+    #[test]
+    fn result_round_trips_through_json() {
+        let original = AdapterResult {
+            assistant_text: "**response**".to_string(),
+            raw_json: r#"{"key":"value"}"#.to_string(),
+            native_session_id: Some("resume-me".to_string()),
+            usage: Some(Usage {
+                input_tokens: 50,
+                cached_input_tokens: 10,
+                output_tokens: 120,
+                reasoning_output_tokens: 0,
+            }),
+        };
+        let json = serde_json::to_value(&original).unwrap();
+        let round_tripped: AdapterResult = serde_json::from_value(json).unwrap();
+        assert_eq!(round_tripped.assistant_text, original.assistant_text);
+        assert_eq!(round_tripped.raw_json, original.raw_json);
+        assert_eq!(round_tripped.native_session_id, original.native_session_id);
+        let u = round_tripped.usage.unwrap();
+        assert_eq!(u.input_tokens, 50);
+        assert_eq!(u.cached_input_tokens, 10);
+        assert_eq!(u.output_tokens, 120);
+        assert_eq!(u.reasoning_output_tokens, 0);
+    }
 }

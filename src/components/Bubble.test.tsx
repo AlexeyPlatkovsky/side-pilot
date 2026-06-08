@@ -27,7 +27,7 @@ function pendingChatApi(): ChatApi {
   };
 }
 
-describe("Bubble", () => {
+describe("[smoke] Bubble", () => {
   it("renders the compact bubble by default, with no panel", () => {
     render(<Bubble resizeWindow={vi.fn()} />);
     expect(screen.getByRole("button", { name: /open side-pilot/i })).toBeInTheDocument();

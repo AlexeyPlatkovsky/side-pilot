@@ -133,7 +133,7 @@ async function send(user: ReturnType<typeof userEvent.setup>, prompt: string) {
   await user.click(screen.getByRole("button", { name: /^send/i }));
 }
 
-describe("ChatPanel", () => {
+describe("[smoke] ChatPanel", () => {
   it("reloads persisted history on mount", async () => {
     const api = makeApi({
       history: [

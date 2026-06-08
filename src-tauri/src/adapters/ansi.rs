@@ -71,6 +71,39 @@ pub(crate) fn strip_ansi(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn strip_ansi_never_panics_on_any_input(s in "\\PC*") {
+            let _ = strip_ansi(&s);
+        }
+
+        #[test]
+        fn strip_ansi_output_is_no_longer_than_input(s in "\\PC*") {
+            let out = strip_ansi(&s);
+            assert!(out.len() <= s.len());
+        }
+
+        #[test]
+        fn strip_ansi_is_idempotent(s in "\\PC*") {
+            let first = strip_ansi(&s);
+            let second = strip_ansi(&first);
+            assert_eq!(second, first);
+        }
+
+        #[test]
+        fn strip_ansi_preserves_plain_text(s in "[A-Za-z0-9 ]{0,100}") {
+            let out = strip_ansi(&s);
+            assert_eq!(out, s);
+        }
+
+        #[test]
+        fn strip_ansi_output_contains_no_escape_character(s in "\\PC*") {
+            let out = strip_ansi(&s);
+            assert!(!out.contains(ESC));
+        }
+    }
 
     #[test]
     fn strip_ansi_removes_csi_color_sequences() {

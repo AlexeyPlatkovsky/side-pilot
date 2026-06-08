@@ -11,7 +11,7 @@ import {
   routesEqual,
 } from "./providers";
 
-describe("providers", () => {
+describe("[smoke] providers", () => {
   it("defaults to a single GPT (Codex) route", () => {
     expect(DEFAULT_ROUTE).toEqual({ kind: "single", provider: "codex" });
   });

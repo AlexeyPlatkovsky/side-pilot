@@ -1,6 +1,7 @@
 import js from "@eslint/js";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
+import testingLibrary from "eslint-plugin-testing-library";
 import tseslint from "typescript-eslint";
 
 const browserGlobals = {
@@ -40,6 +41,10 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  ...tseslint.configs.stylisticTypeChecked.map((c) => ({
+    ...c,
+    files: ["**/*.{ts,tsx}"],
+  })),
   {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
@@ -66,6 +71,28 @@ export default tseslint.config(
           varsIgnorePattern: "^_",
         },
       ],
+      "@typescript-eslint/no-floating-promises": "warn",
+      "@typescript-eslint/await-thenable": "error",
+      "@typescript-eslint/no-misused-promises": "warn",
+      "@typescript-eslint/no-unnecessary-type-assertion": "warn",
+      "@typescript-eslint/no-empty-function": "off",
+      "@typescript-eslint/prefer-nullish-coalescing": "off",
+      "@typescript-eslint/non-nullable-type-assertion-style": "off",
+      "@typescript-eslint/prefer-regexp-exec": "warn",
+      "@typescript-eslint/prefer-optional-chain": "warn",
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/consistent-type-definitions": "warn",
+    },
+  },
+  {
+    files: ["**/*.{test,spec,a11y,proptest}.{ts,tsx}"],
+    ...testingLibrary.configs["flat/react"],
+    rules: {
+      ...testingLibrary.configs["flat/react"].rules,
+      "testing-library/prefer-screen-queries": "warn",
+      "testing-library/no-node-access": "warn",
+      "testing-library/no-container": "warn",
+      "testing-library/prefer-presence-queries": "warn",
     },
   },
 );
