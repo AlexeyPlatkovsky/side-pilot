@@ -23,13 +23,20 @@ pub fn run() {
     tauri::Builder::default()
         .manage(commands::AppState::default())
         .setup(|app| {
-            // The chat history DB lives in the per-user app data directory so it
-            // survives restarts and stays out of the (read-only) app bundle.
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let store = Store::open(data_dir.join("side-pilot.db"))?;
             let preferences = PreferencesStore::open(data_dir.join("preferences.json"))
                 .map_err(std::io::Error::other)?;
+
+            let general = preferences.general_snapshot();
+            if let Some(window) = app.get_webview_window("main") {
+                window.set_always_on_top(general.always_on_top)?;
+                if let Some(pos) = general.startup_position() {
+                    window.set_position(tauri::PhysicalPosition::new(pos.x, pos.y))?;
+                }
+            }
+
             app.manage(store);
             app.manage(preferences);
             Ok(())
@@ -41,6 +48,8 @@ pub fn run() {
             commands::retry_route,
             commands::get_provider_preferences,
             commands::update_provider_preferences,
+            commands::get_general_preferences,
+            commands::update_general_preferences,
             commands::cancel_adapter_run,
             commands::create_session,
             commands::append_message,

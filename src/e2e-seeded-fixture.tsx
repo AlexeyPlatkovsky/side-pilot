@@ -86,6 +86,15 @@ const api: ChatApi = {
       gemini: { model: "gemini-3-flash-preview", reasoning: "none" },
     }),
   updateProviderPreferences: (value) => Promise.resolve(value),
+  getGeneralPreferences: () =>
+    Promise.resolve({
+      alwaysOnTop: true,
+      positionMode: "trackLast",
+      pinnedPosition: null,
+      lastKnownPosition: null,
+      language: "en",
+    }),
+  updateGeneralPreferences: (value) => Promise.resolve(value),
   listSessions: () => Promise.resolve(sessions.map((s) => ({ ...s }))),
   createSession: (title = null) => {
     const created: PersistedSession = {

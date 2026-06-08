@@ -28,6 +28,7 @@ import type { RouteRequest as RustRouteRequest } from "./generated/RouteRequest"
 import type { RouteRunResult as RustRouteRunResult } from "./generated/RouteRunResult";
 import type { ProviderRunOutcome as RustProviderRunOutcome } from "./generated/ProviderRunOutcome";
 import type { ProviderPreferences } from "./generated/ProviderPreferences";
+import type { GeneralPreferences } from "./generated/GeneralPreferences";
 import type { AssistantId } from "./generated/AssistantId";
 
 /**
@@ -94,6 +95,8 @@ export interface ChatApi {
   retryRoute(request: RetryRouteRequest): Promise<ProviderRunOutcome>;
   getProviderPreferences(): Promise<ProviderPreferences>;
   updateProviderPreferences(value: ProviderPreferences): Promise<ProviderPreferences>;
+  getGeneralPreferences(): Promise<GeneralPreferences>;
+  updateGeneralPreferences(value: GeneralPreferences): Promise<GeneralPreferences>;
   createSession(title?: string | null): Promise<PersistedSession>;
   appendMessage(message: NewMessage): Promise<PersistedMessage>;
   readHistory(sessionId: string): Promise<PersistedMessage[]>;
@@ -120,6 +123,8 @@ export const tauriChatApi: ChatApi = {
   retryRoute: (request) => invoke("retry_route", { ...request }),
   getProviderPreferences: () => invoke("get_provider_preferences"),
   updateProviderPreferences: (value) => invoke("update_provider_preferences", { value }),
+  getGeneralPreferences: () => invoke("get_general_preferences"),
+  updateGeneralPreferences: (value) => invoke("update_general_preferences", { value }),
   createSession: (title = null) => invoke("create_session", { title }),
   appendMessage: (message) => invoke("append_message", { message }),
   readHistory: (sessionId) => invoke("read_history", { sessionId }),
@@ -143,6 +148,8 @@ export const inertChatApi: ChatApi = {
   retryRoute: () => Promise.reject(new Error("chat backend unavailable")),
   getProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   updateProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
+  getGeneralPreferences: () => Promise.reject(new Error("chat backend unavailable")),
+  updateGeneralPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   createSession: () =>
     Promise.resolve({
       id: "inert-session",
