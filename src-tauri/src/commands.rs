@@ -13,7 +13,7 @@ use tauri::State;
 use tokio_util::sync::CancellationToken;
 
 use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult, AssistantId};
-use crate::preferences::{PreferencesError, PreferencesStore, ProviderPreferences};
+use crate::preferences::{GeneralPreferences, PreferencesError, PreferencesStore, ProviderPreferences};
 use crate::routing::{
     execute_route_with_preferences, retry_result, ProviderRunOutcome, RetryRequest, RouteRequest,
     RouteRunResult,
@@ -220,6 +220,21 @@ pub fn update_provider_preferences(
     value: ProviderPreferences,
 ) -> Result<ProviderPreferences, PreferencesError> {
     preferences.update(value)
+}
+
+/// Return the in-memory general preference snapshot.
+#[tauri::command]
+pub fn get_general_preferences(preferences: State<'_, PreferencesStore>) -> GeneralPreferences {
+    preferences.general_snapshot()
+}
+
+/// Validate, atomically persist, and immediately activate general preferences.
+#[tauri::command]
+pub fn update_general_preferences(
+    preferences: State<'_, PreferencesStore>,
+    value: GeneralPreferences,
+) -> Result<GeneralPreferences, PreferencesError> {
+    preferences.update_general(value)
 }
 
 /// Cancel an in-flight adapter run. Returns whether an active run was found.

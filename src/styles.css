@@ -367,6 +367,121 @@ body {
   line-height: 1.4;
 }
 
+.general-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.settings-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.settings-group legend {
+  padding: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
+}
+
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  margin-left: var(--space-3);
+}
+
+.settings-radio input[type="radio"] {
+  cursor: pointer;
+}
+
+.settings-btn {
+  margin-left: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.settings-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.settings-field select {
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.lang-select {
+  position: relative;
+}
+
+.lang-select__current {
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  min-width: 100px;
+  text-align: left;
+}
+
+.lang-select__menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  min-width: 100%;
+  z-index: 10;
+  overflow: hidden;
+}
+
+.lang-select__option {
+  display: block;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.lang-select__option:hover {
+  background: var(--tint-honey);
+}
+
+.lang-select__option--active {
+  font-weight: var(--font-weight-bold);
+}
+
+.lang-select__option + .lang-select__option {
+  border-top: 1px solid var(--color-border);
+}
+
 .panel__body {
   flex: 1;
   display: flex;

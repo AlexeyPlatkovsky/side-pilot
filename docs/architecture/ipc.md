@@ -17,6 +17,8 @@ The React front-end never calls Tauri `invoke` directly outside the API bridge. 
 | `retry_route` | `commands::retry_route` | Delete an existing error row, dispatch a fresh adapter run for the same provider, and persist the outcome |
 | `get_provider_preferences` | `commands::get_provider_preferences` | Read the global in-memory provider model/reasoning snapshot |
 | `update_provider_preferences` | `commands::update_provider_preferences` | Validate, atomically persist, and immediately activate global provider preferences |
+| `get_general_preferences` | `commands::get_general_preferences` | Read the global in-memory general preferences snapshot (SP-037) |
+| `update_general_preferences` | `commands::update_general_preferences` | Validate, atomically persist, and immediately activate general preferences (SP-037) |
 | `cancel_adapter_run` | `commands::cancel_adapter_run` | Cancel in-flight subprocess |
 | `create_session` | `commands::create_session` | New local session |
 | `append_message` | `commands::append_message` | Persist a message |

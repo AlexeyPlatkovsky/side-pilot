@@ -57,10 +57,14 @@ all targeted provider preferences before dispatch. Codex and Claude receive
 the configured model and any non-empty reasoning value except exact `none`;
 Gemini receives its configured model and never receives reasoning.
 
-`get_provider_preferences` and `update_provider_preferences` are the future
-Settings seam. Updates validate models, atomically replace the app-data file,
-and refresh the in-memory snapshot immediately. Manual file edits require an
-app restart.
+`get_provider_preferences` and `update_provider_preferences` are the provider
+settings seam; `get_general_preferences` and `update_general_preferences` are the
+general settings seam (SP-037). General preferences store always-on-top, window
+position mode (`pin` / `trackLast`), pinned position, last-known position, and
+language (`en` / `ru`). Both provider and general preferences share the same
+atomic file-backed store and are persisted together. Updates validate models,
+atomically replace the app-data file, and refresh the in-memory snapshot
+immediately. Manual file edits require an app restart.
 
 The route path resumes each provider's own native CLI session across turns
 (SP-011). Before dispatch it reads the `native_session_id` previously recorded
@@ -114,9 +118,12 @@ Binary resolution is cached per assistant. On Unix/macOS it uses `/bin/zsh -lc '
 
 `run()` builds the Tauri app, creates the per-user app data directory, opens
 `side-pilot.db` and `preferences.json` there, manages `Store`,
-`PreferencesStore`, and `AppState`, and registers the IPC commands. The Tauri
-window itself is configured in `src-tauri/tauri.conf.json` as a 64x64 frameless,
-transparent, always-on-top, resizable window with no taskbar entry.
+`PreferencesStore`, and `AppState`, and registers the IPC commands. At boot,
+it reads general preferences and applies `always_on_top` and window position
+(from `pinned_position` or `last_known_position`, depending on mode) before
+the window becomes visible (SP-037). The Tauri window itself is configured in
+`src-tauri/tauri.conf.json` as a 64x64 frameless, transparent,
+always-on-top, resizable window with no taskbar entry.
 
 ## Links Safety (`src-tauri/src/links.rs`)
 

@@ -1,4 +1,6 @@
 import { useState, useCallback, type KeyboardEvent } from "react";
+import type { ChatApi } from "../chat/api";
+import { GeneralSettings } from "./GeneralSettings";
 
 export type SettingsSection =
   | "api-keys"
@@ -24,6 +26,10 @@ const SECTIONS: SectionDef[] = [
   { id: "about", label: "About" },
 ];
 
+export interface SettingsProps {
+  chatApi: ChatApi;
+}
+
 /**
  * Settings view shell with a left section rail and an active-content pane
  * (SP-029, SP-031). Each pane is an empty placeholder for this task; later
@@ -31,7 +37,7 @@ const SECTIONS: SectionDef[] = [
  * the ARIA Tabs pattern: Arrow Up / Down move between tabs with wrapping,
  * Home / End jump to first / last.
  */
-export function Settings() {
+export function Settings({ chatApi }: SettingsProps) {
   const [active, setActive] = useState<SettingsSection>("api-keys");
 
   const select = useCallback((section: SettingsSection) => {
@@ -111,9 +117,13 @@ export function Settings() {
               className="settings-pane__content"
             >
               <h2 className="settings-pane__title">{section.label}</h2>
-              <p className="settings-pane__placeholder">
-                {section.label} settings arrive in a future update.
-              </p>
+              {section.id === "general" ? (
+                <GeneralSettings api={chatApi} />
+              ) : (
+                <p className="settings-pane__placeholder">
+                  {section.label} settings arrive in a future update.
+                </p>
+              )}
             </div>
           );
         })}

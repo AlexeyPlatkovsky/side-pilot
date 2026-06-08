@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { bubbleReducer, type BubbleState } from "../state/bubbleState";
 import { applyWindowSize } from "../state/windowResize";
 import { useClickVsDrag } from "../state/drag";
@@ -45,6 +46,8 @@ export function Bubble({
   const [state, dispatch] = useReducer(bubbleReducer, initialState);
   const [routesBySession, setRoutesBySession] = useState<Record<string, ActiveRoute>>({});
   const chat = useChat(chatApi);
+  const moveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedPos = useRef<{ x: number; y: number } | null>(null);
 
   // The collapsed dot and the panel mark are both window-drag handles and click
   // targets; this shared hook tells a click apart from a drag so dragging the
@@ -94,6 +97,48 @@ export function Bubble({
       leadControlRef.current?.focus();
     }
   }, [state]);
+
+  useEffect(() => {
+    const api = chatApi;
+    if (api === inertChatApi) return;
+    let cancelled = false;
+    let unlistenFn: (() => void) | null = null;
+
+    const savePosition = async () => {
+      try {
+        const pos = lastSavedPos.current;
+        if (!pos) return;
+        const prefs = await api.getGeneralPreferences();
+        const updated = { ...prefs, lastKnownPosition: pos };
+        await api.updateGeneralPreferences(updated);
+      } catch {
+        // best-effort position tracking
+      }
+    };
+
+    const scheduleSave = (pos: { x: number; y: number }) => {
+      lastSavedPos.current = pos;
+      if (moveTimer.current) clearTimeout(moveTimer.current);
+      moveTimer.current = setTimeout(() => {
+        if (!cancelled) savePosition();
+      }, 1000);
+    };
+
+    getCurrentWindow()
+      .onMoved((event) => {
+        if (!cancelled) scheduleSave({ x: event.payload.x, y: event.payload.y });
+      })
+      .then((fn) => {
+        if (cancelled) fn();
+        else unlistenFn = fn;
+      });
+
+    return () => {
+      cancelled = true;
+      if (moveTimer.current) clearTimeout(moveTimer.current);
+      unlistenFn?.();
+    };
+  }, [chatApi]);
 
   if (state === "collapsed") {
     return (
@@ -184,7 +229,7 @@ export function Bubble({
           <div className="panel__body settings">
             {/* Section rail and panes (SP-031). Empty placeholder panes arrive with
                 later tasks filling each section. */}
-            <Settings />
+            <Settings chatApi={chatApi} />
           </div>
         ) : (
           <ChatPanel

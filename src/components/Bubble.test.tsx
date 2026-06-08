@@ -334,4 +334,51 @@ describe("Bubble", () => {
       "data-tauri-drag-region",
     );
   });
+
+  it("tracks window position on move and persists to lastKnownPosition", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const updateGeneralPrefs = vi
+      .fn()
+      .mockResolvedValue({
+        alwaysOnTop: true,
+        positionMode: "trackLast" as const,
+        pinnedPosition: null,
+        lastKnownPosition: null,
+        language: "en",
+      });
+
+    const api = pendingChatApi();
+    api.getGeneralPreferences = vi.fn().mockResolvedValue({
+      alwaysOnTop: true,
+      positionMode: "trackLast" as const,
+      pinnedPosition: null,
+      lastKnownPosition: null,
+      language: "en",
+    });
+    api.updateGeneralPreferences = updateGeneralPrefs;
+
+    render(<Bubble resizeWindow={vi.fn()} chatApi={api} />);
+
+    // The global mock stores the onMoved callback in a ref.
+    // Wait for the effect to register it.
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const mockWin = getCurrentWindow() as unknown as Record<string, unknown>;
+    const ref = mockWin.__onMovedCallback as {
+      current: null | ((e: unknown) => void);
+    };
+    await vi.waitFor(() => {
+      expect(ref.current).toBeTruthy();
+    });
+
+    ref.current!({ payload: { x: 150, y: 250 } });
+
+    vi.advanceTimersByTime(1100);
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
+
+    expect(updateGeneralPrefs).toHaveBeenCalledWith(
+      expect.objectContaining({ lastKnownPosition: { x: 150, y: 250 } }),
+    );
+  });
 });

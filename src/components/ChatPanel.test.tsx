@@ -108,6 +108,8 @@ function makeApi(
       ),
     getProviderPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
     updateProviderPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
+    getGeneralPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
+    updateGeneralPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
     renameSession: vi.fn((sessionId, title) =>
       Promise.resolve({ ...SESSION, id: sessionId, title }),
     ),

@@ -7,6 +7,8 @@ fn main() {
             "retry_route",
             "get_provider_preferences",
             "update_provider_preferences",
+            "get_general_preferences",
+            "update_general_preferences",
             "cancel_adapter_run",
             "create_session",
             "append_message",
