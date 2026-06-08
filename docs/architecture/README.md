@@ -82,7 +82,7 @@ side-pilot/
 │   ├── design-book.md            # Design system tokens
 │   └── code-review.md            # Code review log
 │
-├── .claude/                      # AI governance (skills, pipelines, agents, conventions)
+├── .ai/                      # AI governance (skills, pipelines, agents, conventions)
 ├── .manifesto/                   # Instruction framework
 ├── src-tauri/tauri.conf.json     # Tauri configuration
 ├── src-tauri/capabilities/       # Tauri v2 window + command permissions

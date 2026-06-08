@@ -76,7 +76,7 @@ Every such value flows in through the discovery and discussion steps.
 
 Inventory the project's AI capabilities before any discussion.
 
-1. Locate the AI-capability root. Check common locations (`.ai/`, `.claude/`,
+1. Locate the AI-capability root. Check common locations (`.ai/`, `.ai/`,
    `agents/`, `skills/`, `pipelines/`, an `AGENTS.md` or equivalent contract
    file). If the layout is unclear, ask the user.
 2. Enumerate every **skill**, **agent**, and **pipeline**. For each, record its

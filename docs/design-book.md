@@ -183,6 +183,6 @@ order (e.g. a single entry that imports partials in the section order above).
 
 1. Edit the token value in [`src/styles.css`](../src/styles.css) `:root`.
 2. Update the matching row in this document.
-3. Run the design workflow: see [`.claude/skills/design/SKILL.md`](../.claude/skills/design/SKILL.md)
-   and the [`design-system` pipeline](../.claude/pipelines/design-system.md).
+3. Run the design workflow: see [`.ai/skills/design/SKILL.md`](../.ai/skills/design/SKILL.md)
+   and the [`design-system` pipeline](../.ai/pipelines/design-system.md).
 4. Validate visually (the change is global) and route the `design-reviewer` agent.

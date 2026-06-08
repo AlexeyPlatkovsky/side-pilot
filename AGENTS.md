@@ -12,7 +12,7 @@ Cross-platform desktop (macOS + Windows) floating AI assistant. Routes user prom
 
 Primary design specification: `docs/idea.md`
 Implemented architecture reference: `docs/architecture/README.md`
-Project profile: `.claude/docs/project_specification.md`
+Project profile: `.ai/docs/project_specification.md`
 
 ---
 
@@ -25,7 +25,7 @@ Proceed directly. State the classification.
 
 **Non-trivial** — multi-step, or changes behavior, structure, commands, contracts, or domain facts:
 1. Stop.
-2. Load `.claude/manager/MANAGER.md`.
+2. Load `.ai/manager/MANAGER.md`.
 3. Do not implement until the manager emits its visible routing plan (`Manager: manager - output below`).
 
 When unsure, treat as non-trivial.
@@ -40,7 +40,7 @@ Requirements discovery, scoping, feature refinement, and re-scoping an existing 
 
 ## Beads Planning Gate
 
-For applicable non-trivial work, the manager routes through `.claude/skills/work-with-bead/SKILL.md` before implementation starts. The manager owns the exempt categories list.
+For applicable non-trivial work, the manager routes through `.ai/skills/work-with-bead/SKILL.md` before implementation starts. The manager owns the exempt categories list.
 
 When the Beads gate applies:
 - check whether a relevant Beads item already exists
@@ -66,7 +66,35 @@ These apply to all non-trivial work and may not be skipped:
 
 ## Agent Execution Mode
 
-Dedicated agents are first-class executors. They MUST be spawned as real subagents when a gate requires them. Inline substitution is prohibited. See `.claude/manager/MANAGER.md` for enforcement.
+Dedicated agents are first-class executors. They MUST be spawned via `.ai/bin/spawn-agent.py` when a gate requires them (see §Agent Spawning Convention). Inline substitution is prohibited. The spawner reads the agent's `cli`/`model`/`effort` frontmatter and runs the appropriate CLI with the correct model, effort, and bypassed permissions.
+
+---
+
+## Agent Spawning Convention
+
+Every agent file in `.ai/agents/` declares three metadata fields in its frontmatter:
+
+- **`cli`** — which CLI to use: `claude`, `codex`, or `opencode`
+- **`model`** — CLI-native model identifier (e.g. `sonnet`, `gpt-5.5`, `opencode/deepseek-v4-flash`)
+- **`effort`** — CLI-native reasoning effort: `low`, `medium`, `high`, `xhigh`, `max`
+
+Agents are spawned via `.ai/bin/spawn-agent.py`, which reads the frontmatter, builds the appropriate CLI command, runs it non-interactively with bypassed permissions, and captures the result to an output file.
+
+**Spawn contract:**
+
+```
+spawn-agent.py <name> [--input <path>] [--output <path>] [--timeout <sec>]
+```
+
+Exit codes: `0` success, `1` agent failure, `2` timeout, `3` infra error.
+
+**Output:** The agent writes its structured result (markdown) to stdout, which the spawner redirects to the output file. The caller reads the output file and parses the `Agent: <name> - output below` artifact label to determine the verdict.
+
+**Input:** Task context is passed via stdin pipe (claude/codex) or `--file` flag (opencode).
+
+**Polling:** The spawner checks process liveness every `$POLL_INTERVAL` seconds (default 10) and terminates after `$DEFAULT_TIMEOUT` seconds (default 600).
+
+**Run artifacts:** The `.ai/run/` directory is for ephemeral I/O files and is gitignored.
 
 ---
 
@@ -98,5 +126,5 @@ Compact artifacts must preserve the label, status/verdict, and required table sh
 
 ## References
 
-- Full capability registry: `.claude/docs/capabilities.md`
-- Authoritative sources: `.claude/docs/project_specification.md` §Authoritative Local Sources
+- Full capability registry: `.ai/docs/capabilities.md`
+- Authoritative sources: `.ai/docs/project_specification.md` §Authoritative Local Sources

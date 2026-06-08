@@ -21,5 +21,8 @@ e2e/.artifacts/
 src-tauri/target/
 src-tauri/gen/
 
+# Agent spawn runtime artifacts
+.claude/run/
+
 # macOS
 .DS_Store

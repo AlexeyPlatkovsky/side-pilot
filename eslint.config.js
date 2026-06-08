@@ -27,7 +27,7 @@ export default tseslint.config(
   {
     ignores: [
       ".beads/**",
-      ".claude/**",
+      ".ai/**",
       ".manifesto/**",
       "dist/**",
       "node_modules/**",
