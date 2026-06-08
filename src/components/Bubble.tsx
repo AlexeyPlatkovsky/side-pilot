@@ -240,7 +240,7 @@ export function Bubble({
           <div className="panel__body settings">
             {/* Section rail and panes (SP-031). Empty placeholder panes arrive with
                 later tasks filling each section. */}
-            <Settings chatApi={chatApi} locale={locale} />
+            <Settings chatApi={chatApi} locale={locale} onLocaleChange={setLocale} />
           </div>
         ) : (
           <ChatPanel

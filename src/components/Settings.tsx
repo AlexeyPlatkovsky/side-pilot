@@ -31,6 +31,7 @@ const SECTIONS: SectionDef[] = [
 export interface SettingsProps {
   chatApi: ChatApi;
   locale?: Locale;
+  onLocaleChange?: (locale: Locale) => void;
 }
 
 /**
@@ -40,7 +41,7 @@ export interface SettingsProps {
  * the ARIA Tabs pattern: Arrow Up / Down move between tabs with wrapping,
  * Home / End jump to first / last.
  */
-export function Settings({ chatApi, locale = "en" }: SettingsProps) {
+export function Settings({ chatApi, locale = "en", onLocaleChange }: SettingsProps) {
   const { t } = useI18n(locale);
   const [active, setActive] = useState<SettingsSection>("api-keys");
 
@@ -122,7 +123,7 @@ export function Settings({ chatApi, locale = "en" }: SettingsProps) {
             >
               <h2 className="settings-pane__title">{t(section.labelKey)}</h2>
               {section.id === "general" ? (
-                <GeneralSettings api={chatApi} locale={locale} />
+                <GeneralSettings api={chatApi} locale={locale} onLocaleChange={onLocaleChange} />
               ) : (
                 <p className="settings-pane__placeholder">
                   {t("settings_futureUpdate", { section: t(section.labelKey) })}

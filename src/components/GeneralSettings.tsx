@@ -11,6 +11,8 @@ type LanguageOption = { code: Locale; name: string };
 export interface GeneralSettingsProps {
   api: ChatApi;
   locale?: Locale;
+  /** Called when the user picks a different language. */
+  onLocaleChange?: (locale: Locale) => void;
 }
 
 type LoadState =
@@ -18,7 +20,7 @@ type LoadState =
   | { kind: "loaded"; prefs: GeneralPreferences }
   | { kind: "error"; message: string };
 
-export function GeneralSettings({ api, locale: propLocale }: GeneralSettingsProps) {
+export function GeneralSettings({ api, locale: propLocale, onLocaleChange }: GeneralSettingsProps) {
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [langOpen, setLangOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
@@ -103,8 +105,9 @@ export function GeneralSettings({ api, locale: propLocale }: GeneralSettingsProp
       const next = { ...loadState.prefs, language: lang };
       setLoadState({ kind: "loaded", prefs: next });
       await persist(next);
+      onLocaleChange?.(lang);
     },
-    [loadState, persist],
+    [loadState, persist, onLocaleChange],
   );
 
   if (loadState.kind === "loading") {

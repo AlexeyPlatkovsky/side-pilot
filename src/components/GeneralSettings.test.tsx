@@ -111,6 +111,22 @@ describe("GeneralSettings", () => {
     });
   });
 
+  it("calls onLocaleChange when the language is changed", async () => {
+    const api = buildApi();
+    const onLocaleChange = vi.fn();
+    const user = userEvent.setup();
+    render(<GeneralSettings api={api} onLocaleChange={onLocaleChange} />);
+
+    const langButton = await screen.findByText("English");
+    await user.click(langButton);
+
+    await user.click(screen.getByRole("option", { name: "Russian" }));
+
+    await waitFor(() => {
+      expect(onLocaleChange).toHaveBeenCalledWith("ru");
+    });
+  });
+
   it("shows position mode selector with trackLast as default", async () => {
     const api = buildApi();
     render(<GeneralSettings api={api} />);
