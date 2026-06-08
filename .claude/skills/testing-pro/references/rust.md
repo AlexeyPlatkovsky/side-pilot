@@ -33,8 +33,7 @@ Stack: **cargo-nextest** (preferred runner; process-per-test isolation, faster),
 
 ## Property-based tests (proptest)
 
-For parsing and stripping functions (ANSI escape removal, JSON output parsing,
-error message reduction), use `proptest` to verify invariants:
+For parsing and stripping functions, use `proptest` to verify invariants. See `.claude/conventions/testing-taxonomy.md` §Additional Quality Practices for requirements.
 
 ```rust
 use proptest::prelude::*;
@@ -53,13 +52,11 @@ proptest! {
 }
 ```
 
-Add `proptest = "1"` to `[dev-dependencies]`. Property tests live alongside
-existing `#[cfg(test)]` modules, inside a `proptest! { }` block.
+Add `proptest = "1"` to `[dev-dependencies]`. Property tests live inside `proptest! { }` blocks alongside existing `#[cfg(test)]` modules.
 
 ## Contract tests (round-trip serde)
 
-Every IPC struct (`#[derive(Serialize, Deserialize, TS)]`) must have a round-trip
-test: serialize → deserialize → assert equality.
+Every IPC struct must have a round-trip test: serialize → deserialize → assert equality.
 
 ```rust
 #[test]
@@ -75,9 +72,7 @@ Contract tests live in the same `#[cfg(test)]` module as the struct definition.
 
 ## Integration tests
 
-For pipelines that compose store + adapter registry + routing, write integration
-tests in `src-tauri/tests/`. These use an in-memory SQLite store and stub adapters
-(no real CLI spawns):
+For pipelines that compose store + adapter registry + routing, write integration tests in `src-tauri/tests/` using an in-memory SQLite store and stub adapters (no real CLI spawns):
 
 ```rust
 use side_pilot_lib::storage::Store;

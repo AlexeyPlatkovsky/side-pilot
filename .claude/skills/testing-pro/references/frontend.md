@@ -32,9 +32,7 @@ Stack: **Vitest** (runner, Vite-native, fast), **React Testing Library** (RTL), 
 
 ## Property-based tests (fast-check)
 
-For parsing, stripping, and transformation functions (error message reduction,
-CLI output summarization, ANSI cleanup), use `fast-check` to verify invariants
-across random inputs:
+For parsing, stripping, and transformation functions, use `fast-check` to verify invariants across random inputs. See `.claude/conventions/testing-taxonomy.md` §Additional Quality Practices for requirements.
 
 ```ts
 import fc from "fast-check";
@@ -46,14 +44,11 @@ it("is idempotent", () => {
 });
 ```
 
-Key invariants to verify: idempotence, no throw on any input, output is never
-longer than input (for reduction functions), no secrets/URLs leaked in output.
-
-Property tests live in `*.proptest.ts` files alongside regular tests.
+Key invariants to verify: idempotence, no throw on any input, output is never longer than input (for reduction functions), no secrets/URLs leaked in output. Property tests live in `*.proptest.ts` files alongside regular tests.
 
 ## Accessibility tests (jest-axe)
 
-Every component test file should include at least one a11y audit using `jest-axe`:
+Run an axe audit after rendering a component with live data. Use the `src/test/a11y.ts` helper.
 
 ```ts
 import { checkA11y } from "../test/a11y";
@@ -64,29 +59,18 @@ it("has no a11y violations", async () => {
 });
 ```
 
-Use `src/test/a11y.ts` helper which wraps `axe()` and adds `toHaveNoViolations()`.
-A11y tests live in `*.a11y.test.tsx` files.
-
-E2E a11y uses `@axe-core/playwright`:
-
-```ts
-import AxeBuilder from "@axe-core/playwright";
-const results = await new AxeBuilder({ page }).include(".panel").analyze();
-expect(results.violations).toEqual([]);
-```
+A11y tests live in `*.a11y.test.tsx` files. E2E a11y uses `@axe-core/playwright`.
 
 ## Contract tests (IPC shapes)
 
-Verify generated TypeScript types match the Rust source of truth and that round-trip
-serialization works:
+Verify generated TypeScript types match the Rust source and are importable. The CI gate `cargo test export_bindings` + `git diff --exit-code src/chat/generated` ensures generated files are never stale.
 
 ```ts
 it("all generated contract modules are importable", async () => {
   for (const mod of ["AdapterRequest", "Message", "Route" /* ...more modules */]) {
-    await expect(import(`./generated/${mod}`)).resolves.toBeDefined();
+    await expect(import(`./generated/${mod as string}`)).resolves.toBeDefined();
   }
 });
 ```
 
-Contract tests live in `src/chat/contract.test.ts`. The CI gate `cargo test export_bindings`
-+ `git diff --exit-code src/chat/generated` ensures the generated files are never stale.
+Contract tests live in `src/chat/contract.test.ts`.
