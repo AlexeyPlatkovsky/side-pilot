@@ -40,7 +40,15 @@ Scope for this step (Rust core): implement the adapter type (e.g. `CodexAdapter`
 
 Required output: `Skill: implement-tauri-feature - output below`
 
-Do not advance to Step 3 until this artifact is present and Build Status (cargo) is clean.
+**Post-implementation validation** — before advancing to Step 3, run local CI-equivalent checks:
+
+Skill: `.claude/skills/validate/SKILL.md`
+Required output: `Skill: validate - output below`
+
+Select checks matching the touched layers (Rust-only for adapter work):
+`checks="clippy nextest cargobuild"`
+
+If validation fails, fix and re-run. Do not advance until `Skill: validate - output below` reports all checks PASS.
 
 ---
 

@@ -50,7 +50,16 @@ Consult `react-tauri-expert` reference topics as needed; follow TDD order (Red �
 For UI/interaction surfaces, state the **interaction contract** before writing component code and treat it as acceptance criteria — drag/click-vs-drag, keyboard (Enter/Shift+Enter/Esc/focus), sizing (default rows, max, scroll vs. pin, reflow on resize), empty/loading/error states, known WebKit quirks (see `AGENTS.md` → Quality Gates and `.claude/conventions/react-tauri/tauri-windowing.md`). The contract must name the **default/initial state the user reaches the feature from** and state success as a **user-visible outcome, not a mechanism** (per `AGENTS.md` → Quality Gates, "Interaction contract first"); write the acceptance test to assert that outcome **from the default state**, so a test set up in an already-open/seeded state can't pass while the feature is invisible in normal use.
 For a **novel UI/interaction pattern** (no existing precedent in this app), check prior art before inventing one — a quick web/precedent search for the established pattern (e.g. where unread/in-progress indicators live relative to a collapsed surface) is cheaper than discovering the convention in review.
 Before advancing, run the **change-hygiene self-check** — all four audits in `.claude/conventions/react-tauri/change-hygiene.md` (state-lifecycle completeness, refactor-invariant re-check, adversarial-input coverage, and the cumulative integration re-audit). Advisory here; enforced in Step 4 by `code-reviewer`.
-Do not advance to Step 3 until this artifact is present and Build Status (tsc + cargo) is clean.
+
+**Post-implementation validation** — before advancing to Step 3, run local CI-equivalent checks on the current tree:
+
+Skill: `.claude/skills/validate/SKILL.md`
+Required output: `Skill: validate - output below`
+
+Select checks matching the touched layers. For a typical feature touching both front-end and Rust:
+`checks="lint format tsc vitest coverage clippy nextest cargobuild"`
+
+If validation fails, fix and re-run. Do not advance to Step 3 until `Skill: validate - output below` reports all checks PASS.
 
 ---
 

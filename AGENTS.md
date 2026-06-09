@@ -61,7 +61,7 @@ These apply to all non-trivial work at the level set by the assigned Quality Tie
 - **Interaction contract must be established** before component code is written.
 - **Runtime UI validation required** for any UI or interaction change. JSDOM-based testing alone does not satisfy this gate.
 - **Documentation maintenance** after any change that affects behavior, interfaces, commands, architecture, or domain facts.
-- **Local validation** before a feature closes: touched layers must build and tests must pass.
+- **Local validation** before a feature closes: run the `validate` skill with checks matching the touched layers. Touched layers must build and all checks must pass.
 - **test-runner agent** for non-trivial routed validation. Direct command execution is allowed only for trivial requests.
 - **design-reviewer agent** for non-trivial UI or icon work.
 
@@ -115,6 +115,7 @@ When creating or materially changing any instruction artifact:
 
 For non-trivial routed work, the final response must include:
 
+- `Skill: validate - output below` when validation was required
 - `Skill: task-complete - output below`
 - `Agent: test-runner - output below` when validation was required
 - `Agent: instruction-evaluator - output below` and `Agent: artifact-acceptance-tester - output below` when instruction artifacts changed

@@ -41,9 +41,9 @@ Do not use when:
 4. **Implement Rust side (if any)** — Add commands as thin wrappers over testable functions; add `tauri-specta` types; add the required permission to `src-tauri/capabilities/`. Write only enough code to make the tests from Step 3 pass (Green).
 5. **Implement React side (if any)** — Build UI against generated IPC bindings; add accessibility; keep business logic in plain TS modules. Write only enough code to make the tests from Step 3 pass (Green).
 6. **Refactor** — Clean up without changing behavior. Tests must remain green throughout.
-7. **Build & test** — Verify the front-end builds (`npm run build` / `tsc --noEmit`) and the Rust core compiles (`cargo build`), and that all tests pass, before emitting the output artifact.
+ 7. **Build & test** — Ensure the project builds (`npm run build` / `tsc --noEmit` for front-end, `cargo build` for Rust) and that all tests pass before emitting the output artifact. The pipeline will run `Skill: validate` separately after this step.
 
-## Quality Requirements (non-negotiable)
+ ## Quality Requirements (non-negotiable)
 
 - **TDD is required**: tests must be written and confirmed failing (Red) before any production code is written. Implementing first and adding tests after is a violation of this gate.
 - Pure-UI/visual changes may be tested manually; explicitly state this in the output artifact.

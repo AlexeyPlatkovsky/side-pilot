@@ -56,7 +56,15 @@ Scope: implement the minimal code change that makes the failing test(s) pass wit
 
 Required output: `Skill: implement-tauri-feature - output below`
 
-Do not advance to Step 3 until Build Status (tsc + cargo) is clean and the new test(s) pass. If the build is not clean, fix the build error and re-run before emitting the artifact.
+**Post-implementation validation** — before advancing to Step 3, run local CI-equivalent checks:
+
+Skill: `.claude/skills/validate/SKILL.md`
+Required output: `Skill: validate - output below`
+
+Select checks matching the touched layers:
+`checks="lint format tsc vitest coverage clippy nextest cargobuild"`
+
+If validation fails, fix and re-run. Do not advance until `Skill: validate - output below` reports all checks PASS.
 
 ---
 

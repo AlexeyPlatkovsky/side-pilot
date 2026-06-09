@@ -116,7 +116,7 @@ Apply AGENTS.md §Final Response Gate before sending the final response.
 
 | Risk | Requirement |
 |---|---|
-| Low / medium | Pipeline + local validation (`cargo nextest run` and/or `npm run test` and `npm run test:e2e`) |
+| Low / medium | Pipeline + local validation via `Skill: validate` with checks for the touched layers (see validate/SKILL.md "When to run" column) |
 | High | Pipeline + instruction-evaluator review or manual code review before closing |
 | System-level | Stop and require explicit user approval before any file changes |
 

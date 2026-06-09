@@ -38,7 +38,19 @@ records a justified exception.
 
 ---
 
-### Step 2 — Dedicated Validation
+### Step 2 — Post-Implementation Validation
+
+Skill: `.claude/skills/validate/SKILL.md`
+Required output: `Skill: validate - output below`
+
+Select checks for the touched layers (CSS token work):
+`checks="lint format tsc vitest build"`
+
+If validation fails, fix and re-run. Do not advance to Step 3 (Dedicated Validation) until `Skill: validate - output below` reports all checks PASS.
+
+---
+
+### Step 3 — Dedicated Validation
 
 Agent: `.claude/agents/test-runner.md`
 
@@ -50,7 +62,7 @@ Step 1.
 
 ---
 
-### Step 3 — Design Review
+### Step 4 — Design Review
 
 Agent: `.claude/agents/design-reviewer.md`
 
@@ -62,7 +74,7 @@ return to Step 1.
 
 ---
 
-### Step 4 — Code Review
+### Step 5 — Code Review
 
 Agent: `.claude/agents/code-reviewer.md`
 
@@ -72,7 +84,7 @@ If verdict is `Needs revision` or `Blocked`, return to Step 1.
 
 ---
 
-### Step 5 — Instruction Artifact Gates
+### Step 6 — Instruction Artifact Gates
 
 **Trigger:** the work also creates or materially changes any instruction artifact,
 routing rule, validation gate, or output contract (e.g. the `design` skill, this
@@ -88,7 +100,7 @@ Required outputs when triggered:
 
 ---
 
-### Step 6 — Documentation Maintenance
+### Step 7 — Documentation Maintenance
 
 Skill: `.claude/skills/documentation-maintenance/SKILL.md`
 
@@ -96,7 +108,7 @@ Required output: `Skill: documentation-maintenance - output below`
 
 ---
 
-### Step 7 — Task Complete
+### Step 8 — Task Complete
 
 Skill: `.claude/skills/task-complete/SKILL.md`
 
