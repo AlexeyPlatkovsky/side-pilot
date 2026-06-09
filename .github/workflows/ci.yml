@@ -144,6 +144,7 @@ jobs:
       - name: Audit Rust dependencies
         id: cargo-audit
         if: ${{ !cancelled() }}
+        working-directory: src-tauri
         run: cargo audit
 
       - name: Install cargo-mutants
