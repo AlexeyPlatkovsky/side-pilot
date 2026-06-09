@@ -123,7 +123,11 @@ export function Settings({ chatApi, locale = "en", onLocaleChange }: SettingsPro
             >
               <h2 className="settings-pane__title">{t(section.labelKey)}</h2>
               {section.id === "general" ? (
-                <GeneralSettings api={chatApi} locale={locale} onLocaleChange={onLocaleChange} />
+                <GeneralSettings
+                  api={chatApi}
+                  locale={locale}
+                  onLocaleChange={onLocaleChange}
+                />
               ) : (
                 <p className="settings-pane__placeholder">
                   {t("settings_futureUpdate", { section: t(section.labelKey) })}

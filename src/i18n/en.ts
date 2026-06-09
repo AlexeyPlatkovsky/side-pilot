@@ -23,7 +23,7 @@ export const en: Record<TranslationKey, string> = {
   chat_clearChat: "Clear chat",
   chat_clearChatLabel: "Clear chat",
   chat_clearConfirm:
-    'Clear this chat? All messages in \u201c{title}\u201d will be permanently deleted and this conversation can\u2019t be resumed.',
+    "Clear this chat? All messages in \u201c{title}\u201d will be permanently deleted and this conversation can\u2019t be resumed.",
   chat_composerLabel: "Prompt composer",
   chat_hideHistory: "Hide chat history",
   chat_newChat: "New chat",
@@ -45,19 +45,17 @@ export const en: Record<TranslationKey, string> = {
   error_notAuthenticated:
     "{name} is not authenticated. Sign in to its CLI and try again.",
   error_notFound: "That conversation could not be found in local history.",
-  error_outputParseFailure:
-    "{name} returned output that could not be read.",
+  error_outputParseFailure: "{name} returned output that could not be read.",
   error_requestFailed: "The request failed.",
   error_retryRequestFailed: "The retry request failed.",
   error_somethingWentWrong: "Something went wrong.",
   error_somethingWentWrongWithKind: "Something went wrong ({kind}).",
   error_storageUnavailable: "Local history is unavailable right now.",
   error_timedOut: "{name} timed out before responding.",
-  error_unsupportedSchemaVersion:
-    "Local history was created by a newer app version.",
+  error_unsupportedSchemaVersion: "Local history was created by a newer app version.",
   history_delete: "Delete",
   history_deleteConfirm:
-    'Delete this chat and all messages? \u201c{title}\u201d and its history can\u2019t be recovered.',
+    "Delete this chat and all messages? \u201c{title}\u201d and its history can\u2019t be recovered.",
   history_deleteLabel: "Delete chat",
   history_label: "Chat history",
   history_optionsFor: "Options for {title}",

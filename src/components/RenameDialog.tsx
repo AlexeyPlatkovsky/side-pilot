@@ -21,7 +21,12 @@ export interface RenameDialogProps {
  * per-row options menu and the active-chat toolbar's Edit control (SP-050/057),
  * so both entry points enforce the same title rule.
  */
-export function RenameDialog({ session, onCancel, onSave, locale = "en" }: RenameDialogProps) {
+export function RenameDialog({
+  session,
+  onCancel,
+  onSave,
+  locale = "en",
+}: RenameDialogProps) {
   const { t } = useI18n(locale);
   const [value, setValue] = useState(session.title ?? "");
   const inputRef = useRef<HTMLInputElement | null>(null);

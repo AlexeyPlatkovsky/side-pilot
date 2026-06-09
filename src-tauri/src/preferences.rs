@@ -153,18 +153,13 @@ pub struct Position {
     pub y: i32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../src/chat/generated/")]
 pub enum PositionMode {
     Pin,
+    #[default]
     TrackLast,
-}
-
-impl Default for PositionMode {
-    fn default() -> Self {
-        Self::TrackLast
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -721,8 +716,7 @@ mod tests {
 
     #[test]
     fn general_preferences_rejects_invalid_language() {
-        let mut general = GeneralPreferences::default();
-        general.language = "de".to_string();
+        let general = GeneralPreferences { language: "de".to_string(), ..Default::default() };
 
         let err = general.normalized().unwrap_err();
         assert!(matches!(err, PreferencesError::Validation { .. }));
@@ -731,8 +725,7 @@ mod tests {
     #[test]
     fn accepts_en_and_ru_languages() {
         for lang in ["en", "ru"] {
-            let mut general = GeneralPreferences::default();
-            general.language = lang.to_string();
+            let general = GeneralPreferences { language: lang.to_string(), ..Default::default() };
             assert!(general.normalized().is_ok());
         }
     }
@@ -742,10 +735,12 @@ mod tests {
         let path = temp_file();
         let store = PreferencesStore::open(&path).unwrap();
 
-        let mut general = GeneralPreferences::default();
-        general.always_on_top = false;
-        general.language = "ru".to_string();
-        general.pinned_position = Some(Position { x: 100, y: 200 });
+        let general = GeneralPreferences {
+            always_on_top: false,
+            language: "ru".to_string(),
+            pinned_position: Some(Position { x: 100, y: 200 }),
+            ..Default::default()
+        };
 
         let saved = store.update_general(general).unwrap();
 
@@ -768,8 +763,7 @@ mod tests {
         provider.codex.model = "custom-model".to_string();
         store.update(provider).unwrap();
 
-        let mut general = GeneralPreferences::default();
-        general.language = "ru".to_string();
+        let general = GeneralPreferences { language: "ru".to_string(), ..Default::default() };
         store.update_general(general).unwrap();
 
         let reopened = PreferencesStore::open(&path).unwrap();
@@ -828,8 +822,7 @@ mod tests {
         let path = temp_file();
         let store = PreferencesStore::open(&path).unwrap();
 
-        let mut general = GeneralPreferences::default();
-        general.language = "ru".to_string();
+        let general = GeneralPreferences { language: "ru".to_string(), ..Default::default() };
         store.update_general(general.clone()).unwrap();
 
         let mut provider = store.snapshot();
@@ -849,8 +842,7 @@ mod tests {
         provider.codex.model = "changed".to_string();
         store.update(provider.clone()).unwrap();
 
-        let mut general = GeneralPreferences::default();
-        general.language = "ru".to_string();
+        let general = GeneralPreferences { language: "ru".to_string(), ..Default::default() };
         store.update_general(general).unwrap();
 
         assert_eq!(store.snapshot(), provider);
@@ -874,20 +866,24 @@ mod tests {
 
     #[test]
     fn startup_position_returns_pinned_position_in_pin_mode() {
-        let mut general = GeneralPreferences::default();
-        general.position_mode = PositionMode::Pin;
-        general.pinned_position = Some(Position { x: 100, y: 200 });
-        general.last_known_position = Some(Position { x: 300, y: 400 });
+        let general = GeneralPreferences {
+            position_mode: PositionMode::Pin,
+            pinned_position: Some(Position { x: 100, y: 200 }),
+            last_known_position: Some(Position { x: 300, y: 400 }),
+            ..Default::default()
+        };
 
         assert_eq!(general.startup_position(), Some(Position { x: 100, y: 200 }));
     }
 
     #[test]
     fn startup_position_returns_last_known_position_in_track_mode() {
-        let mut general = GeneralPreferences::default();
-        general.position_mode = PositionMode::TrackLast;
-        general.pinned_position = Some(Position { x: 100, y: 200 });
-        general.last_known_position = Some(Position { x: 300, y: 400 });
+        let general = GeneralPreferences {
+            position_mode: PositionMode::TrackLast,
+            pinned_position: Some(Position { x: 100, y: 200 }),
+            last_known_position: Some(Position { x: 300, y: 400 }),
+            ..Default::default()
+        };
 
         assert_eq!(general.startup_position(), Some(Position { x: 300, y: 400 }));
     }

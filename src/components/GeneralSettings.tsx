@@ -6,7 +6,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useI18n } from "../i18n/useI18n";
 import type { Locale } from "../i18n/types";
 
-type LanguageOption = { code: Locale; name: string };
+interface LanguageOption {
+  code: Locale;
+  name: string;
+}
 
 export interface GeneralSettingsProps {
   api: ChatApi;
@@ -20,15 +23,18 @@ type LoadState =
   | { kind: "loaded"; prefs: GeneralPreferences }
   | { kind: "error"; message: string };
 
-export function GeneralSettings({ api, locale: propLocale, onLocaleChange }: GeneralSettingsProps) {
+export function GeneralSettings({
+  api,
+  locale: propLocale,
+  onLocaleChange,
+}: GeneralSettingsProps) {
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [langOpen, setLangOpen] = useState(false);
   const langRef = useRef<HTMLDivElement>(null);
 
   const langCode: Locale =
-    propLocale ?? (loadState.kind === "loaded"
-      ? (loadState.prefs.language as Locale)
-      : "en");
+    propLocale ??
+    (loadState.kind === "loaded" ? (loadState.prefs.language as Locale) : "en");
   const { t } = useI18n(langCode);
 
   useEffect(() => {

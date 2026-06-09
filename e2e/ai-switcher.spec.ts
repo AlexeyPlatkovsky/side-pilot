@@ -177,7 +177,9 @@ test("All mode renders three fixed provider configuration badges after resolving
   await page.screenshot({ path: "e2e/.artifacts/ai-switcher-all-resolved.png" });
 });
 
-test("Escape and outside click close the picker, focus returns to toggle", async ({ page }) => {
+test("Escape and outside click close the picker, focus returns to toggle", async ({
+  page,
+}) => {
   await gotoSeeded(page);
 
   await page.getByRole("button", { name: /choose ai provider/i }).click();

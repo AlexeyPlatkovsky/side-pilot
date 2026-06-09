@@ -147,7 +147,7 @@ export function ChatPanel({
   const retryErrorId = useMemo(() => {
     if (route.kind !== "single") return null;
     const lastError = [...state.messages].reverse().find((m) => m.error);
-    if (!lastError || lastError.assistantId !== route.provider) return null;
+    if (lastError?.assistantId !== route.provider) return null;
     return lastError.id;
   }, [route, state.messages]);
 
@@ -404,7 +404,11 @@ export function ChatPanel({
             {state.status.message}
           </p>
         )}
-        <form className="composer" aria-label={t("chat_composerLabel")} onSubmit={onSubmit}>
+        <form
+          className="composer"
+          aria-label={t("chat_composerLabel")}
+          onSubmit={onSubmit}
+        >
           <textarea
             ref={inputRef}
             className="composer__input"
@@ -415,7 +419,12 @@ export function ChatPanel({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={onKeyDown}
           />
-          <AiSwitcher route={route} disabled={isPending} onSelect={setActiveRoute} locale={locale} />
+          <AiSwitcher
+            route={route}
+            disabled={isPending}
+            onSelect={setActiveRoute}
+            locale={locale}
+          />
           <button
             type="submit"
             className="composer__send"
@@ -443,7 +452,10 @@ export function ChatPanel({
       )}
 
       {confirmingClear && (
-        <Dialog label={t("chat_clearChatLabel")} onClose={() => setConfirmingClear(false)}>
+        <Dialog
+          label={t("chat_clearChatLabel")}
+          onClose={() => setConfirmingClear(false)}
+        >
           <div className="dialog__body">
             <p className="dialog__message">
               {t("chat_clearConfirm", { title: activeTitle })}

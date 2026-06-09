@@ -180,7 +180,7 @@ test("empty sessions list auto-creates one session", async ({ page }) => {
   await expect(page.getByText("How do I add passkey login?")).toHaveCount(0);
 });
 
-test("conversation div has aria-live=\"polite\"", async ({ page }) => {
+test('conversation div has aria-live="polite"', async ({ page }) => {
   await page.goto("/e2e/seeded.html");
   await expect(page.getByTestId("panel")).toBeVisible();
 

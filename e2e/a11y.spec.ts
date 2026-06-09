@@ -18,9 +18,7 @@ test.describe("a11y", () => {
     await page.goto("/e2e/fixture.html");
     await expect(page.getByLabel("Ask side-pilot")).toBeVisible();
 
-    const results = await new AxeBuilder({ page })
-      .include("form")
-      .analyze();
+    const results = await new AxeBuilder({ page }).include("form").analyze();
 
     expect(results.violations).toEqual([]);
   });
@@ -32,7 +30,9 @@ test.describe("a11y", () => {
     await expect(page.getByRole("complementary", { name: "Chat history" })).toBeVisible();
 
     // The default active chat has `aria-current` on its select button.
-    const activeRow = page.locator(".chat-row__select", { hasText: "Refactor auth module" });
+    const activeRow = page.locator(".chat-row__select", {
+      hasText: "Refactor auth module",
+    });
     await expect(activeRow).toHaveAttribute("aria-current", "true");
 
     // Switch to the other chat.

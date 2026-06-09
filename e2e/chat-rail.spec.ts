@@ -147,7 +147,9 @@ test("delete dialog cancels and confirms", async ({ page }) => {
     .getByRole("button", { name: "Cancel" })
     .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator(".chat-row__select", { hasText: "Refactor auth module" })).toBeVisible();
+  await expect(
+    page.locator(".chat-row__select", { hasText: "Refactor auth module" }),
+  ).toBeVisible();
 
   // Confirm: row removed, switches to next chat.
   await page.getByRole("button", { name: "Options for Refactor auth module" }).click();
@@ -157,8 +159,12 @@ test("delete dialog cancels and confirms", async ({ page }) => {
     .getByRole("button", { name: "Delete" })
     .click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator(".chat-row__select", { hasText: "Refactor auth module" })).toHaveCount(0);
-  await expect(page.locator(".chat-row__select", { hasText: "Fix login bug" })).toBeVisible();
+  await expect(
+    page.locator(".chat-row__select", { hasText: "Refactor auth module" }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator(".chat-row__select", { hasText: "Fix login bug" }),
+  ).toBeVisible();
 });
 
 test("rename dialog validates empty and max-length input", async ({ page }) => {
@@ -210,7 +216,9 @@ test.describe("dialog focus trap", () => {
     return page.getByRole("dialog", { name: /Rename chat/ });
   }
 
-  test("dialog has focusable elements and aria-modal for focus trapping", async ({ page }) => {
+  test("dialog has focusable elements and aria-modal for focus trapping", async ({
+    page,
+  }) => {
     await openRenameDialog(page);
     const dialog = page.getByRole("dialog", { name: /Rename chat/ });
 

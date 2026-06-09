@@ -139,7 +139,7 @@ async fn all_three_registered_adapters_respond() {
                 cancel.clone(),
             )
             .await
-            .expect(&format!("{} adapter runs", id.as_str()));
+            .unwrap_or_else(|_| panic!("{} adapter runs", id.as_str()));
 
         assert!(result.assistant_text.contains("test"));
     }

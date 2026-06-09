@@ -183,7 +183,14 @@ interface RowMenuProps {
 }
 
 /** Small per-row options popup; closes on Escape or outside click. */
-function RowMenu({ id, renameLabel, deleteLabel, onClose, onRename, onDelete }: RowMenuProps) {
+function RowMenu({
+  id,
+  renameLabel,
+  deleteLabel,
+  onClose,
+  onRename,
+  onDelete,
+}: RowMenuProps) {
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -241,7 +248,14 @@ interface DeleteDialogProps {
 }
 
 /** Confirmation modal before a destructive cascade delete. */
-function DeleteDialog({ cancelLabel, deleteLabel, dialogLabel, message, onCancel, onConfirm }: DeleteDialogProps) {
+function DeleteDialog({
+  cancelLabel,
+  deleteLabel,
+  dialogLabel,
+  message,
+  onCancel,
+  onConfirm,
+}: DeleteDialogProps) {
   return (
     <Dialog label={dialogLabel} onClose={onCancel}>
       <div className="dialog__body">

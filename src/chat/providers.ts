@@ -49,7 +49,9 @@ export function providerInfo(id: AssistantId): ProviderInfo {
 
 /** The user-facing label for a route ("All" or the single provider's name). */
 export function routeLabel(route: ActiveRoute, locale: Locale = "en"): string {
-  return route.kind === "all" ? translate(locale, "ai_all") : providerInfo(route.provider).label;
+  return route.kind === "all"
+    ? translate(locale, "ai_all")
+    : providerInfo(route.provider).label;
 }
 
 /** Whether two routes select the same target(s). */
@@ -157,10 +159,17 @@ function asSentence(detail: string): string {
 }
 
 /** A concise user-visible message for a CLI process that exited unsuccessfully. */
-export function describeCliExit(name: string, stderr: string | undefined, locale: Locale = "en"): string {
+export function describeCliExit(
+  name: string,
+  stderr: string | undefined,
+  locale: Locale = "en",
+): string {
   const detail = summarizeCliStderr(stderr ?? "");
   if (detail) {
-    return translate(locale, "error_cliExitWithDetail", { name, detail: asSentence(detail) });
+    return translate(locale, "error_cliExitWithDetail", {
+      name,
+      detail: asSentence(detail),
+    });
   }
   return translate(locale, "error_cliExit", { name });
 }

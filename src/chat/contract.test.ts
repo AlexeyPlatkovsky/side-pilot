@@ -26,9 +26,7 @@ describe("IPC contract", () => {
     ];
 
     for (const mod of mods) {
-      await expect(
-        import(`./generated/${mod}`),
-      ).resolves.toBeDefined();
+      await expect(import(`./generated/${mod}`)).resolves.toBeDefined();
     }
   });
 

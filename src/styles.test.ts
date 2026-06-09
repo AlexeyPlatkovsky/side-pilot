@@ -5,18 +5,18 @@ const styles = readFileSync("src/styles.css", "utf8");
 
 function cssRule(selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = styles.match(new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`));
+  const match = new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`).exec(styles);
   return match?.[1] ?? "";
 }
 
 function cssDeclaration(rule: string, property: string): string | undefined {
   const escapedProperty = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = rule.match(new RegExp(`${escapedProperty}\\s*:\\s*([^;]+)`));
+  const match = new RegExp(`${escapedProperty}\\s*:\\s*([^;]+)`).exec(rule);
   return match?.[1]?.trim();
 }
 
 function rgbaAlpha(value: string): number | undefined {
-  const match = value.match(/rgba\([^,]+,[^,]+,[^,]+,\s*([0-9.]+)\s*\)/);
+  const match = /rgba\([^,]+,[^,]+,[^,]+,\s*([0-9.]+)\s*\)/.exec(value);
   return match ? Number(match[1]) : undefined;
 }
 

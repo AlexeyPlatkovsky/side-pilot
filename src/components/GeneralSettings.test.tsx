@@ -64,7 +64,9 @@ describe("GeneralSettings", () => {
 
   it("loads and displays Russian labels when language is ru", async () => {
     const api = buildApi({
-      getGeneralPreferences: vi.fn().mockResolvedValue({ ...defaultGeneral(), language: "ru" }),
+      getGeneralPreferences: vi
+        .fn()
+        .mockResolvedValue({ ...defaultGeneral(), language: "ru" }),
     });
     render(<GeneralSettings api={api} />);
 

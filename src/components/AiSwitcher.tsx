@@ -15,7 +15,12 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { type ActiveRoute, PROVIDERS, providerInfo, routesEqual } from "../chat/providers";
+import {
+  type ActiveRoute,
+  PROVIDERS,
+  providerInfo,
+  routesEqual,
+} from "../chat/providers";
 import { AllGlyph, ProviderGlyph, RouteIcon } from "./ProviderIcon";
 import type { Locale } from "../i18n/types";
 import { useI18n } from "../i18n/useI18n";
@@ -33,7 +38,12 @@ export interface AiSwitcherProps {
 
 const ALL_ROUTE: ActiveRoute = { kind: "all" };
 
-export function AiSwitcher({ route, disabled, onSelect, locale = "en" }: AiSwitcherProps) {
+export function AiSwitcher({
+  route,
+  disabled,
+  onSelect,
+  locale = "en",
+}: AiSwitcherProps) {
   const { t } = useI18n(locale);
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -73,12 +83,17 @@ export function AiSwitcher({ route, disabled, onSelect, locale = "en" }: AiSwitc
     buttonRef.current?.focus();
   };
 
-  const activeLabel = route.kind === "all" ? t("ai_all") : providerInfo(route.provider).label;
+  const activeLabel =
+    route.kind === "all" ? t("ai_all") : providerInfo(route.provider).label;
 
   return (
     <div className="ai-switcher" ref={containerRef}>
       {menuOpen && (
-        <div className="ai-switcher__menu" role="menu" aria-label={t("ai_chooseProvider")}>
+        <div
+          className="ai-switcher__menu"
+          role="menu"
+          aria-label={t("ai_chooseProvider")}
+        >
           <button
             type="button"
             role="menuitemradio"
