@@ -23,7 +23,14 @@ export default defineConfig({
     baseURL: "http://localhost:5175",
     trace: "on-first-retry",
   },
-  projects: [{ name: "webkit", use: { ...devices["Desktop Safari"] } }],
+  projects: [
+    { name: "webkit", use: { ...devices["Desktop Safari"] } },
+    {
+      name: "chromium-smoke",
+      use: { ...devices["Desktop Chrome"] },
+      grep: /@chromium-smoke/,
+    },
+  ],
   // Reuse the project's Vite dev server so tests render the real components.
   webServer: {
     command: "npm run dev",

@@ -71,3 +71,29 @@ test("@smoke a single-row composer stays compact (no over-tall box)", async ({ p
   // fix. Guard against that regression.
   expect(composerHeight).toBeLessThanOrEqual(46);
 });
+
+test("Enter submits the message and clears the draft; Shift+Enter inserts a newline", async ({
+  page,
+}) => {
+  await page.goto("/e2e/seeded.html");
+  await expect(page.getByTestId("panel")).toBeVisible();
+
+  const input = page.getByLabel("Ask side-pilot");
+  await input.fill("Hello from Enter test");
+  await page.keyboard.press("Enter");
+
+  // The user message appears in the transcript and the input clears.
+  await expect(page.getByText("Hello from Enter test")).toBeVisible();
+  await expect(input).toHaveValue("");
+
+  // Shift+Enter inserts a newline without submitting.
+  const startHeight = await input.evaluate((el) => el.scrollHeight);
+  await input.fill("line one");
+  await page.keyboard.press("Shift+Enter");
+  await input.type("line two");
+  // The content should be multi-line (textarea grew).
+  const endHeight = await input.evaluate((el) => el.scrollHeight);
+  expect(endHeight).toBeGreaterThan(startHeight);
+  // The message was not submitted — no second user message yet.
+  expect(await page.getByText("Hello from Enter test").count()).toBe(1);
+});

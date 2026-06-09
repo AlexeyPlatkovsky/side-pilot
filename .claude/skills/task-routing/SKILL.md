@@ -1,9 +1,7 @@
 ---
-name: manager
+name: task-routing
 description: Routes non-trivial work to the correct pipeline or capability; enforces Beads planning, git branch selection, output artifact gates, documentation maintenance, and task-complete.
 ---
-
-# Manager: manager
 
 ## Purpose
 

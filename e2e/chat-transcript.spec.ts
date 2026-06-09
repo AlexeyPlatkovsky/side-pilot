@@ -156,3 +156,35 @@ test("deleting a chat invalidates its slow pending selection", async ({ page }) 
   ).toHaveCount(0);
   await expect(page.getByText("How do I add passkey login?")).toBeVisible();
 });
+
+test("error banner appears when listSessions rejects", async ({ page }) => {
+  await page.goto("/e2e/seeded.html?errorBanner=1");
+  await expect(page.getByTestId("panel")).toBeVisible();
+
+  // The error banner with role="alert" is visible.
+  const banner = page.locator(".conversation__error[role='alert']");
+  await expect(banner).toBeVisible();
+  await expect(banner).not.toBeEmpty();
+  await page.screenshot({ path: "e2e/.artifacts/error-banner.png" });
+});
+
+test("empty sessions list auto-creates one session", async ({ page }) => {
+  await page.goto("/e2e/seeded.html?emptySessions=1");
+  await expect(page.getByTestId("panel")).toBeVisible();
+
+  // The rail shows the auto-created session.
+  await page.getByRole("button", { name: "Show chat history" }).click();
+  await expect(page.getByRole("complementary", { name: "Chat history" })).toBeVisible();
+  await expect(page.getByText("Untitled")).toBeVisible();
+  // The transcript is empty.
+  await expect(page.getByText("How do I add passkey login?")).toHaveCount(0);
+});
+
+test("conversation div has aria-live=\"polite\"", async ({ page }) => {
+  await page.goto("/e2e/seeded.html");
+  await expect(page.getByTestId("panel")).toBeVisible();
+
+  const conversation = page.locator(".conversation");
+  await expect(conversation).toBeVisible();
+  await expect(conversation).toHaveAttribute("aria-live", "polite");
+});

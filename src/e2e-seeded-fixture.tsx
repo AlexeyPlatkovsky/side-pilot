@@ -20,28 +20,35 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const t0 = Date.now();
 const fixtureParams = new URLSearchParams(window.location.search);
+const errorBanner = fixtureParams.get("errorBanner") === "1";
+const emptySessions = fixtureParams.get("emptySessions") === "1";
+const generalLoadDelay = Number(fixtureParams.get("generalLoadDelay") ?? 0);
+const generalError = fixtureParams.get("generalError") === "1";
+const retryFails = fixtureParams.get("retryFails") === "1";
 const providerPreference = {
   codex: { model: "gpt-5.5", reasoningEffort: "low" },
   claude: { model: "haiku", reasoningEffort: "low" },
   gemini: { model: "gemini-3-flash-preview", reasoningEffort: "none" },
 } as const;
 
-const sessions: PersistedSession[] = [
-  {
-    id: "s1",
-    title: "Refactor auth module",
-    createdAt: t0 - 3 * HOUR,
-    updatedAt: t0 - 3 * MINUTE,
-    codexSessionId: null,
-  },
-  {
-    id: "s2",
-    title: "Fix login bug",
-    createdAt: t0 - 5 * HOUR,
-    updatedAt: t0 - 4 * HOUR,
-    codexSessionId: null,
-  },
-];
+const sessions: PersistedSession[] = emptySessions
+  ? []
+  : [
+      {
+        id: "s1",
+        title: "Refactor auth module",
+        createdAt: t0 - 3 * HOUR,
+        updatedAt: t0 - 3 * MINUTE,
+        codexSessionId: null,
+      },
+      {
+        id: "s2",
+        title: "Fix login bug",
+        createdAt: t0 - 5 * HOUR,
+        updatedAt: t0 - 4 * HOUR,
+        codexSessionId: null,
+      },
+    ];
 
 const messages: Record<string, PersistedMessage[]> = {
   s1: [
@@ -87,15 +94,26 @@ const api: ChatApi = {
     }),
   updateProviderPreferences: (value) => Promise.resolve(value),
   getGeneralPreferences: () =>
-    Promise.resolve({
-      alwaysOnTop: true,
-      positionMode: "trackLast",
-      pinnedPosition: null,
-      lastKnownPosition: null,
-      language: "en",
-    }),
+    generalError
+      ? Promise.reject(new Error("Failed to load general preferences"))
+      : new Promise((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                alwaysOnTop: true,
+                positionMode: "trackLast",
+                pinnedPosition: null,
+                lastKnownPosition: null,
+                language: "en",
+              }),
+            generalLoadDelay,
+          ),
+        ),
   updateGeneralPreferences: (value) => Promise.resolve(value),
-  listSessions: () => Promise.resolve(sessions.map((s) => ({ ...s }))),
+  listSessions: () =>
+    errorBanner
+      ? Promise.reject(new Error("Storage unavailable"))
+      : Promise.resolve(sessions.map((s) => ({ ...s }))),
   createSession: (title = null) => {
     const created: PersistedSession = {
       id: `s${sessions.length + 1}`,
@@ -247,6 +265,9 @@ const api: ChatApi = {
   },
   openExternal: () => Promise.resolve(),
   retryRoute: (request) => {
+    if (retryFails) {
+      return Promise.reject(new Error("Retry failed"));
+    }
     // Delete the error message, then produce a fresh reply.
     const list = messages[request.sessionId] ?? [];
     const idx = list.findIndex((m) => m.id === request.errorMessageId);

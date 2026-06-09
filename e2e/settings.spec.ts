@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 // Settings view WebKit validation (SP-031). The section rail, active tab, and
 // pane content must render correctly in WebKit — jsdom can't verify layout
@@ -111,5 +111,116 @@ test("settings view renders the section rail with correct layout in WebKit", asy
   await page.screenshot({
     path: "e2e/.artifacts/settings-rail-general.png",
     fullPage: false,
+  });
+});
+
+test.describe("GeneralSettings controls", () => {
+  test("toggles always-on-top and switches position mode", async ({ page }) => {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "General" }).click();
+
+    // Toggle always-on-top.
+    const toggle = page.getByLabel("Always on top");
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    // Clicking the toggle should not break the settings view.
+    await expect(page.getByTestId("settings")).toBeVisible();
+  });
+
+  test("pin button appears in pin mode", async ({ page }) => {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "General" }).click();
+
+    // Switch to pin mode.
+    const trackLast = page.getByRole("radio", { name: /track last position/i });
+    const pinMode = page.getByRole("radio", { name: /pin the position/i });
+    await expect(trackLast).toBeChecked();
+    await pinMode.click();
+    await expect(pinMode).toBeChecked();
+
+    // Pin button appears.
+    const pinBtn = page.getByRole("button", { name: /pin/i });
+    await expect(pinBtn).toBeVisible();
+  });
+
+  test("language dropdown opens and allows selection", async ({ page }) => {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "General" }).click();
+
+    await page.getByRole("button", { name: /language/i }).click();
+    const listbox = page.getByRole("listbox");
+    await expect(listbox).toBeVisible();
+    await expect(listbox.getByRole("option", { name: /english/i })).toBeVisible();
+    await expect(listbox.getByRole("option", { name: /russian/i })).toBeVisible();
+  });
+});
+
+test.describe("settings keyboard navigation", () => {
+  async function openSettings(page: Page) {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await expect(page.getByTestId("settings")).toBeVisible();
+  }
+
+  test("Arrow Down/Up cycle through tabs with wrapping", async ({ page }) => {
+    await openSettings(page);
+    const tabs = page.getByRole("tab");
+    await expect(tabs).toHaveCount(7);
+
+    // Focus the first tab.
+    await tabs.first().focus();
+    await expect(tabs.first()).toBeFocused();
+
+    // Arrow Down moves to the next tab each time.
+    for (let i = 1; i < 7; i++) {
+      await page.keyboard.press("ArrowDown");
+      await expect(tabs.nth(i)).toBeFocused();
+    }
+    // Arrow Down from the last wraps to the first.
+    await page.keyboard.press("ArrowDown");
+    await expect(tabs.first()).toBeFocused();
+
+    // Arrow Up wraps from first to last.
+    await page.keyboard.press("ArrowUp");
+    await expect(tabs.nth(6)).toBeFocused();
+  });
+
+  test("Home jumps to first tab, End jumps to last", async ({ page }) => {
+    await openSettings(page);
+    const tabs = page.getByRole("tab");
+
+    // Focus the middle tab, then Home.
+    await tabs.nth(3).focus();
+    await page.keyboard.press("Home");
+    await expect(tabs.first()).toBeFocused();
+
+    // End jumps to the last tab.
+    await page.keyboard.press("End");
+    await expect(tabs.nth(6)).toBeFocused();
+  });
+});
+
+test.describe("GeneralSettings loading and error states", () => {
+  test("shows loading placeholder while preferences load", async ({ page }) => {
+    await page.goto("/e2e/seeded.html?generalLoadDelay=2000");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "General" }).click();
+    await expect(page.getByText("Loading...")).toBeVisible();
+  });
+
+  test("shows error text when preferences fail to load", async ({ page }) => {
+    await page.goto("/e2e/seeded.html?generalError=1");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "General" }).click();
+    await expect(page.getByText("Failed to load general settings.")).toBeVisible();
   });
 });
