@@ -33,9 +33,7 @@ describe("describeError", () => {
   });
 
   it("formats timedOut", () => {
-    expect(describeError({ kind: "timedOut" })).toBe(
-      "GPT timed out before responding.",
-    );
+    expect(describeError({ kind: "timedOut" })).toBe("GPT timed out before responding.");
   });
 
   it("formats cancelled", () => {
