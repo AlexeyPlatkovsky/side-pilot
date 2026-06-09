@@ -212,8 +212,8 @@ jobs:
            | $(icon "$MUTATION_RUST")| Mutation (Rust)  | $MUTATION_RUST |
            | $(icon "$MUTATION_FE")| Mutation (FE)    | $MUTATION_FE |"
 
-          pass=$(echo "$table" | grep -cE "✅|➖")
-          fail=$(echo "$table" | grep -cE "❌|🚫|❓")
+          pass=$(echo "$table" | grep -cE "✅|➖" || true)
+          fail=$(echo "$table" | grep -cE "❌|🚫|❓" || true)
           total=$((pass+fail))
           summary="$pass / $total passed"
           [ "$fail" -gt 0 ] && summary="$summary, $fail failed"
