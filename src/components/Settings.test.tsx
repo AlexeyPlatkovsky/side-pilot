@@ -220,7 +220,9 @@ describe("Settings", () => {
     const panel = screen.getByRole("tabpanel");
     expect(panel).toBeVisible();
     await waitFor(() => {
-      expect(screen.getByRole("checkbox", { name: /always on top/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("checkbox", { name: /always on top/i }),
+      ).toBeInTheDocument();
     });
   });
 

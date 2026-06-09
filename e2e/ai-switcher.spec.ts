@@ -176,3 +176,100 @@ test("All mode renders three fixed provider configuration badges after resolving
 
   await page.screenshot({ path: "e2e/.artifacts/ai-switcher-all-resolved.png" });
 });
+
+test("Escape and outside click close the picker, focus returns to toggle", async ({
+  page,
+}) => {
+  await gotoSeeded(page);
+
+  await page.getByRole("button", { name: /choose ai provider/i }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+
+  // Escape closes.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  // Focus returned to the toggle.
+  await expect(page.getByRole("button", { name: /choose ai provider/i })).toBeFocused();
+
+  // Open again, then outside click closes.
+  await page.getByRole("button", { name: /choose ai provider/i }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await page.locator(".panel__header").first().click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+});
+
+test("single-provider error shows Retry button, click replaces error with pending slot", async ({
+  page,
+}) => {
+  await page.goto("/e2e/seeded.html?route=error&routeDelay=500");
+  await expect(page.getByTestId("panel")).toBeVisible();
+
+  // Default route is GPT (codex).
+  await page.getByLabel("Ask side-pilot").fill("retry test");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  // An error card appears.
+  const error = page.getByRole("alert");
+  await expect(error).toBeVisible({ timeout: 3000 });
+
+  // Retry button is visible on the error card.
+  const retry = page.getByRole("button", { name: /retry/i });
+  await expect(retry).toBeVisible();
+
+  // Click Retry — the error is replaced by a pending slot, then a reply.
+  await retry.click();
+  await expect(error).not.toBeVisible();
+  await expect(page.getByText("A retried codex reply.")).toBeVisible({ timeout: 3000 });
+});
+
+test("retry-fails-again shows error card again", async ({ page }) => {
+  await page.goto("/e2e/seeded.html?route=error&routeDelay=500&retryFails=1");
+  await expect(page.getByTestId("panel")).toBeVisible();
+
+  await page.getByLabel("Ask side-pilot").fill("retry failure test");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  // Error card appears.
+  await expect(page.getByRole("alert")).toBeVisible({ timeout: 3000 });
+
+  // Click Retry.
+  await page.getByRole("button", { name: /retry/i }).click();
+  // The retry call fails — an error banner or new error card should appear.
+  await expect(page.getByRole("alert")).toBeVisible({ timeout: 3000 });
+});
+
+test("single-provider submit resolves one labeled reply", async ({ page }) => {
+  await page.goto("/e2e/seeded.html?routeDelay=500");
+  await expect(page.getByTestId("panel")).toBeVisible();
+
+  await page.getByLabel("Ask side-pilot").fill("test single provider");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  // One thinking slot appears.
+  await expect(page.getByTestId("thinking")).toHaveCount(1);
+
+  // One reply labeled with the provider's model.
+  await expect(page.locator(".message--assistant")).toHaveCount(2, { timeout: 3000 });
+  await expect(page.locator(".message__label", { hasText: "gpt-5.5-low" })).toBeVisible();
+});
+
+test.describe("provider error types", () => {
+  // For each error kind, the fixture must produce the matching error shape.
+  // The seeded fixture currently produces `nonZeroExit` errors via the
+  // `route=error` param. Other error types require fixture extension and are
+  // noted as the minimum smoke check here: the error card renders with role="alert".
+  test("nonZeroExit error shows a readable message in an alert", async ({ page }) => {
+    await page.goto("/e2e/seeded.html?route=error&routeDelay=500");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: /choose ai provider/i }).click();
+    await page.getByRole("menuitemradio", { name: "Gemini" }).click();
+
+    await page.getByLabel("Ask side-pilot").fill("error test");
+    await page.getByRole("button", { name: "Send" }).click();
+
+    const error = page.getByRole("alert");
+    await expect(error).toBeVisible({ timeout: 3000 });
+    // The error message is human-readable (not a raw stack trace or JSON blob).
+    await expect(error).not.toContainText("Full report available");
+  });
+});

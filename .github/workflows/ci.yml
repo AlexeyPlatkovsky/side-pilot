@@ -105,9 +105,9 @@ jobs:
         if: ${{ !cancelled() }}
         run: npm run test:coverage
 
-      - name: Install Playwright WebKit
+      - name: Install Playwright browsers
         if: ${{ !cancelled() }}
-        run: npx playwright install --with-deps webkit
+        run: npx playwright install --with-deps webkit chromium
 
       - name: Smoke test WebKit E2E
         id: smoke-e2e
@@ -144,7 +144,8 @@ jobs:
       - name: Audit Rust dependencies
         id: cargo-audit
         if: ${{ !cancelled() }}
-        run: cargo audit --no-fetch
+        working-directory: src-tauri
+        run: cargo audit
 
       - name: Install cargo-mutants
         if: ${{ !cancelled() && startsWith(github.ref_name, 'feature/') }}
@@ -211,8 +212,8 @@ jobs:
            | $(icon "$MUTATION_RUST")| Mutation (Rust)  | $MUTATION_RUST |
            | $(icon "$MUTATION_FE")| Mutation (FE)    | $MUTATION_FE |"
 
-          pass=$(echo "$table" | grep -cE "✅|➖")
-          fail=$(echo "$table" | grep -cE "❌|🚫|❓")
+          pass=$(echo "$table" | grep -cE "✅|➖" || true)
+          fail=$(echo "$table" | grep -cE "❌|🚫|❓" || true)
           total=$((pass+fail))
           summary="$pass / $total passed"
           [ "$fail" -gt 0 ] && summary="$summary, $fail failed"

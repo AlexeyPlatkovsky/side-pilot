@@ -1,6 +1,6 @@
 import { afterEach, expect } from "vitest";
 import { axe, toHaveNoViolations } from "jest-axe";
-import type { AxeResults } from "jest-axe";
+import type { AxeResults } from "axe-core";
 
 expect.extend(toHaveNoViolations);
 
@@ -10,11 +10,11 @@ export async function checkA11y(
   container: Element | HTMLElement,
   label?: string,
 ): Promise<void> {
-  const results: AxeResults = await axe(container, {
+  const results: AxeResults = (await axe(container, {
     rules: {
       "aria-dialog-name": { enabled: false },
     },
-  }) as AxeResults;
+  })) as AxeResults;
 
   const count = results.violations.length;
   if (count > 0) {
@@ -30,4 +30,3 @@ export async function checkA11y(
 }
 
 afterEach(() => {});
-

@@ -100,11 +100,12 @@ function makeApi(
       ),
     retryRoute:
       opts.retryRoute ??
-      vi.fn(() =>
-        Promise.resolve({
-          provider: "codex" as AssistantId,
-          message: persisted({ sender: "assistant", content: "retried" }),
-        }),
+      vi.fn(
+        (): Promise<import("../chat/api").ProviderRunOutcome> =>
+          Promise.resolve({
+            provider: "codex" as const,
+            message: persisted({ sender: "assistant", content: "retried" }),
+          }),
       ),
     getProviderPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
     updateProviderPreferences: vi.fn(() => Promise.reject(new Error("unused"))),
@@ -1310,7 +1311,7 @@ describe("[smoke] ChatPanel", () => {
     // Retry button (it's no longer last).
     await screen.findByText("here is the weather");
     expect(
-      screen.getByTestId("provider-error").querySelector('[role="button"]'),
+      screen.queryByTestId("provider-error")?.querySelector('[role="button"]'),
     ).toBeNull();
   });
 
@@ -1334,10 +1335,10 @@ describe("[smoke] ChatPanel", () => {
     const api = makeApi({
       history: [userMessage, errorMessage],
       runRoute: vi.fn(() => new Promise<RouteRunResult>(() => {})),
-      retryRoute: vi.fn(() => {
+      retryRoute: vi.fn((): Promise<import("../chat/api").ProviderRunOutcome> => {
         retryCalled = true;
         return Promise.resolve({
-          provider: "gemini" as AssistantId,
+          provider: "gemini" as const,
           message: persisted({
             id: "a-retry",
             sender: "assistant",

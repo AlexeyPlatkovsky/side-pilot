@@ -20,6 +20,12 @@ vi.mock("@tauri-apps/api/window", () => ({
   LogicalSize: vi.fn(),
 }));
 
+// Satisfy the __TAURI_INTERNALS__ guard in Bubble's position-tracking effect.
+Object.defineProperty(window, "__TAURI_INTERNALS__", {
+  value: {},
+  writable: true,
+});
+
 afterEach(() => {
   cleanup();
 });

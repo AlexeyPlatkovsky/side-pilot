@@ -34,7 +34,9 @@ test("@smoke composer starts at a single row", async ({ page }) => {
   expect(box.scrollHeight).toBeLessThanOrEqual(box.clientHeight + 1);
 });
 
-test("@smoke composer auto-grows with newlines, then caps and scrolls", async ({ page }) => {
+test("@smoke composer auto-grows with newlines, then caps and scrolls", async ({
+  page,
+}) => {
   await gotoPanel(page);
   const start = (await inputBox(page)).height;
 
@@ -60,7 +62,9 @@ test("@smoke the auto-grown field fits its content exactly — no trailing gap",
   expect(box.scrollHeight).toBe(box.clientHeight);
 });
 
-test("@smoke a single-row composer stays compact (no over-tall box)", async ({ page }) => {
+test("@smoke a single-row composer stays compact (no over-tall box)", async ({
+  page,
+}) => {
   await gotoPanel(page);
   const composerHeight = await page.$eval(".composer", (el) =>
     Math.round(el.getBoundingClientRect().height),
@@ -70,4 +74,30 @@ test("@smoke a single-row composer stays compact (no over-tall box)", async ({ p
   // it rendered ~52px (42 + padding + border) — demonstrated by reverting the
   // fix. Guard against that regression.
   expect(composerHeight).toBeLessThanOrEqual(46);
+});
+
+test("Enter submits the message and clears the draft; Shift+Enter inserts a newline", async ({
+  page,
+}) => {
+  await page.goto("/e2e/seeded.html");
+  await expect(page.getByTestId("panel")).toBeVisible();
+
+  const input = page.getByLabel("Ask side-pilot");
+  await input.fill("Hello from Enter test");
+  await page.keyboard.press("Enter");
+
+  // The user message appears in the transcript and the input clears.
+  await expect(page.getByText("Hello from Enter test")).toBeVisible();
+  await expect(input).toHaveValue("");
+
+  // Shift+Enter inserts a newline without submitting.
+  const startHeight = await input.evaluate((el) => el.scrollHeight);
+  await input.fill("line one");
+  await page.keyboard.press("Shift+Enter");
+  await input.type("line two");
+  // The content should be multi-line (textarea grew).
+  const endHeight = await input.evaluate((el) => el.scrollHeight);
+  expect(endHeight).toBeGreaterThan(startHeight);
+  // The message was not submitted — no second user message yet.
+  expect(await page.getByText("Hello from Enter test").count()).toBe(1);
 });

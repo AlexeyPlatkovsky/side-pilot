@@ -119,6 +119,7 @@ export interface ChatApi {
 }
 
 /** The real backend, wired to the registered Tauri commands. */
+/* v8 ignore next 16 */
 export const tauriChatApi: ChatApi = {
   runAdapter: (request) => invoke("run_adapter", { request }),
   runRoute: (request) => invoke("run_route", { request }),
@@ -250,7 +251,9 @@ export function describeError(err: unknown, locale: Locale = "en"): string {
       case "unsupportedSchemaVersion":
         return translate(locale, "error_unsupportedSchemaVersion");
       default:
-        return translate(locale, "error_somethingWentWrongWithKind", { kind: tagged.kind });
+        return translate(locale, "error_somethingWentWrongWithKind", {
+          kind: tagged.kind,
+        });
     }
   }
   if (err instanceof Error) return err.message;

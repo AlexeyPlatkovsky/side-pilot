@@ -35,6 +35,16 @@ Skill: `.claude/skills/implement-tauri-feature/SKILL.md`
 
 Required output: `Skill: implement-tauri-feature - output below`
 
+**Post-implementation validation** — before advancing to Step 3, run local CI-equivalent checks:
+
+Skill: `.claude/skills/validate/SKILL.md`
+Required output: `Skill: validate - output below`
+
+Select checks matching the touched layers (UI-only work):
+`checks="lint format tsc vitest"`
+
+If validation fails, fix and re-run. Do not advance until `Skill: validate - output below` reports all checks PASS.
+
 The implementation must follow `.claude/conventions/react-tauri/desktop-platform-scope.md` in addition to the relevant React/Tauri conventions.
 
 ---

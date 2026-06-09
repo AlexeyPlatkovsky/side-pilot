@@ -36,25 +36,21 @@ export const ru: Record<TranslationKey, string> = {
   chat_showHistoryUnread: "Показать историю, непрочитанные ответы",
   chat_thinking: "Думаю\u2026",
   error: "Не удалось загрузить общие настройки.",
-  error_binaryNotFound:
-    "{name} недоступен \u2014 его CLI не найден в PATH.",
+  error_binaryNotFound: "{name} недоступен \u2014 его CLI не найден в PATH.",
   error_cancelled: "Запрос к {name} был отмен\u0451н.",
   error_cliExit: "{name} завершился с ошибкой.",
   error_cliExitWithDetail: "{name} завершился с ошибкой: {detail}",
   error_defaultError: "Что-то пошло не так с {name}.",
-  error_notAuthenticated:
-    "{name} не авторизован. Войдите в CLI и попробуйте снова.",
+  error_notAuthenticated: "{name} не авторизован. Войдите в CLI и попробуйте снова.",
   error_notFound: "Этот диалог не найден в локальной истории.",
-  error_outputParseFailure:
-    "{name} вернул ответ, который не удалось прочитать.",
+  error_outputParseFailure: "{name} вернул ответ, который не удалось прочитать.",
   error_requestFailed: "Запрос не удался.",
   error_retryRequestFailed: "Повторный запрос не удался.",
   error_somethingWentWrong: "Что-то пошло не так.",
   error_somethingWentWrongWithKind: "Что-то пошло не так ({kind}).",
   error_storageUnavailable: "Локальная история сейчас недоступна.",
   error_timedOut: "{name} не ответил вовремя.",
-  error_unsupportedSchemaVersion:
-    "Локальная история создана новой версией приложения.",
+  error_unsupportedSchemaVersion: "Локальная история создана новой версией приложения.",
   history_delete: "Удалить",
   history_deleteConfirm:
     "Удалить этот чат и все сообщения? \u00ab{title}\u00bb и его историю нельзя будет восстановить.",
@@ -81,8 +77,7 @@ export const ru: Record<TranslationKey, string> = {
   settings_account: "Аккаунт",
   settings_apiKeys: "API-ключи",
   settings_cliIntegrations: "CLI-интеграции",
-  settings_futureUpdate:
-    "Настройки \u00ab{section}\u00bb появятся в будущем обновлении.",
+  settings_futureUpdate: "Настройки \u00ab{section}\u00bb появятся в будущем обновлении.",
   settings_general: "Основные",
   settings_keyboardShortcuts: "Горячие клавиши",
   settings_sections: "Разделы настроек",

@@ -338,15 +338,13 @@ describe("[smoke] Bubble", () => {
   it("tracks window position on move and persists to lastKnownPosition", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
 
-    const updateGeneralPrefs = vi
-      .fn()
-      .mockResolvedValue({
-        alwaysOnTop: true,
-        positionMode: "trackLast" as const,
-        pinnedPosition: null,
-        lastKnownPosition: null,
-        language: "en",
-      });
+    const updateGeneralPrefs = vi.fn().mockResolvedValue({
+      alwaysOnTop: true,
+      positionMode: "trackLast" as const,
+      pinnedPosition: null,
+      lastKnownPosition: null,
+      language: "en",
+    });
 
     const api = pendingChatApi();
     api.getGeneralPreferences = vi.fn().mockResolvedValue({

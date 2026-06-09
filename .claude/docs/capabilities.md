@@ -18,6 +18,7 @@
 - `.claude/skills/work-with-bead/SKILL.md` — check, create, update, and maintain Beads work items for applicable non-trivial work
 - `.claude/skills/work-with-git/SKILL.md` — select or create the appropriate task branch and enforce commit/push boundaries
 - `.claude/skills/documentation-maintenance/SKILL.md` — post-change documentation updates
+- `.claude/skills/validate/SKILL.md` — run local CI-equivalent checks (lint, format, typecheck, tests, coverage, Rust checks) and report pass/fail
 - `.claude/skills/task-complete/SKILL.md` — closure reporting for non-trivial routed work
 
 ## Pipelines

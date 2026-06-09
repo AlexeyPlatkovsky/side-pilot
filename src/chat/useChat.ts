@@ -190,7 +190,7 @@ export function useChat(api: ChatApi, enabled = true, locale: Locale = "en") {
         // Name a still-untitled chat from its first prompt (SP-049). `run_route`
         // persists the user prompt and each successful reply server-side, so the
         // client no longer appends them itself.
-        if (!session.title || !session.title.trim()) {
+        if (!session.title?.trim()) {
           const generated = generateTitle(trimmed);
           if (generated) {
             const updated = await api.renameSession(session.id, generated);
