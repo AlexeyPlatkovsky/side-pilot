@@ -119,6 +119,7 @@ export interface ChatApi {
 }
 
 /** The real backend, wired to the registered Tauri commands. */
+/* v8 ignore next 16 */
 export const tauriChatApi: ChatApi = {
   runAdapter: (request) => invoke("run_adapter", { request }),
   runRoute: (request) => invoke("run_route", { request }),

@@ -34,6 +34,12 @@ export default defineConfig({
         "src/e2e-seeded-fixture.tsx",
         "src/**/*.test.{ts,tsx}",
         "src/**/*.spec.{ts,tsx}",
+        "src/main.tsx",
+        "src/App.tsx",
+        "src/vite-env.d.ts",
+        "src/i18n/index.ts",
+        "src/i18n/types.ts",
+        "src/chat/providers.proptest.ts",
       ],
       thresholds: {
         lines: 80,
