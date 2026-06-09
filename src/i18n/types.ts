@@ -80,4 +80,11 @@ export type TranslationKey =
   | "settings_sections"
   | "settings_themes"
   | "time_now"
-  | "trackLast";
+  | "trackLast"
+  | "cli_statusAvailable"
+  | "cli_statusNotInstalled"
+  | "cli_statusNotAuthenticated"
+  | "cli_statusNotDetected"
+  | "cli_recheck"
+  | "cli_detecting"
+  | "cli_noProviders";

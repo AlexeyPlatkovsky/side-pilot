@@ -66,6 +66,27 @@ atomic file-backed store and are persisted together. Updates validate models,
 atomically replace the app-data file, and refresh the in-memory snapshot
 immediately. Manual file edits require an app restart.
 
+## CLI Detection (`src-tauri/src/cli_integrations.rs`)
+
+`CliDetector` (SP-038) checks each provider's binary presence and authentication
+status. Detection runs concurrently at app start and on manual re-check from the
+CLI Integrations settings pane. The detector reuses `BinaryResolver` for PATH
+lookups; auth checks (`codex login status`, `claude auth status`) are run through
+a login shell (`/bin/zsh -lc` on macOS, `cmd /C` on Windows) with a 10 s timeout
+per CLI. Gemini is checked for binary presence only — no fast auth check exists.
+
+Each detection call is dispatched via `tokio::task::spawn_blocking` so the three
+providers are checked concurrently without blocking the async runtime.
+
+Status outcomes: `Available` (binary found + auth confirmed), `NotInstalled`
+(binary not on PATH), `NotAuthenticated` (binary found but not logged in),
+`NotDetected` (detection command failed, timed out, or returned unparseable
+output).
+
+Detection results update the in-memory `CliIntegrations` snapshot in
+`PreferencesStore`; enable/disable toggles persist alongside provider and general
+preferences in `preferences.json`.
+
 The route path resumes each provider's own native CLI session across turns
 (SP-011). Before dispatch it reads the `native_session_id` previously recorded
 for `(session, provider)` (`provider_sessions`, see `db.md`) and passes it as

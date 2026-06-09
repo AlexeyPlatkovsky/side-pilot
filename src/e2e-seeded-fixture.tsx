@@ -264,6 +264,9 @@ const api: ChatApi = {
     return Promise.resolve();
   },
   openExternal: () => Promise.resolve(),
+  detectClis: () => Promise.resolve([]),
+  getCliIntegrations: () => Promise.reject(new Error("unused in e2e")),
+  updateCliIntegrations: (value) => Promise.resolve(value),
   retryRoute: (request) => {
     if (retryFails) {
       return Promise.reject(new Error("Retry failed"));

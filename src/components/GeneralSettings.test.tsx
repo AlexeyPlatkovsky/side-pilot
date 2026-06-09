@@ -4,6 +4,15 @@ import userEvent from "@testing-library/user-event";
 import { GeneralSettings } from "./GeneralSettings";
 import type { ChatApi } from "../chat/api";
 import type { GeneralPreferences } from "../chat/generated/GeneralPreferences";
+import type { CliIntegrations } from "../chat/generated/CliIntegrations";
+
+function cliIntegrationsDefault(): CliIntegrations {
+  return {
+    codex: { assistant: "codex", enabled: true, detectedStatus: "notDetected" },
+    claude: { assistant: "claude", enabled: true, detectedStatus: "notDetected" },
+    gemini: { assistant: "gemini", enabled: true, detectedStatus: "notDetected" },
+  };
+}
 
 const mockSetAlwaysOnTop = vi.fn();
 const mockOuterPosition = vi.fn();
@@ -43,6 +52,9 @@ function buildApi(overrides: Partial<ChatApi> = {}): ChatApi {
     clearSession: vi.fn(),
     updateCodexSessionId: vi.fn(),
     openExternal: vi.fn(),
+    detectClis: vi.fn().mockResolvedValue([]),
+    getCliIntegrations: vi.fn().mockResolvedValue(cliIntegrationsDefault()),
+    updateCliIntegrations: vi.fn().mockImplementation((v) => Promise.resolve(v)),
     ...overrides,
   };
 }

@@ -10,6 +10,7 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use crate::adapters::{AdapterRequest, AssistantId};
+use crate::cli_integrations::CliIntegrations;
 
 type ReplaceFile = fn(&Path, &Path) -> std::io::Result<()>;
 
@@ -213,12 +214,14 @@ struct PersistedPreferences {
     claude: ProviderPreference,
     gemini: ProviderPreference,
     general: GeneralPreferences,
+    cli_integrations: CliIntegrations,
 }
 
 pub struct PreferencesStore {
     path: PathBuf,
     provider_snapshot: Mutex<ProviderPreferences>,
     general_snapshot: Mutex<GeneralPreferences>,
+    cli_integrations_snapshot: Mutex<CliIntegrations>,
     replace_file: ReplaceFile,
 }
 
@@ -232,7 +235,7 @@ impl PreferencesStore {
         replace_file: ReplaceFile,
     ) -> Result<Self, PreferencesError> {
         let path = path.as_ref().to_path_buf();
-        let (provider, general) = match fs::read_to_string(&path) {
+        let (provider, general, cli_integrations) = match fs::read_to_string(&path) {
             Ok(contents) => {
                 let parsed = serde_json::from_str::<Value>(&contents);
                 let provider = parsed
@@ -247,10 +250,20 @@ impl PreferencesStore {
                     .and_then(|g| serde_json::from_value::<GeneralPreferences>(g.clone()).ok())
                     .and_then(|g| g.normalized().ok())
                     .unwrap_or_default();
-                (provider, general)
+                let cli_integrations = parsed
+                    .as_ref()
+                    .ok()
+                    .and_then(|v| v.get("cliIntegrations"))
+                    .and_then(|ci| serde_json::from_value::<CliIntegrations>(ci.clone()).ok())
+                    .unwrap_or_default();
+                (provider, general, cli_integrations)
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                (ProviderPreferences::default(), GeneralPreferences::default())
+                (
+                    ProviderPreferences::default(),
+                    GeneralPreferences::default(),
+                    CliIntegrations::default(),
+                )
             }
             Err(error) => {
                 return Err(PreferencesError::Persistence {
@@ -262,6 +275,7 @@ impl PreferencesStore {
             path,
             provider_snapshot: Mutex::new(provider),
             general_snapshot: Mutex::new(general),
+            cli_integrations_snapshot: Mutex::new(cli_integrations),
             replace_file,
         })
     }
@@ -280,6 +294,13 @@ impl PreferencesStore {
             .clone()
     }
 
+    pub fn cli_integrations_snapshot(&self) -> CliIntegrations {
+        self.cli_integrations_snapshot
+            .lock()
+            .expect("cli integrations snapshot lock poisoned")
+            .clone()
+    }
+
     pub fn update(
         &self,
         preferences: ProviderPreferences,
@@ -293,6 +314,11 @@ impl PreferencesStore {
             .general_snapshot
             .lock()
             .expect("general preferences snapshot lock poisoned")
+            .clone();
+        let cli_integrations = self
+            .cli_integrations_snapshot
+            .lock()
+            .expect("cli integrations snapshot lock poisoned")
             .clone();
         let parent = self
             .path
@@ -309,6 +335,7 @@ impl PreferencesStore {
             claude: preferences.claude.clone(),
             gemini: preferences.gemini.clone(),
             general,
+            cli_integrations,
         };
         let bytes = serde_json::to_vec_pretty(&persisted).map_err(|error| {
             PreferencesError::Persistence {
@@ -340,14 +367,19 @@ impl PreferencesStore {
         general: GeneralPreferences,
     ) -> Result<GeneralPreferences, PreferencesError> {
         let general = general.normalized()?;
-        let mut general_snapshot = self
-            .general_snapshot
-            .lock()
-            .expect("general preferences snapshot lock poisoned");
         let provider = self
             .provider_snapshot
             .lock()
             .expect("preferences snapshot lock poisoned")
+            .clone();
+        let mut general_snapshot = self
+            .general_snapshot
+            .lock()
+            .expect("general preferences snapshot lock poisoned");
+        let cli_integrations = self
+            .cli_integrations_snapshot
+            .lock()
+            .expect("cli integrations snapshot lock poisoned")
             .clone();
         let parent = self
             .path
@@ -364,6 +396,7 @@ impl PreferencesStore {
             claude: provider.claude,
             gemini: provider.gemini,
             general: general.clone(),
+            cli_integrations,
         };
         let bytes = serde_json::to_vec_pretty(&persisted).map_err(|error| {
             PreferencesError::Persistence {
@@ -388,6 +421,66 @@ impl PreferencesStore {
         }
         *general_snapshot = general.clone();
         Ok(general)
+    }
+
+    pub fn update_cli_integrations(
+        &self,
+        value: CliIntegrations,
+    ) -> Result<CliIntegrations, PreferencesError> {
+        let provider = self
+            .provider_snapshot
+            .lock()
+            .expect("preferences snapshot lock poisoned")
+            .clone();
+        let general = self
+            .general_snapshot
+            .lock()
+            .expect("general preferences snapshot lock poisoned")
+            .clone();
+        let mut cli_snapshot = self
+            .cli_integrations_snapshot
+            .lock()
+            .expect("cli integrations snapshot lock poisoned");
+        let parent = self
+            .path
+            .parent()
+            .ok_or_else(|| PreferencesError::Persistence {
+                detail: "preferences path has no parent directory".to_string(),
+            })?;
+        fs::create_dir_all(parent).map_err(|error| PreferencesError::Persistence {
+            detail: format!("failed to create app data: {error}"),
+        })?;
+        let temp_path = parent.join(format!(".preferences-{}.tmp", uuid::Uuid::new_v4()));
+        let persisted = PersistedPreferences {
+            codex: provider.codex,
+            claude: provider.claude,
+            gemini: provider.gemini,
+            general,
+            cli_integrations: value.clone(),
+        };
+        let bytes = serde_json::to_vec_pretty(&persisted).map_err(|error| {
+            PreferencesError::Persistence {
+                detail: format!("failed to serialize preferences: {error}"),
+            }
+        })?;
+        let mut temp =
+            fs::File::create(&temp_path).map_err(|error| PreferencesError::Persistence {
+                detail: format!("failed to create preferences temp file: {error}"),
+            })?;
+        if let Err(error) = temp.write_all(&bytes).and_then(|_| temp.sync_all()) {
+            fs::remove_file(&temp_path).ok();
+            return Err(PreferencesError::Persistence {
+                detail: format!("failed to write preferences: {error}"),
+            });
+        }
+        if let Err(error) = (self.replace_file)(&temp_path, &self.path) {
+            fs::remove_file(&temp_path).ok();
+            return Err(PreferencesError::Persistence {
+                detail: format!("failed to replace preferences: {error}"),
+            });
+        }
+        *cli_snapshot = value.clone();
+        Ok(value)
     }
 }
 
@@ -909,6 +1002,81 @@ mod tests {
 
         let reopened = PreferencesStore::open(&path).unwrap();
         assert_eq!(reopened.general_snapshot(), GeneralPreferences::default());
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    // --- CliIntegrations tests ---
+
+    #[test]
+    fn cli_integrations_defaults_are_fixed() {
+        let integrations = CliIntegrations::default();
+
+        assert!(integrations.codex.enabled);
+        assert!(integrations.claude.enabled);
+        assert!(integrations.gemini.enabled);
+    }
+
+    #[test]
+    fn cli_integrations_persists_and_reads_back() {
+        let path = temp_file();
+        let store = PreferencesStore::open(&path).unwrap();
+
+        let mut integrations = store.cli_integrations_snapshot();
+        assert!(integrations.codex.enabled);
+        integrations.codex.enabled = false;
+        integrations.claude.enabled = false;
+
+        let saved = store.update_cli_integrations(integrations.clone()).unwrap();
+
+        assert!(!saved.codex.enabled);
+        assert!(!saved.claude.enabled);
+        assert_eq!(store.cli_integrations_snapshot(), saved);
+
+        let reopened = PreferencesStore::open(&path).unwrap();
+        let reloaded = reopened.cli_integrations_snapshot();
+        assert!(!reloaded.codex.enabled);
+        assert!(!reloaded.claude.enabled);
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn cli_integrations_survives_provider_and_general_updates() {
+        let path = temp_file();
+        let store = PreferencesStore::open(&path).unwrap();
+
+        let mut integrations = store.cli_integrations_snapshot();
+        integrations.gemini.enabled = false;
+        store.update_cli_integrations(integrations).unwrap();
+
+        let mut provider = store.snapshot();
+        provider.codex.model = "changed".to_string();
+        store.update(provider).unwrap();
+
+        let general = GeneralPreferences { language: "ru".to_string(), ..Default::default() };
+        store.update_general(general).unwrap();
+
+        let integrations = store.cli_integrations_snapshot();
+        assert!(!integrations.gemini.enabled);
+
+        let reopened = PreferencesStore::open(&path).unwrap();
+        assert!(!reopened.cli_integrations_snapshot().gemini.enabled);
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn old_preferences_file_without_cli_integrations_uses_defaults() {
+        let path = temp_file();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"codex": {"model": "old-model", "reasoning": "low"}, "claude": {"model": "haiku", "reasoning": "low"}, "gemini": {"model": "gemini-3-flash-preview", "reasoning": "none"}}"#,
+        )
+        .unwrap();
+
+        let store = PreferencesStore::open(&path).unwrap();
+
+        assert_eq!(store.snapshot().codex.model, "old-model");
+        assert_eq!(store.cli_integrations_snapshot(), CliIntegrations::default());
         std::fs::remove_dir_all(path.parent().unwrap()).ok();
     }
 }

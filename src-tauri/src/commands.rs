@@ -13,6 +13,9 @@ use tauri::State;
 use tokio_util::sync::CancellationToken;
 
 use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult, AssistantId};
+use crate::adapters::binary::SystemBinaryResolver;
+use crate::adapters::environment::SystemEnvironmentProvider;
+use crate::cli_integrations::{CliDetector, CliIntegration, CliIntegrations};
 use crate::preferences::{GeneralPreferences, PreferencesError, PreferencesStore, ProviderPreferences};
 use crate::routing::{
     execute_route_with_preferences, retry_result, ProviderRunOutcome, RetryRequest, RouteRequest,
@@ -22,6 +25,7 @@ use crate::storage::{Message, NewMessage, Session, StorageError, Store};
 
 pub struct AppState {
     registry: AdapterRegistry,
+    detector: CliDetector,
     active_runs: Mutex<HashMap<String, CancellationToken>>,
     next_run: AtomicU64,
 }
@@ -30,6 +34,10 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             registry: AdapterRegistry::with_default_adapters(),
+            detector: CliDetector::new(
+                std::sync::Arc::new(SystemBinaryResolver::new()),
+                std::sync::Arc::new(SystemEnvironmentProvider::new()),
+            ),
             active_runs: Mutex::new(HashMap::new()),
             next_run: AtomicU64::new(1),
         }
@@ -326,6 +334,34 @@ pub fn open_external(url: String) -> Result<(), crate::links::OpenError> {
     crate::links::open_external(&url)
 }
 
+/// Detect installed CLIs concurrently and return their statuses.
+/// Results are not persisted — the front-end is responsible for merging
+/// detection results with existing enabled flags and calling
+/// `update_cli_integrations`.
+#[tauri::command]
+pub async fn detect_clis(state: State<'_, AppState>) -> Result<Vec<CliIntegration>, String> {
+    let results = state.detector.detect_all().await;
+    Ok(results)
+}
+
+/// Return the in-memory CLI integrations snapshot (enabled flags + last known
+/// statuses).
+#[tauri::command]
+pub fn get_cli_integrations(
+    preferences: State<'_, PreferencesStore>,
+) -> Result<CliIntegrations, String> {
+    Ok(preferences.cli_integrations_snapshot())
+}
+
+/// Persist and immediately activate CLI integration toggles.
+#[tauri::command]
+pub fn update_cli_integrations(
+    preferences: State<'_, PreferencesStore>,
+    value: CliIntegrations,
+) -> Result<CliIntegrations, PreferencesError> {
+    preferences.update_cli_integrations(value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,6 +432,10 @@ mod tests {
         registry.register(adapter);
         AppState {
             registry,
+            detector: CliDetector::new(
+                std::sync::Arc::new(SystemBinaryResolver::new()),
+                std::sync::Arc::new(SystemEnvironmentProvider::new()),
+            ),
             active_runs: Default::default(),
             next_run: AtomicU64::new(1),
         }

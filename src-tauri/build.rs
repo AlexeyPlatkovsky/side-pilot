@@ -19,6 +19,9 @@ fn main() {
             "clear_session",
             "update_codex_session_id",
             "open_external",
+            "detect_clis",
+            "get_cli_integrations",
+            "update_cli_integrations",
         ]),
     ))
     .expect("failed to run Tauri build script");

@@ -9,6 +9,7 @@
 use tauri::Manager;
 
 pub mod adapters;
+pub mod cli_integrations;
 pub mod commands;
 pub mod links;
 pub mod preferences;
@@ -59,7 +60,10 @@ pub fn run() {
             commands::delete_session,
             commands::clear_session,
             commands::update_codex_session_id,
-            commands::open_external
+            commands::open_external,
+            commands::detect_clis,
+            commands::get_cli_integrations,
+            commands::update_cli_integrations
         ])
         .run(tauri::generate_context!())
         .expect("error while running side-pilot");

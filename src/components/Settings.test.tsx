@@ -3,6 +3,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Settings } from "./Settings";
 import type { ChatApi } from "../chat/api";
+import type { CliIntegrations } from "../chat/generated/CliIntegrations";
+
+function cliIntegrationsDefault(): CliIntegrations {
+  return {
+    codex: { assistant: "codex", enabled: true, detectedStatus: "notDetected" },
+    claude: { assistant: "claude", enabled: true, detectedStatus: "notDetected" },
+    gemini: { assistant: "gemini", enabled: true, detectedStatus: "notDetected" },
+  };
+}
 
 const ALL_SECTIONS = [
   "API Keys",
@@ -38,6 +47,9 @@ function mockChatApi(overrides: Partial<ChatApi> = {}): ChatApi {
     clearSession: vi.fn(),
     updateCodexSessionId: vi.fn(),
     openExternal: vi.fn(),
+    detectClis: vi.fn().mockResolvedValue([]),
+    getCliIntegrations: vi.fn().mockResolvedValue(cliIntegrationsDefault()),
+    updateCliIntegrations: vi.fn().mockImplementation((v) => Promise.resolve(v)),
     ...overrides,
   };
 }

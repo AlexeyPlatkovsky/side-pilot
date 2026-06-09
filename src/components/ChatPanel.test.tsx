@@ -120,6 +120,9 @@ function makeApi(
     ),
     updateCodexSessionId: vi.fn(() => Promise.resolve()),
     openExternal: vi.fn(() => Promise.resolve()),
+    detectClis: vi.fn(() => Promise.resolve([])),
+    getCliIntegrations: vi.fn(() => Promise.reject(new Error("unused"))),
+    updateCliIntegrations: vi.fn(() => Promise.reject(new Error("unused"))),
   };
 }
 
