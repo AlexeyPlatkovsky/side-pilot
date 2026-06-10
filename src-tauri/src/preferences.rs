@@ -301,25 +301,14 @@ impl PreferencesStore {
             .clone()
     }
 
-    pub fn update(
+    /// Atomically write all preference fields to disk.
+    /// Acquires no locks — callers must pass already-cloned values.
+    fn persist_all(
         &self,
-        preferences: ProviderPreferences,
-    ) -> Result<ProviderPreferences, PreferencesError> {
-        let preferences = preferences.normalized()?;
-        let mut provider_snapshot = self
-            .provider_snapshot
-            .lock()
-            .expect("preferences snapshot lock poisoned");
-        let general = self
-            .general_snapshot
-            .lock()
-            .expect("general preferences snapshot lock poisoned")
-            .clone();
-        let cli_integrations = self
-            .cli_integrations_snapshot
-            .lock()
-            .expect("cli integrations snapshot lock poisoned")
-            .clone();
+        provider: &ProviderPreferences,
+        general: &GeneralPreferences,
+        cli_integrations: &CliIntegrations,
+    ) -> Result<(), PreferencesError> {
         let parent = self
             .path
             .parent()
@@ -331,11 +320,11 @@ impl PreferencesStore {
         })?;
         let temp_path = parent.join(format!(".preferences-{}.tmp", uuid::Uuid::new_v4()));
         let persisted = PersistedPreferences {
-            codex: preferences.codex.clone(),
-            claude: preferences.claude.clone(),
-            gemini: preferences.gemini.clone(),
-            general,
-            cli_integrations,
+            codex: provider.codex.clone(),
+            claude: provider.claude.clone(),
+            gemini: provider.gemini.clone(),
+            general: general.clone(),
+            cli_integrations: cli_integrations.clone(),
         };
         let bytes = serde_json::to_vec_pretty(&persisted).map_err(|error| {
             PreferencesError::Persistence {
@@ -358,6 +347,29 @@ impl PreferencesStore {
                 detail: format!("failed to replace preferences: {error}"),
             });
         }
+        Ok(())
+    }
+
+    pub fn update(
+        &self,
+        preferences: ProviderPreferences,
+    ) -> Result<ProviderPreferences, PreferencesError> {
+        let preferences = preferences.normalized()?;
+        let mut provider_snapshot = self
+            .provider_snapshot
+            .lock()
+            .expect("preferences snapshot lock poisoned");
+        let general = self
+            .general_snapshot
+            .lock()
+            .expect("general preferences snapshot lock poisoned")
+            .clone();
+        let cli_integrations = self
+            .cli_integrations_snapshot
+            .lock()
+            .expect("cli integrations snapshot lock poisoned")
+            .clone();
+        self.persist_all(&preferences, &general, &cli_integrations)?;
         *provider_snapshot = preferences.clone();
         Ok(preferences)
     }
@@ -381,44 +393,7 @@ impl PreferencesStore {
             .lock()
             .expect("cli integrations snapshot lock poisoned")
             .clone();
-        let parent = self
-            .path
-            .parent()
-            .ok_or_else(|| PreferencesError::Persistence {
-                detail: "preferences path has no parent directory".to_string(),
-            })?;
-        fs::create_dir_all(parent).map_err(|error| PreferencesError::Persistence {
-            detail: format!("failed to create app data: {error}"),
-        })?;
-        let temp_path = parent.join(format!(".preferences-{}.tmp", uuid::Uuid::new_v4()));
-        let persisted = PersistedPreferences {
-            codex: provider.codex,
-            claude: provider.claude,
-            gemini: provider.gemini,
-            general: general.clone(),
-            cli_integrations,
-        };
-        let bytes = serde_json::to_vec_pretty(&persisted).map_err(|error| {
-            PreferencesError::Persistence {
-                detail: format!("failed to serialize preferences: {error}"),
-            }
-        })?;
-        let mut temp =
-            fs::File::create(&temp_path).map_err(|error| PreferencesError::Persistence {
-                detail: format!("failed to create preferences temp file: {error}"),
-            })?;
-        if let Err(error) = temp.write_all(&bytes).and_then(|_| temp.sync_all()) {
-            fs::remove_file(&temp_path).ok();
-            return Err(PreferencesError::Persistence {
-                detail: format!("failed to write preferences: {error}"),
-            });
-        }
-        if let Err(error) = (self.replace_file)(&temp_path, &self.path) {
-            fs::remove_file(&temp_path).ok();
-            return Err(PreferencesError::Persistence {
-                detail: format!("failed to replace preferences: {error}"),
-            });
-        }
+        self.persist_all(&provider, &general, &cli_integrations)?;
         *general_snapshot = general.clone();
         Ok(general)
     }
@@ -441,44 +416,7 @@ impl PreferencesStore {
             .cli_integrations_snapshot
             .lock()
             .expect("cli integrations snapshot lock poisoned");
-        let parent = self
-            .path
-            .parent()
-            .ok_or_else(|| PreferencesError::Persistence {
-                detail: "preferences path has no parent directory".to_string(),
-            })?;
-        fs::create_dir_all(parent).map_err(|error| PreferencesError::Persistence {
-            detail: format!("failed to create app data: {error}"),
-        })?;
-        let temp_path = parent.join(format!(".preferences-{}.tmp", uuid::Uuid::new_v4()));
-        let persisted = PersistedPreferences {
-            codex: provider.codex,
-            claude: provider.claude,
-            gemini: provider.gemini,
-            general,
-            cli_integrations: value.clone(),
-        };
-        let bytes = serde_json::to_vec_pretty(&persisted).map_err(|error| {
-            PreferencesError::Persistence {
-                detail: format!("failed to serialize preferences: {error}"),
-            }
-        })?;
-        let mut temp =
-            fs::File::create(&temp_path).map_err(|error| PreferencesError::Persistence {
-                detail: format!("failed to create preferences temp file: {error}"),
-            })?;
-        if let Err(error) = temp.write_all(&bytes).and_then(|_| temp.sync_all()) {
-            fs::remove_file(&temp_path).ok();
-            return Err(PreferencesError::Persistence {
-                detail: format!("failed to write preferences: {error}"),
-            });
-        }
-        if let Err(error) = (self.replace_file)(&temp_path, &self.path) {
-            fs::remove_file(&temp_path).ok();
-            return Err(PreferencesError::Persistence {
-                detail: format!("failed to replace preferences: {error}"),
-            });
-        }
+        self.persist_all(&provider, &general, &value)?;
         *cli_snapshot = value.clone();
         Ok(value)
     }

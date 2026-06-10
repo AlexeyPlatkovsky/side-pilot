@@ -83,9 +83,26 @@ Status outcomes: `Available` (binary found + auth confirmed), `NotInstalled`
 `NotDetected` (detection command failed, timed out, or returned unparseable
 output).
 
+Codex auth parsing (`parse_codex_auth`) tries structured JSON first on stdout (`{"loggedIn": bool}`) for
+forward compatibility, then falls back to case-insensitive text substring matching on the combined
+stdout + stderr output. The combined-stream approach is required because `codex login status` writes
+its status line (e.g. `"Logged in using ChatGPT"`) to **stderr** with an empty stdout. Negative
+patterns are checked before positive ones (`"not logged in"` before `"logged in"`) to prevent
+false-positive `Available` results from substrings embedded in error phrases.
+
 Detection results update the in-memory `CliIntegrations` snapshot in
 `PreferencesStore`; enable/disable toggles persist alongside provider and general
 preferences in `preferences.json`.
+
+### Route Planning and `active_providers`
+
+`plan_targets(route, active_providers)` in `routing/mod.rs` converts a client-supplied
+`Route` into the concrete list of `AssistantId` targets. For `Route::All` it deduplicates
+and preserves insertion order from `active_providers`. For `Route::Single { provider }` it
+also respects `active_providers`: if the list is non-empty and does not contain `provider`,
+`plan_targets` returns an empty list so that a provider the user has disabled is never
+dispatched — even when the client explicitly names it. An empty `active_providers` bypasses
+the filter (legacy call sites, tests).
 
 The route path resumes each provider's own native CLI session across turns
 (SP-011). Before dispatch it reads the `native_session_id` previously recorded

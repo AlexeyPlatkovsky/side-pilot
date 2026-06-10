@@ -162,7 +162,7 @@ export function useChat(api: ChatApi, enabled = true, locale: Locale = "en") {
       // which the user may switch to another chat; the late reply must land in
       // (and only re-render) its originating chat, never whichever is now active.
       const originId = session.id;
-      const targets = routeTargets(route);
+      const targets = routeTargets(route, activeProviders);
 
       const userMessage: ChatMessage = {
         id: newId(),

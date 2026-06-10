@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CliIntegrationsSettings } from "./CliIntegrationsSettings";
 import type { ChatApi } from "../chat/api";
-import type { CliIntegrations } from "../chat/generated/CliIntegrations";
 import type { CliIntegration } from "../chat/generated/CliIntegration";
+import type { CliIntegrations } from "../chat/generated/CliIntegrations";
 
 function cliIntegrationsDefault(): CliIntegrations {
   return {
@@ -75,7 +75,6 @@ describe("CliIntegrationsSettings", () => {
     });
 
     expect(api.getCliIntegrations).toHaveBeenCalled();
-    expect(api.detectClis).toHaveBeenCalled();
   });
 
   it("shows loading state with all three CLIs and Detecting status", () => {
@@ -136,16 +135,13 @@ describe("CliIntegrationsSettings", () => {
 
   it("re-checks a CLI and updates status", async () => {
     const api = buildApi({
-      detectClis: vi
-        .fn()
-        .mockResolvedValueOnce(detectedAll()) // mount
-        .mockResolvedValueOnce([
-          {
-            assistant: "claude",
-            enabled: true,
-            detectedStatus: "available",
-          },
-        ]), // re-check
+      detectClis: vi.fn().mockResolvedValueOnce([
+        {
+          assistant: "claude",
+          enabled: true,
+          detectedStatus: "available",
+        },
+      ]), // re-check only
     });
     render(<CliIntegrationsSettings api={api} />);
 
@@ -154,7 +150,7 @@ describe("CliIntegrationsSettings", () => {
     });
 
     const recheckButtons = screen.getAllByText("Re-check");
-    await userEvent.click(recheckButtons[0]); // Claude re-check
+    await userEvent.click(recheckButtons[1]); // Claude re-check
 
     await waitFor(() => {
       expect(api.updateCliIntegrations).toHaveBeenCalled();
@@ -163,16 +159,13 @@ describe("CliIntegrationsSettings", () => {
 
   it("preserves user disable on re-check", async () => {
     const api = buildApi({
-      detectClis: vi
-        .fn()
-        .mockResolvedValueOnce(detectedAll()) // mount
-        .mockResolvedValueOnce([
-          {
-            assistant: "codex",
-            enabled: true,
-            detectedStatus: "available",
-          },
-        ]), // re-check
+      detectClis: vi.fn().mockResolvedValueOnce([
+        {
+          assistant: "codex",
+          enabled: true,
+          detectedStatus: "available",
+        },
+      ]), // re-check only
     });
     render(<CliIntegrationsSettings api={api} />);
 
@@ -184,9 +177,9 @@ describe("CliIntegrationsSettings", () => {
     const checkboxes = screen.getAllByRole("checkbox");
     await userEvent.click(checkboxes[0]);
 
-    // Then re-check
+    // Then re-check Codex
     const recheckButtons = screen.getAllByText("Re-check");
-    await userEvent.click(recheckButtons[0]);
+    await userEvent.click(recheckButtons[0]); // Codex
 
     await waitFor(() => {
       const calls = (api.updateCliIntegrations as ReturnType<typeof vi.fn>).mock
@@ -194,6 +187,60 @@ describe("CliIntegrationsSettings", () => {
       // The last call should have codex still disabled
       const lastCall = calls[calls.length - 1][0] as CliIntegrations;
       expect(lastCall.codex.enabled).toBe(false);
+    });
+  });
+
+  it("handleRecheck uses the state from after an in-flight toggle (no stale closure)", async () => {
+    // This test verifies Fix #3: the stale closure bug where handleRecheck
+    // would read loadState from the creation-time closure (before a toggle)
+    // rather than the state at the time it resumes after await.
+    //
+    // Scenario: gemini is available+disabled. Re-check starts on codex (slow).
+    // User enables gemini while detection is in-flight. Detection resolves.
+    // The final persist call must include gemini.enabled=true (post-toggle), not
+    // the stale pre-toggle false.
+    let resolveDetect!: (results: import("../chat/generated/CliIntegration").CliIntegration[]) => void;
+    const api = buildApi({
+      getCliIntegrations: vi.fn().mockResolvedValue({
+        codex: { assistant: "codex", enabled: true, detectedStatus: "available" },
+        claude: { assistant: "claude", enabled: false, detectedStatus: "notInstalled" },
+        gemini: { assistant: "gemini", enabled: false, detectedStatus: "available" },
+      }),
+      detectClis: vi.fn().mockReturnValue(
+        new Promise<import("../chat/generated/CliIntegration").CliIntegration[]>(
+          (resolve) => { resolveDetect = resolve; },
+        ),
+      ),
+    });
+    render(<CliIntegrationsSettings api={api} />);
+
+    // Wait for initial load.
+    await screen.findByText("Codex");
+
+    // Start slow re-check on Codex. Codex toggle is now disabled (detecting).
+    const recheckButtons = screen.getAllByText("Re-check");
+    const codexRow = recheckButtons[0];
+    await userEvent.click(codexRow);
+
+    // While detection is in-flight, enable Gemini (its checkbox is still clickable).
+    const checkboxes = screen.getAllByRole("checkbox");
+    // gemini is the 3rd row; its toggle is enabled (available + not in detecting set)
+    await userEvent.click(checkboxes[2]);
+
+    // Resolve detection — codex is available.
+    await act(async () => {
+      resolveDetect([
+        { assistant: "codex", enabled: true, detectedStatus: "available" },
+      ]);
+      await Promise.resolve();
+    });
+
+    // The last persist call from the re-check must reflect the gemini toggle.
+    await waitFor(() => {
+      const calls = (api.updateCliIntegrations as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = calls[calls.length - 1][0] as CliIntegrations;
+      expect(lastCall.gemini.enabled).toBe(true);
+      expect(lastCall.codex.detectedStatus).toBe("available");
     });
   });
 

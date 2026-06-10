@@ -7,6 +7,7 @@ import { ChatPanel } from "./ChatPanel";
 import { useChat } from "../chat/useChat";
 import { Settings } from "./Settings";
 import { inertChatApi, type ChatApi } from "../chat/api";
+import { mergeDetection } from "../chat/cliIntegrationsUtils";
 import type { ActiveRoute } from "../chat/providers";
 import type { Locale } from "../i18n/types";
 import { useI18n } from "../i18n/useI18n";
@@ -52,6 +53,20 @@ export function Bubble({
   const chat = useChat(chatApi, true, locale);
   const moveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedPos = useRef<{ x: number; y: number } | null>(null);
+
+  // Run CLI detection at startup and persist the results (SP-038).
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([chatApi.getCliIntegrations(), chatApi.detectClis()])
+      .then(([persisted, detected]) => {
+        if (cancelled) return;
+        chatApi.updateCliIntegrations(mergeDetection(persisted, detected)).catch(() => {});
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [chatApi]);
 
   // The collapsed dot and the panel mark are both window-drag handles and click
   // targets; this shared hook tells a click apart from a drag so dragging the
@@ -112,7 +127,7 @@ export function Bubble({
   useEffect(() => {
     const api = chatApi;
     if (api === inertChatApi) return;
-    if (typeof (window as any).__TAURI_INTERNALS__ === "undefined") return;
+    if (typeof (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ === "undefined") return;
     let cancelled = false;
     let unlistenFn: (() => void) | null = null;
 
@@ -132,11 +147,11 @@ export function Bubble({
       lastSavedPos.current = pos;
       if (moveTimer.current) clearTimeout(moveTimer.current);
       moveTimer.current = setTimeout(() => {
-        if (!cancelled) savePosition();
+        if (!cancelled) void savePosition();
       }, 1000);
     };
 
-    getCurrentWindow()
+    void getCurrentWindow()
       .onMoved((event) => {
         if (!cancelled) scheduleSave({ x: event.payload.x, y: event.payload.y });
       })

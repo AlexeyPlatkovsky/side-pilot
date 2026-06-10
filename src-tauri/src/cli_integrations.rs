@@ -165,12 +165,9 @@ impl CliDetector {
     }
 
     async fn detect_with_auth(&self, id: AssistantId, auth_cmd: &str) -> CliDetectionStatus {
-        let binary = match self.resolver.resolve(id).await {
-            Ok(path) => path,
-            Err(_) => return CliDetectionStatus::NotInstalled,
-        };
-
-        let _ = binary; // binary presence confirmed, now check auth
+        if self.resolver.resolve(id).await.is_err() {
+            return CliDetectionStatus::NotInstalled;
+        }
 
         let run_shell = Arc::clone(&self.run_shell);
         let cmd = auth_cmd.to_string();
@@ -192,7 +189,23 @@ impl CliDetector {
         if outcome.exit_code != Some(0) {
             return CliDetectionStatus::NotDetected;
         }
-        let lower = outcome.stdout.to_lowercase();
+        // Try structured JSON first on stdout (forward-compat: same shape as claude auth status).
+        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&outcome.stdout) {
+            if let Some(logged_in) = value.get("loggedIn").and_then(|v| v.as_bool()) {
+                return if logged_in {
+                    CliDetectionStatus::Available
+                } else {
+                    CliDetectionStatus::NotAuthenticated
+                };
+            }
+        }
+        // Fall back to text matching on combined stdout + stderr.
+        // `codex login status` writes its status line to stderr (stdout is empty);
+        // checking both streams makes the match stream-agnostic. Negative patterns
+        // are checked before positive to avoid "not authenticated" matching the
+        // trailing "authenticated" substring.
+        let combined = format!("{}\n{}", outcome.stdout, outcome.stderr);
+        let lower = combined.to_lowercase();
         if lower.contains("not logged in")
             || lower.contains("not authenticated")
             || lower.contains("login required")
@@ -225,52 +238,43 @@ fn system_run_detection_command(
     timeout: Duration,
 ) -> std::io::Result<DetectionRunOutcome> {
     #[cfg(windows)]
-    {
-        let child = std::process::Command::new("cmd")
-            .args(["/C", command])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
-
-        match wait_with_timeout(child, timeout) {
-            Ok(output) => Ok(DetectionRunOutcome {
-                exit_code: output.status.code(),
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            }),
-            Err(e) => Err(e),
-        }
-    }
+    let (shell, args): (&str, &[&str]) = ("cmd", &["/C", command]);
 
     #[cfg(not(windows))]
-    {
-        let child = std::process::Command::new("/bin/zsh")
-            .args(["-lc", command])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
+    let (shell, args): (&str, &[&str]) = ("/bin/zsh", &["-lc", command]);
 
-        match wait_with_timeout(child, timeout) {
-            Ok(output) => Ok(DetectionRunOutcome {
-                exit_code: output.status.code(),
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            }),
-            Err(e) => Err(e),
-        }
-    }
+    let child = std::process::Command::new(shell)
+        .args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+
+    wait_with_timeout(child, timeout)
 }
 
 fn wait_with_timeout(
     mut child: std::process::Child,
     timeout: Duration,
-) -> std::io::Result<std::process::Output> {
+) -> std::io::Result<DetectionRunOutcome> {
+    use std::io::Read;
+
     let start = std::time::Instant::now();
     loop {
         match child.try_wait()? {
-            Some(_status) => {
-                let output = child.wait_with_output()?;
-                return Ok(output);
+            Some(exit_status) => {
+                let mut stdout = Vec::new();
+                let mut stderr = Vec::new();
+                if let Some(mut out) = child.stdout.take() {
+                    out.read_to_end(&mut stdout)?;
+                }
+                if let Some(mut err) = child.stderr.take() {
+                    err.read_to_end(&mut stderr)?;
+                }
+                return Ok(DetectionRunOutcome {
+                    exit_code: exit_status.code(),
+                    stdout: String::from_utf8_lossy(&stdout).into_owned(),
+                    stderr: String::from_utf8_lossy(&stderr).into_owned(),
+                });
             }
             None => {
                 if start.elapsed() >= timeout {
@@ -327,6 +331,21 @@ mod tests {
                 exit_code,
                 stdout: stdout.clone(),
                 stderr: String::new(),
+            })
+        })
+    }
+
+    /// Like `shell_runner` but puts content on stderr and leaves stdout empty —
+    /// exactly how `codex login status` behaves in practice.
+    fn shell_runner_stderr(
+        exit_code: Option<i32>,
+        stderr: String,
+    ) -> DetectShellFn {
+        Arc::new(move |_cmd, _timeout| {
+            Ok(DetectionRunOutcome {
+                exit_code,
+                stdout: String::new(),
+                stderr: stderr.clone(),
             })
         })
     }
@@ -436,6 +455,62 @@ mod tests {
         );
         let result = detector.detect_single(AssistantId::Claude).await;
         assert_eq!(result.detected_status, CliDetectionStatus::NotDetected);
+    }
+
+    // --- Codex stderr tests (actual codex CLI writes to stderr, not stdout) ---
+
+    #[tokio::test]
+    async fn codex_available_when_logged_in_message_on_stderr() {
+        // `codex login status` writes "Logged in using ChatGPT" to stderr; stdout is empty.
+        let detector = detector_with_resolver(
+            mock_binary_found(),
+            shell_runner_stderr(Some(0), "Logged in using ChatGPT".to_string()),
+        );
+        let result = detector.detect_single(AssistantId::Codex).await;
+        assert_eq!(result.detected_status, CliDetectionStatus::Available);
+    }
+
+    #[tokio::test]
+    async fn codex_not_authenticated_when_not_logged_in_message_on_stderr() {
+        let detector = detector_with_resolver(
+            mock_binary_found(),
+            shell_runner_stderr(Some(0), "Not logged in. Run 'codex login' first.".to_string()),
+        );
+        let result = detector.detect_single(AssistantId::Codex).await;
+        assert_eq!(result.detected_status, CliDetectionStatus::NotAuthenticated);
+    }
+
+    // --- Codex JSON-format tests (parse_codex_auth json-first path) ---
+
+    #[tokio::test]
+    async fn codex_available_when_json_logged_in_true() {
+        let detector = detector_with_resolver(
+            mock_binary_found(),
+            shell_runner(Some(0), r#"{"loggedIn":true}"#.to_string()),
+        );
+        let result = detector.detect_single(AssistantId::Codex).await;
+        assert_eq!(result.detected_status, CliDetectionStatus::Available);
+    }
+
+    #[tokio::test]
+    async fn codex_not_authenticated_when_json_logged_in_false() {
+        let detector = detector_with_resolver(
+            mock_binary_found(),
+            shell_runner(Some(0), r#"{"loggedIn":false}"#.to_string()),
+        );
+        let result = detector.detect_single(AssistantId::Codex).await;
+        assert_eq!(result.detected_status, CliDetectionStatus::NotAuthenticated);
+    }
+
+    #[tokio::test]
+    async fn codex_not_authenticated_when_output_contains_not_authenticated_substring() {
+        // Verifies the negative pattern wins over the embedded "authenticated" substring.
+        let detector = detector_with_resolver(
+            mock_binary_found(),
+            shell_runner(Some(0), "Not authenticated. Run codex login.".to_string()),
+        );
+        let result = detector.detect_single(AssistantId::Codex).await;
+        assert_eq!(result.detected_status, CliDetectionStatus::NotAuthenticated);
     }
 
     // --- Gemini tests ---

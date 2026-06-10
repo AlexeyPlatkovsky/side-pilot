@@ -46,7 +46,7 @@ App
 | Unread set | `useState` in `useChat` | `Set<sessionId>` |
 | Active routes | `useState` in `Bubble`, passed into `ChatPanel` | Session-id keyed `ActiveRoute` values (`{single, provider}` \| `{all}`); retained across collapse/reopen, each chat defaults to GPT |
 | Picker open | `useState` in `AiSwitcher` | `boolean` (rendered only while not in flight) |
-| Enabled providers | `useState` in `ChatPanel`, loaded from `getCliIntegrations()` | `AssistantId[] \| null` (filters AiSwitcher; null = loading, empty = all disabled → composer hidden) |
+| Enabled providers | `useState` in `ChatPanel`, loaded from `getCliIntegrations()` | `AssistantId[]` (initialised to `ALL_PROVIDER_IDS` so the loading window never blocks the composer; updated async; empty = all disabled → composer hidden) |
 
 ### Data Flow for Prompt Submission (SP-017 multi-provider route)
 
@@ -96,7 +96,9 @@ selection target invalidates the pending activation.
 | `src/components/Dialog.tsx` | Accessible modal dialog (focus trap, Escape) |
 | `src/components/RenameDialog.tsx` | Chat rename form inside Dialog |
 | `src/chat/api.ts` | `ChatApi` interface + Tauri IPC bridge (`tauriChatApi`) |
+| `src/chat/cliIntegrationsUtils.ts` | Shared `mergeDetection` + `findEntry` utilities for merging detection results into persisted integrations (SP-038) |
 | `src/chat/providers.ts` | Provider presentation and persisted model/reasoning badge labels |
+| `src/components/CliIntegrationsSettings.tsx` | CLI detection status display, enable/disable toggles, Re-check button (SP-038) |
 | `src/chat/history.ts` | Title generation, relative time, sorting, selection |
 | `src/state/bubbleState.ts` | Bubble visual state machine |
 | `src/state/chat.ts` | Chat transcript reducer (loaded/submit/success/error) |

@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { ChatApi } from "../chat/api";
 import type { CliIntegration } from "../chat/generated/CliIntegration";
 import type { CliIntegrations } from "../chat/generated/CliIntegrations";
 import type { CliDetectionStatus } from "../chat/generated/CliDetectionStatus";
 import type { AssistantId } from "../chat/generated/AssistantId";
+import { mergeDetection, findEntry } from "../chat/cliIntegrationsUtils";
 import { useI18n } from "../i18n/useI18n";
 import type { Locale } from "../i18n/types";
 
@@ -58,14 +59,21 @@ export function CliIntegrationsSettings({
   const [loadState, setLoadState] = useState<LoadState>({ kind: "loading" });
   const [detecting, setDetecting] = useState<Set<AssistantId>>(new Set());
 
+  // Always-fresh reference used by handleRecheck to avoid stale closures across
+  // async detection round-trips (up to 10 s).
+  const latestIntegrationsRef = useRef<CliIntegrations | null>(null);
+  useEffect(() => {
+    if (loadState.kind === "loaded") {
+      latestIntegrationsRef.current = loadState.integrations;
+    }
+  }, [loadState]);
+
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.getCliIntegrations(), api.detectClis()])
-      .then(([persisted, detected]) => {
-        if (cancelled) return;
-        const merged = mergeDetection(persisted, detected);
-        api.updateCliIntegrations(merged).catch(() => {});
-        setLoadState({ kind: "loaded", integrations: merged });
+    api
+      .getCliIntegrations()
+      .then((integrations) => {
+        if (!cancelled) setLoadState({ kind: "loaded", integrations });
       })
       .catch((err) => {
         if (!cancelled) setLoadState({ kind: "error", message: String(err) });
@@ -99,13 +107,14 @@ export function CliIntegrationsSettings({
 
   const handleRecheck = useCallback(
     async (assistant: AssistantId) => {
-      if (loadState.kind !== "loaded") return;
+      if (latestIntegrationsRef.current === null) return;
       setDetecting((prev) => new Set(prev).add(assistant));
       try {
         const results = await api.detectClis();
         const match = results.find((r) => r.assistant === assistant);
-        if (match) {
-          const next = mergeDetection(loadState.integrations, [match]);
+        // Read the ref after the await to get the latest state, not the stale closure.
+        if (match && latestIntegrationsRef.current !== null) {
+          const next = mergeDetection(latestIntegrationsRef.current, [match]);
           setLoadState({ kind: "loaded", integrations: next });
           await persist(next);
         }
@@ -117,7 +126,7 @@ export function CliIntegrationsSettings({
         });
       }
     },
-    [loadState, api, persist],
+    [api, persist],
   );
 
   const isLoaded = loadState.kind === "loaded";
@@ -161,7 +170,7 @@ export function CliIntegrationsSettings({
                 type="checkbox"
                 checked={isLoaded && item.enabled && isAvailable}
                 disabled={!isLoaded || !isAvailable || detecting.has(item.assistant)}
-                onChange={(e) => handleToggle(item.assistant, e.target.checked)}
+                onChange={(e) => void handleToggle(item.assistant, e.target.checked)}
               />
               <span />
             </label>
@@ -169,7 +178,7 @@ export function CliIntegrationsSettings({
             <button
               type="button"
               className="settings-btn cli-integration-row__recheck"
-              onClick={() => handleRecheck(item.assistant)}
+              onClick={() => void handleRecheck(item.assistant)}
               disabled={!isLoaded || detecting.has(item.assistant)}
             >
               {t("cli_recheck")}
@@ -192,30 +201,3 @@ function toggleIntegration(
   return next;
 }
 
-function mergeDetection(
-  persisted: CliIntegrations,
-  detected: CliIntegration[],
-): CliIntegrations {
-  const next = structuredClone(persisted);
-  for (const d of detected) {
-    const entry = findEntry(next, d.assistant);
-    if (entry) {
-      entry.detectedStatus = d.detectedStatus;
-    }
-  }
-  return next;
-}
-
-function findEntry(
-  integrations: CliIntegrations,
-  assistant: AssistantId,
-): CliIntegration | null {
-  switch (assistant) {
-    case "codex":
-      return integrations.codex;
-    case "claude":
-      return integrations.claude;
-    case "gemini":
-      return integrations.gemini;
-  }
-}

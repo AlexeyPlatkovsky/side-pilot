@@ -95,7 +95,9 @@ export function ChatPanel({
   const [railOpen, setRailOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [renamingActive, setRenamingActive] = useState(false);
-  const [enabledProviders, setEnabledProviders] = useState<AssistantId[] | null>(null);
+  // Initialise to all providers so submissions are never blocked during the async
+  // load. The effect below overwrites with the real persisted set immediately.
+  const [enabledProviders, setEnabledProviders] = useState<AssistantId[]>([...ALL_PROVIDER_IDS]);
   const isPending = state.status.kind === "pending";
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -217,8 +219,7 @@ export function ChatPanel({
     };
   }, [api]);
 
-  const allProvidersDisabled =
-    enabledProviders !== null && enabledProviders.length === 0;
+  const allProvidersDisabled = enabledProviders.length === 0;
 
   const resizeComposerInput = useCallback(() => {
     const el = inputRef.current;
@@ -246,7 +247,7 @@ export function ChatPanel({
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (isPending || !draft.trim()) return;
-    void submit(draft, route, enabledProviders ?? undefined);
+    void submit(draft, route, enabledProviders);
     setDraft("");
   };
 
@@ -255,7 +256,7 @@ export function ChatPanel({
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!isPending && draft.trim()) {
-        void submit(draft, route, enabledProviders ?? undefined);
+        void submit(draft, route, enabledProviders);
         setDraft("");
       }
     }
@@ -462,7 +463,7 @@ export function ChatPanel({
               disabled={isPending}
               onSelect={setActiveRoute}
               locale={locale}
-              enabledProviders={enabledProviders ?? undefined}
+              enabledProviders={enabledProviders}
             />
             <button
               type="submit"

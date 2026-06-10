@@ -32,7 +32,7 @@
      semantic tokens below. Alpha variants are derived with color-mix() so a
      single primitive change updates every tint built from it. */
   --ink: #312522;
-  --muted: #7a625b;
+  --muted: #b74f30;
   --honey: #f7b955;
   --coral: #dc6b4f;
   --sage: #6b8f83;
@@ -372,6 +372,64 @@ body {
   flex-direction: column;
   gap: var(--space-3);
   margin-top: var(--space-2);
+}
+
+/* --- CLI Integrations settings (SP-038) --- */
+
+.cli-integrations-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.cli-integration-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: nowrap;
+  min-height: 32px;
+  padding: var(--space-1) 0;
+}
+
+.cli-integration-row__name {
+  flex-shrink: 0;
+  width: 72px;
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+}
+
+.cli-status {
+  flex-shrink: 0;
+  width: 128px;
+  font-size: 0.875em;
+  white-space: nowrap;
+}
+
+.cli-status--available {
+  color: var(--color-accent);
+}
+
+.cli-status--not-installed {
+  color: var(--color-text-muted);
+}
+
+.cli-status--not-authenticated {
+  color: var(--color-unread);
+}
+
+.cli-status--not-detected {
+  color: var(--color-danger);
+}
+
+.cli-integration-row__toggle {
+  flex-shrink: 0;
+  margin: 0 var(--space-1);
+}
+
+.cli-integration-row__recheck {
+  flex-shrink: 0;
+  margin-left: 0;
 }
 
 .settings-toggle {

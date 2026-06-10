@@ -19,6 +19,7 @@ import type {
 } from "../chat/api";
 import type { AssistantId } from "../chat/generated/AssistantId";
 import type { AdapterError } from "../chat/generated/AdapterError";
+import type { CliIntegrations } from "../chat/generated/CliIntegrations";
 
 const SESSION: PersistedSession = {
   id: "s1",
@@ -1373,5 +1374,166 @@ describe("[smoke] ChatPanel", () => {
         prompt: "weather in Antalya",
       }),
     );
+  });
+
+  // SP-038 Scenario: disabled provider must not get a pending thinking slot in All mode
+  it("All mode with one provider disabled shows only the enabled thinking slots", async () => {
+    const user = userEvent.setup();
+    const codexDisabled: CliIntegrations = {
+      codex: { assistant: "codex", enabled: false, detectedStatus: "available" },
+      claude: { assistant: "claude", enabled: true, detectedStatus: "available" },
+      gemini: { assistant: "gemini", enabled: true, detectedStatus: "available" },
+    };
+    const api = makeApi({
+      runRoute: vi.fn(() => new Promise<RouteRunResult>(() => {})),
+    });
+    api.getCliIntegrations = vi.fn(() => Promise.resolve(codexDisabled));
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Open the switcher — this also acts as a synchronisation point ensuring
+    // getCliIntegrations has settled and enabledProviders has been updated.
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    // EP: disabled provider (codex / GPT) must be absent from the picker.
+    await waitFor(() =>
+      expect(screen.queryByRole("menuitemradio", { name: /GPT/i })).toBeNull(),
+    );
+
+    // Select All mode and submit.
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+    await send(user, "to all");
+
+    // EP: only the 2 enabled providers must get a Thinking slot — not 3.
+    const slots = await screen.findAllByTestId("thinking");
+    expect(slots).toHaveLength(2);
+    // Decision-table: display order preserved (PROVIDERS order, codex filtered out).
+    expect(slots.map((s) => s.dataset.provider)).toEqual(["claude", "gemini"]);
+  });
+
+  // SP-038 Scenario: Disable a CLI mid-chat
+  it("disabling a provider in CLI integrations removes it from the AI switcher but preserves existing messages", async () => {
+    const user = userEvent.setup();
+    const codexDisabled: CliIntegrations = {
+      codex: { assistant: "codex", enabled: false, detectedStatus: "available" },
+      claude: { assistant: "claude", enabled: true, detectedStatus: "available" },
+      gemini: { assistant: "gemini", enabled: true, detectedStatus: "available" },
+    };
+    const api = makeApi({
+      history: [
+        persisted({ sender: "user", content: "hello codex" }),
+        persisted({ sender: "assistant", content: "hi from codex", assistantId: "codex", seq: 2 }),
+      ],
+    });
+    api.getCliIntegrations = vi.fn(() => Promise.resolve(codexDisabled));
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    // Existing Codex messages must remain visible even though Codex is disabled.
+    expect(await screen.findByText("hi from codex")).toBeInTheDocument();
+
+    // Open the AI switcher and verify GPT (Codex) is not listed.
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    expect(screen.queryByRole("menuitemradio", { name: /GPT/i })).toBeNull();
+    expect(screen.getByRole("menuitemradio", { name: /Claude/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: /Gemini/i })).toBeInTheDocument();
+
+    // All mode must only dispatch to the two enabled providers.
+    await user.click(screen.getByRole("menuitemradio", { name: /^All/ }));
+    await user.type(screen.getByLabelText("Ask side-pilot"), "to all");
+    await user.click(screen.getByRole("button", { name: /^send/i }));
+
+    await waitFor(() =>
+      expect(api.runRoute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          route: { kind: "all" },
+          activeProviders: ["claude", "gemini"],
+        }),
+      ),
+    );
+  });
+
+  // SP-038 Scenario: In-flight response from disabled provider
+  it("a response from a provider still renders even when that provider is disabled before the response arrives", async () => {
+    const user = userEvent.setup();
+    // getCliIntegrations is slow — resolves with Claude disabled after the
+    // submit is already in-flight so Claude was active at submit time.
+    let resolveIntegrations!: (v: CliIntegrations) => void;
+    let resolveRoute!: (r: RouteRunResult) => void;
+    const api = makeApi({
+      runRoute: vi.fn(
+        () => new Promise<RouteRunResult>((resolve) => { resolveRoute = resolve; }),
+      ),
+    });
+    api.getCliIntegrations = vi.fn(
+      () => new Promise<CliIntegrations>((resolve) => { resolveIntegrations = resolve; }),
+    );
+    render(<ChatPanel api={api} />);
+
+    // The composer renders immediately (optimistic ALL_PROVIDER_IDS state).
+    await waitForReady(api);
+
+    // Submit while all providers are still active (integrations not yet resolved).
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Claude" }));
+    await user.type(screen.getByLabelText("Ask side-pilot"), "pending claude");
+    await user.click(screen.getByRole("button", { name: /^send/i }));
+    expect(await screen.findByTestId("thinking")).toBeInTheDocument();
+
+    // Now disable Claude while the response is in-flight.
+    await act(async () => {
+      resolveIntegrations({
+        codex: { assistant: "codex", enabled: true, detectedStatus: "available" },
+        claude: { assistant: "claude", enabled: false, detectedStatus: "available" },
+        gemini: { assistant: "gemini", enabled: true, detectedStatus: "available" },
+      });
+      await Promise.resolve();
+    });
+
+    // The in-flight response resolves and must still appear in the transcript.
+    await act(async () => {
+      resolveRoute(routeResult("pending claude", [{ provider: "claude", content: "late claude reply" }]));
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText("late claude reply")).toBeInTheDocument();
+    // Claude is now gone from the switcher for subsequent sends.
+    await user.click(screen.getByRole("button", { name: /choose ai provider/i }));
+    expect(screen.queryByRole("menuitemradio", { name: /^Claude$/ })).toBeNull();
+  });
+
+  it("renders the composer immediately before getCliIntegrations settles (no loading race)", () => {
+    // Fix #2: enabledProviders initialises to ALL_PROVIDER_IDS so the loading
+    // window never produces an empty list that hides the composer.
+    const api = makeApi();
+    api.getCliIntegrations = vi.fn(() => new Promise<CliIntegrations>(() => {}));
+    render(<ChatPanel api={api} />);
+
+    // Before the async load settles the composer input must already be present.
+    expect(screen.getByLabelText("Ask side-pilot")).toBeInTheDocument();
+    expect(screen.queryByTestId("no-ai-providers")).toBeNull();
+  });
+
+  it("shows the no-providers warning and hides the composer when all CLI integrations are disabled", async () => {
+    const allDisabled: CliIntegrations = {
+      codex: { assistant: "codex", enabled: false, detectedStatus: "available" },
+      claude: { assistant: "claude", enabled: false, detectedStatus: "available" },
+      gemini: { assistant: "gemini", enabled: false, detectedStatus: "available" },
+    };
+    const api = makeApi();
+    api.getCliIntegrations = vi.fn(() => Promise.resolve(allDisabled));
+    render(<ChatPanel api={api} />);
+
+    await screen.findByTestId("no-ai-providers");
+    expect(screen.queryByLabelText("Ask side-pilot")).toBeNull();
+  });
+
+  it("keeps the composer when getCliIntegrations rejects (falls back to all providers)", async () => {
+    const api = makeApi();
+    api.getCliIntegrations = vi.fn(() => Promise.reject(new Error("network")));
+    render(<ChatPanel api={api} />);
+    await waitForReady(api);
+
+    expect(screen.getByLabelText("Ask side-pilot")).toBeInTheDocument();
+    expect(screen.queryByTestId("no-ai-providers")).toBeNull();
   });
 });
