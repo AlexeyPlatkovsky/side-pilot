@@ -77,6 +77,7 @@ export function routeTargets(
     // Filter in PROVIDERS display order so slot ordering is always consistent.
     return ALL_PROVIDER_IDS.filter((id) => effective.includes(id));
   }
+  if (activeProviders?.length && !activeProviders.includes(route.provider)) return [];
   return [route.provider];
 }
 
@@ -92,7 +93,8 @@ export function messageLabel(
 ): string {
   if (model) return `${model}-${reasoningEffort || "none"}`;
   if (!assistantId) return translate(locale, "assistant");
-  return providerInfo(assistantId as AssistantId).label;
+  const info = PROVIDERS.find((p) => p.id === assistantId);
+  return info?.label ?? assistantId;
 }
 
 const MAX_PROVIDER_ERROR_DETAIL_CHARS = 240;

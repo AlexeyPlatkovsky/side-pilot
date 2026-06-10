@@ -12,8 +12,9 @@
 //! {"type":"turn.completed","usage":{"input_tokens":18982,...}}
 //! ```
 
-use std::path::PathBuf;
 use std::sync::Arc;
+#[cfg(test)]
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -24,16 +25,13 @@ use super::binary::BinaryResolver;
 use super::contract::{AdapterRequest, AdapterResult, PermissionMode, Usage};
 use super::environment::EnvironmentProvider;
 use super::error::AdapterError;
-use super::process::{CommandRunner, CommandSpec, RunOutcome};
+use super::process::{CommandRunner, RunOutcome};
+use super::shared::AdapterBase;
 use super::{AssistantId, CliAdapter};
 
 /// Adapter that runs the OpenAI Codex CLI.
 pub struct CodexAdapter {
-    resolver: Arc<dyn BinaryResolver>,
-    runner: Arc<dyn CommandRunner>,
-    env_provider: Arc<dyn EnvironmentProvider>,
-    /// Neutral working directory used when a request carries no workspace (§3).
-    neutral_cwd: PathBuf,
+    base: AdapterBase,
 }
 
 impl CodexAdapter {
@@ -46,27 +44,15 @@ impl CodexAdapter {
         env_provider: Arc<dyn EnvironmentProvider>,
     ) -> Self {
         Self {
-            resolver,
-            runner,
-            env_provider,
-            neutral_cwd: std::env::temp_dir(),
+            base: AdapterBase::new(resolver, runner, env_provider),
         }
     }
 
     /// Override the neutral working directory (tests use this for determinism).
     #[cfg(test)]
     fn with_neutral_cwd(mut self, cwd: PathBuf) -> Self {
-        self.neutral_cwd = cwd;
+        self.base = self.base.with_neutral_cwd(cwd);
         self
-    }
-
-    /// The working directory for this request: the requested workspace, or the
-    /// neutral app-controlled directory when none is supplied (§3, MVP).
-    fn resolve_cwd(&self, req: &AdapterRequest) -> PathBuf {
-        req.working_directory
-            .as_ref()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.neutral_cwd.clone())
     }
 
     /// Construct the `codex exec` argument vector for a request.
@@ -126,23 +112,9 @@ impl CliAdapter for CodexAdapter {
         req: AdapterRequest,
         cancel: CancellationToken,
     ) -> Result<AdapterResult, AdapterError> {
-        let program = self.resolver.resolve(AssistantId::Codex).await?;
-        let env = self.env_provider.environment(AssistantId::Codex).await?;
-        let cwd = self.resolve_cwd(&req);
+        let cwd = self.base.resolve_cwd(&req);
         let args = Self::build_args(&req, &cwd.to_string_lossy());
-
-        let spec = CommandSpec {
-            program,
-            args,
-            cwd,
-            env,
-            stdin: None,
-            timeout: req.timeout(),
-            cancel,
-        };
-
-        // A failure to start/await the resolved binary maps to BinaryNotFound.
-        let outcome = self.runner.run(spec).await.map_err(map_runner_io_error)?;
+        let outcome = self.base.dispatch(AssistantId::Codex, args, cwd, &req, cancel).await?;
 
         match outcome {
             RunOutcome::TimedOut => Err(AdapterError::TimedOut),
@@ -163,17 +135,6 @@ impl CliAdapter for CodexAdapter {
                     usage: parsed.usage,
                 })
             }
-        }
-    }
-}
-
-fn map_runner_io_error(err: std::io::Error) -> AdapterError {
-    if err.kind() == std::io::ErrorKind::NotFound {
-        AdapterError::BinaryNotFound
-    } else {
-        AdapterError::NonZeroExit {
-            code: None,
-            stderr: err.to_string(),
         }
     }
 }

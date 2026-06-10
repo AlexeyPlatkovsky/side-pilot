@@ -1,30 +1,19 @@
 # side-pilot Code Review Report
 
-**Date:** 2026-06-08
+**Date:** 2026-06-08 (last updated 2026-06-10)
 **Scope:** Full project audit — Rust backend (25 files), TypeScript/React frontend (~50 files), configuration/build files (16 files), E2E tests (7 spec files).
 
 ---
 
 ## Executive Summary
 
-The project demonstrates strong architectural foundations: clean layer separation, well-typed IPC contracts, a trait-based adapter pattern, and comprehensive test coverage for pure functions. However, several critical issues were identified, including a **deadlock risk in the preferences system**, a **fully disabled Content Security Policy**, and **unsafe type assertions** in the frontend. Below is the prioritized issue catalog.
+The project demonstrates strong architectural foundations: clean layer separation, well-typed IPC contracts, a trait-based adapter pattern, and comprehensive test coverage for pure functions. Several issues were identified in the original audit; the deadlock in `preferences.rs` and its associated persistence duplication have since been fixed, and dependency auditing has been added to CI. Outstanding concerns include a **fully disabled Content Security Policy**, **unsafe type assertions** in the frontend, and ~85% duplication across the three adapter files. Below is the current prioritized issue catalog.
 
 ---
 
 ## Critical Issues
 
-### C1. Deadlock in `preferences.rs` — Opposite Lock Order
-
-**File:** `src-tauri/src/preferences.rs:288-396`
-
-`update()` acquires locks in order: `provider_snapshot` → `general_snapshot`.  
-`update_general()` acquires locks in order: `general_snapshot` → `provider_snapshot`.
-
-This is a classic ABBA deadlock. Two concurrent calls (one to each method) will deadlock the application.
-
-**Fix:** Establish a consistent lock order in both methods. Extract the shared persistence logic into a helper function to prevent recurrence.
-
-### C2. CSP Fully Disabled (`csp: null`)
+### C1. CSP Fully Disabled (`csp: null`)
 
 **File:** `src-tauri/tauri.conf.json`
 
@@ -35,7 +24,7 @@ Content Security Policy is set to `null`, allowing unrestricted inline script ex
 "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
 ```
 
-### C3. Missing `engines` / `packageManager` in `package.json`
+### C2. Missing `engines` / `packageManager` in `package.json`
 
 **File:** `package.json`
 
@@ -66,15 +55,7 @@ No pinned Node.js or npm version, leading to "works on my machine" issues.
 
 **Fix:** Extract a generic `AdapterTemplate` struct or derive macro. Shared helpers (`map_runner_io_error`, `classify_exit`, test fixtures) belong in a common module (`process.rs` or `mod.rs`).
 
-### H2. Duplicated Persistence Logic in `preferences.rs`
-
-**File:** `src-tauri/src/preferences.rs:288-396`
-
-~50 lines of file-atom-write logic duplicated verbatim between `update()` and `update_general()`. The only difference is which snapshot is read/updated. This duplication is the root cause of the deadlock in C1.
-
-**Fix:** Extract `fn persist_atomically<T>(&self, update_fn: impl FnOnce(&mut PersistedPreferences, T))`.
-
-### H3. Vitest 2.x with Vite 6.x — Version Mismatch Risk
+### H2. Vitest 2.x with Vite 6.x — Version Mismatch Risk
 
 **File:** `package.json`
 
@@ -82,7 +63,7 @@ No pinned Node.js or npm version, leading to "works on my machine" issues.
 
 **Fix:** Either downgrade Vite to `^5.x` or upgrade Vitest to `^3.x`.
 
-### H4. CI Only Tests Linux — Misses macOS/Windows Validation
+### H3. CI Only Tests Linux — Misses macOS/Windows Validation
 
 **File:** `.github/workflows/ci.yml`
 
@@ -94,18 +75,18 @@ The app targets macOS and Windows, but CI only runs on `ubuntu-latest`. This mis
 
 **Fix:** Add a matrix strategy: `[ubuntu-latest, macos-latest, windows-latest]`.
 
-### H5. Unsafe `as` Type Assertions in Frontend
+### H4. Unsafe `as` Type Assertions in Frontend
 
 **Files:**
 - `src/main.tsx:6` — `as HTMLElement` on `getElementById` result (no null guard)
-- `src/chat/api.ts:230` — `as { kind: string; ... }` on `unknown` error
-- `src/chat/providers.ts:78` — `as AssistantId` on `string | undefined`
+- `src/chat/api.ts:246` — `as { kind: string; ... }` on `unknown` error
+- `src/chat/providers.ts:95` — `as AssistantId` on `string | undefined`
 
 These bypass the type system silently. If assumptions are wrong, the app crashes at runtime or produces garbage output.
 
 **Fix:** Use proper narrowing (early return, `instanceof` checks, discriminated union validation).
 
-### H6. No Memoization on Message List Render
+### H5. No Memoization on Message List Render
 
 **File:** `src/components/ChatPanel.tsx:298`
 
@@ -113,7 +94,7 @@ These bypass the type system silently. If assumptions are wrong, the app crashes
 
 **Fix:** Extract a memoized `MessageRow` component.
 
-### H7. `.message__retry` Class Used but No CSS Rule
+### H6. `.message__retry` Class Used but No CSS Rule
 
 **File:** `src/components/ChatPanel.tsx:356` uses `className="message__retry"` but `styles.css` has no `.message__retry` rule. The Retry button is unstyled.
 
@@ -145,7 +126,7 @@ The `let PermissionMode::ReadOnly = req.permission_mode;` pattern will **panic a
 
 **Fix:** Use `match` with explicit arms and a `#[non_exhaustive]` catch-all.
 
-### M4. `ChatPanel.tsx` Violates Single Responsibility (475 lines)
+### M4. `ChatPanel.tsx` Violates Single Responsibility (528 lines)
 
 **File:** `src/components/ChatPanel.tsx`
 
@@ -153,7 +134,7 @@ Handles transcript rendering, toolbar, composer, retry logic, clear/rename dialo
 
 **Fix:** Extract `ConversationTranscript`, `Composer`, `Toolbar`, `ClearDialog` subcomponents.
 
-### M5. `useChat` Hook Too Large (437 lines)
+### M5. `useChat` Hook Too Large (441 lines)
 
 **File:** `src/chat/useChat.ts`
 
@@ -172,8 +153,7 @@ Mutates the object stored in `activeRef.current` directly rather than following 
 ### M7. Silent Error Swallowing
 
 **Files:**
-- `src/components/Bubble.tsx:63` — `.catch(() => {})` on preference loading
-- `src/components/Bubble.tsx:126` — `.catch(() => {})` on position tracking
+- `src/components/Bubble.tsx:63,65,78` — `.catch(() => {})` on CLI-integration update, preference load, and position tracking
 - Multiple Rust test cleanup: `.ok()` silently discards cleanup failures
 
 **Fix:** Log errors, surface minimal feedback to user, or at minimum `console.error`.
@@ -184,15 +164,7 @@ Three implementations of outside-click handling and four implementations of Esca
 
 **Fix:** Extract shared hooks: `useOutsideClick(ref, callback, enabled?)` and `useEscape(callback, enabled?)`.
 
-### M9. No Dependency Vulnerability Scanning
-
-**File:** `.github/workflows/ci.yml`
-
-No `npm audit`, `cargo audit`, or Dependabot configuration.
-
-**Fix:** Add `npm audit` step to CI and enable Dependabot.
-
-### M10. Irrefutable `millis_since_epoch` Panic
+### M9. Irrefutable `millis_since_epoch` Panic
 
 **File:** `src-tauri/src/storage/store.rs:585`
 
@@ -260,7 +232,7 @@ Components import directly from `./useI18n` rather than through the barrel.
 
 ### L11. `Date.now()` Recalculated on Every Render
 
-**File:** `src/components/ChatPanel.tsx:97` — `now = Date.now()` in render body forces all timestamp-relative formatting to recompute on every render.
+**File:** `src/components/ChatPanel.tsx:106` — `now = Date.now()` in render body forces all timestamp-relative formatting to recompute on every render.
 
 ### L12. Magic String ID Prefixes Not Centralized
 
@@ -315,7 +287,6 @@ E2E tests use Playwright/Node APIs incompatible with browser DOM types.
 ### Weaknesses
 - **Three near-identical adapter implementations** instead of a generic template
 - **`ChatPanel` and `useChat`** are too large and handle too many concerns
-- **`preferences.rs`** has both a deadlock and massive duplication
 - **No structured logging or tracing** (`tracing` crate)
 - **No sentry/crash reporting** for production
 - **`winperf_counters`-style issue:** the `withGlobalTauri: true` flag and `csp: null` together create a meaningful XSS attack surface
@@ -345,7 +316,6 @@ E2E tests use Playwright/Node APIs incompatible with browser DOM types.
 | `csp: null` — fully disabled | `tauri.conf.json` | High |
 | Vitest 2.x + Vite 6.x mismatch | `package.json` | High |
 | CI only on Linux | `.github/workflows/ci.yml` | High |
-| No dependency auditing | `.github/workflows/ci.yml` | Medium |
 | Prettier lacks explicit options | `.prettierrc.json` | Medium |
 | `e2e` in main tsconfig | `tsconfig.json` | Medium |
 | No production build optimization | `vite.config.ts` | Medium |
@@ -354,18 +324,17 @@ E2E tests use Playwright/Node APIs incompatible with browser DOM types.
 
 ---
 
-## Top 10 Recommendations (Priority Order)
+## Top 9 Recommendations (Priority Order)
 
-1. **Fix the deadlock in `preferences.rs`** — Establish consistent lock order and extract shared atom-write helper.
-2. **Enable Content Security Policy** — Define a restrictive CSP in `tauri.conf.json`.
-3. **Extract shared adapter logic** — Eliminate ~85% duplication between `codex.rs`, `claude.rs`, `gemini.rs`.
-4. **Fix unsafe `as` casts in frontend** — `main.tsx:6`, `api.ts:230`, `providers.ts:78`.
-5. **Upgrade/downgrade Vitest or Vite** — Resolve version mismatch.
-6. **Add macOS/Windows CI matrix** — Validate platform-specific code paths.
-7. **Decompose `ChatPanel.tsx` and `useChat.ts`** — Extract subcomponents and smaller hooks.
-8. **Replace irrefutable `let` patterns with `match`** — `PermissionMode::ReadOnly` in three adapters.
-9. **Fix `LookupCache` TOCTOU race** — Hold lock across check and insert.
-10. **Extract shared `useOutsideClick` and `useEscape` hooks** — Eliminate 3+ duplicate implementations.
+1. **Enable Content Security Policy** — Define a restrictive CSP in `tauri.conf.json`.
+2. **Extract shared adapter logic** — Eliminate ~85% duplication between `codex.rs`, `claude.rs`, `gemini.rs`.
+3. **Fix unsafe `as` casts in frontend** — `main.tsx:6`, `api.ts:246`, `providers.ts:95`.
+4. **Upgrade/downgrade Vitest or Vite** — Resolve version mismatch.
+5. **Add macOS/Windows CI matrix** — Validate platform-specific code paths.
+6. **Decompose `ChatPanel.tsx` and `useChat.ts`** — Extract subcomponents and smaller hooks.
+7. **Replace irrefutable `let` patterns with `match`** — `PermissionMode::ReadOnly` in three adapters.
+8. **Fix `LookupCache` TOCTOU race** — Hold lock across check and insert.
+9. **Extract shared `useOutsideClick` and `useEscape` hooks** — Eliminate 3+ duplicate implementations.
 
 ---
 
@@ -373,13 +342,11 @@ E2E tests use Playwright/Node APIs incompatible with browser DOM types.
 
 | File | Line(s) | Issue | Severity |
 |------|---------|-------|----------|
-| `preferences.rs` | 288-341, 343-396 | Deadlock (opposite lock order) + duplication | **Critical** |
-| `preferences.rs` | 288-396 | ~50 lines duplicated x2 | Medium |
-| `codex/claude/gemini.rs` | passim | ~85% structural overlap (3 files) | Medium |
+| `codex/claude/gemini.rs` | passim | ~85% structural overlap (3 files) | High |
 | `cache.rs` | 46-50 | TOCTOU race in `get_or_try_insert_with` | Medium |
 | `codex/claude/gemini.rs` | 95/99/104 | Irrefutable `let` pattern on enum | Medium |
 | `commands.rs`, `preferences.rs`, `cache.rs` | multiple | 8× `.expect()` on mutex locks | Medium |
-| `store.rs` | 585 | `millis_since_epoch` panics on pre-epoch clock | Low |
+| `store.rs` | 583 | `millis_since_epoch` panics on pre-epoch clock | Low |
 | `process.rs` | 309 | SIGKILL race after fast process exit | Low |
 | `routing/mod.rs` | 185-207 | Overly dense pipeline | Low |
 | `routing/mod.rs` | 330-387, 434-470 | `retry_result` duplicates logic | Low |
@@ -389,20 +356,20 @@ E2E tests use Playwright/Node APIs incompatible with browser DOM types.
 | File | Line(s) | Issue | Severity |
 |------|---------|-------|----------|
 | `main.tsx` | 6 | Unsafe `as` cast on `getElementById` | High |
-| `api.ts` | 230 | Unsafe `as` cast on `unknown` error | High |
-| `providers.ts` | 78 | Unsafe `as` cast on `string \| undefined` | High |
+| `api.ts` | 246 | Unsafe `as` cast on `unknown` error | High |
+| `providers.ts` | 95 | Unsafe `as` cast on `string \| undefined` | High |
 | `ChatPanel.tsx` | 298 | No memoization on message list | High |
-| `ChatPanel.tsx` | 475 lines | Component too large (SRP violation) | Medium |
-| `useChat.ts` | 197 | Direct mutation of ref-held object | Medium |
-| `Bubble.tsx` | 63, 126 | Silent error swallowing | Medium |
+| `ChatPanel.tsx` | 528 lines | Component too large (SRP violation) | Medium |
+| `useChat.ts` | 201, 368 | Direct mutation of ref-held object | Medium |
+| `Bubble.tsx` | 63, 65, 78 | Silent error swallowing | Medium |
 | Multiple files | — | 3× `useOutsideClick`, 4× `useEscape` | Medium |
 | `api.test.ts` | — | Only 1/12+ error types tested | Low |
 | `api.ts` | 201-221 | `toChatMessage` untested | Low |
 | `chat.test.ts` | — | `retryReplace` not tested | Low |
-| `ChatPanel.tsx` | 97 | `Date.now()` on every render | Low |
+| `ChatPanel.tsx` | 106 | `Date.now()` on every render | Low |
 | `useChat.ts` | 172, 225, 383 | Magic string prefixes | Low |
 | `i18n/index.ts` | — | Unused barrel file | Low |
 
 ---
 
-*Report generated by automated code review. No code was changed.*
+*Report generated by automated code review. No production code was changed. Updated 2026-06-10: removed C1 (deadlock fixed), H2 (persistence duplication fixed), M9 (dependency auditing added to CI); updated line numbers and file sizes.*

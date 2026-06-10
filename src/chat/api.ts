@@ -164,8 +164,7 @@ export const inertChatApi: ChatApi = {
   updateProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   getGeneralPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   updateGeneralPreferences: () => Promise.reject(new Error("chat backend unavailable")),
-  detectClis: () =>
-    Promise.resolve([]),
+  detectClis: () => Promise.resolve([]),
   getCliIntegrations: () => Promise.reject(new Error("chat backend unavailable")),
   updateCliIntegrations: () => Promise.reject(new Error("chat backend unavailable")),
   createSession: () =>
@@ -242,7 +241,12 @@ export function toChatMessage(row: PersistedMessage): {
  */
 export function describeError(err: unknown, locale: Locale = "en"): string {
   if (typeof err === "string") return err;
-  if (err && typeof err === "object" && "kind" in err) {
+  if (
+    err &&
+    typeof err === "object" &&
+    "kind" in err &&
+    typeof (err as Record<string, unknown>).kind === "string"
+  ) {
     const tagged = err as { kind: string; stderr?: string; detail?: string };
     switch (tagged.kind) {
       case "binaryNotFound":

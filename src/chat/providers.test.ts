@@ -32,6 +32,17 @@ describe("[smoke] providers", () => {
     expect(routeTargets({ kind: "all" })).toEqual(["codex", "claude", "gemini"]);
   });
 
+  it("returns [] for a single route whose provider is not in activeProviders", () => {
+    expect(
+      routeTargets({ kind: "single", provider: "codex" }, ["claude", "gemini"]),
+    ).toEqual([]);
+    expect(routeTargets({ kind: "single", provider: "codex" }, ["codex"])).toEqual([
+      "codex",
+    ]);
+    // EP: empty activeProviders — no filter, falls back
+    expect(routeTargets({ kind: "single", provider: "codex" }, [])).toEqual(["codex"]);
+  });
+
   it("filters All-route targets to the enabled providers while preserving display order", () => {
     // EP: partial activeProviders — filters to enabled set, preserves PROVIDERS order.
     expect(routeTargets({ kind: "all" }, ["claude", "gemini"])).toEqual([

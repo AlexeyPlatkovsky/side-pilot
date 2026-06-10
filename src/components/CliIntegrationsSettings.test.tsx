@@ -32,12 +32,8 @@ function detectedAll(): CliIntegration[] {
 
 function buildApi(overrides: Partial<ChatApi> = {}): ChatApi {
   return {
-    getCliIntegrations: vi
-      .fn()
-      .mockResolvedValue(cliIntegrationsDefault()),
-    updateCliIntegrations: vi
-      .fn()
-      .mockImplementation((v) => Promise.resolve(v)),
+    getCliIntegrations: vi.fn().mockResolvedValue(cliIntegrationsDefault()),
+    updateCliIntegrations: vi.fn().mockImplementation((v) => Promise.resolve(v)),
     detectClis: vi.fn().mockResolvedValue(detectedAll()),
     getGeneralPreferences: vi.fn(),
     updateGeneralPreferences: vi.fn(),
@@ -113,8 +109,7 @@ describe("CliIntegrationsSettings", () => {
 
     await userEvent.click(codexCheckbox);
     expect(api.updateCliIntegrations).toHaveBeenCalled();
-    const calls = (api.updateCliIntegrations as ReturnType<typeof vi.fn>).mock
-      .calls;
+    const calls = (api.updateCliIntegrations as ReturnType<typeof vi.fn>).mock.calls;
     const lastCall = calls[calls.length - 1][0] as CliIntegrations;
     expect(lastCall.codex.enabled).toBe(false);
   });
@@ -182,8 +177,7 @@ describe("CliIntegrationsSettings", () => {
     await userEvent.click(recheckButtons[0]); // Codex
 
     await waitFor(() => {
-      const calls = (api.updateCliIntegrations as ReturnType<typeof vi.fn>).mock
-        .calls;
+      const calls = (api.updateCliIntegrations as ReturnType<typeof vi.fn>).mock.calls;
       // The last call should have codex still disabled
       const lastCall = calls[calls.length - 1][0] as CliIntegrations;
       expect(lastCall.codex.enabled).toBe(false);
@@ -199,7 +193,9 @@ describe("CliIntegrationsSettings", () => {
     // User enables gemini while detection is in-flight. Detection resolves.
     // The final persist call must include gemini.enabled=true (post-toggle), not
     // the stale pre-toggle false.
-    let resolveDetect!: (results: import("../chat/generated/CliIntegration").CliIntegration[]) => void;
+    let resolveDetect!: (
+      results: import("../chat/generated/CliIntegration").CliIntegration[],
+    ) => void;
     const api = buildApi({
       getCliIntegrations: vi.fn().mockResolvedValue({
         codex: { assistant: "codex", enabled: true, detectedStatus: "available" },
@@ -208,7 +204,9 @@ describe("CliIntegrationsSettings", () => {
       }),
       detectClis: vi.fn().mockReturnValue(
         new Promise<import("../chat/generated/CliIntegration").CliIntegration[]>(
-          (resolve) => { resolveDetect = resolve; },
+          (resolve) => {
+            resolveDetect = resolve;
+          },
         ),
       ),
     });
@@ -229,9 +227,7 @@ describe("CliIntegrationsSettings", () => {
 
     // Resolve detection — codex is available.
     await act(async () => {
-      resolveDetect([
-        { assistant: "codex", enabled: true, detectedStatus: "available" },
-      ]);
+      resolveDetect([{ assistant: "codex", enabled: true, detectedStatus: "available" }]);
       await Promise.resolve();
     });
 

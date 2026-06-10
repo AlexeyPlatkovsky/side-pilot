@@ -20,8 +20,9 @@
 //! Older/other builds may emit the bare `{"type":"result",…}` object instead of
 //! an array; the parser accepts both shapes (§5).
 
-use std::path::PathBuf;
 use std::sync::Arc;
+#[cfg(test)]
+use std::path::PathBuf;
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -33,16 +34,13 @@ use super::contract::{AdapterRequest, AdapterResult, PermissionMode, Usage};
 use super::environment::EnvironmentProvider;
 use super::error::AdapterError;
 use super::json::parse_json_lenient;
-use super::process::{CommandRunner, CommandSpec, RunOutcome};
+use super::process::{CommandRunner, RunOutcome};
+use super::shared::AdapterBase;
 use super::{AssistantId, CliAdapter};
 
 /// Adapter that runs the Claude Code CLI.
 pub struct ClaudeAdapter {
-    resolver: Arc<dyn BinaryResolver>,
-    runner: Arc<dyn CommandRunner>,
-    env_provider: Arc<dyn EnvironmentProvider>,
-    /// Neutral working directory used when a request carries no workspace (§3).
-    neutral_cwd: PathBuf,
+    base: AdapterBase,
 }
 
 impl ClaudeAdapter {
@@ -55,29 +53,15 @@ impl ClaudeAdapter {
         env_provider: Arc<dyn EnvironmentProvider>,
     ) -> Self {
         Self {
-            resolver,
-            runner,
-            env_provider,
-            neutral_cwd: std::env::temp_dir(),
+            base: AdapterBase::new(resolver, runner, env_provider),
         }
     }
 
     /// Override the neutral working directory (tests use this for determinism).
     #[cfg(test)]
     fn with_neutral_cwd(mut self, cwd: PathBuf) -> Self {
-        self.neutral_cwd = cwd;
+        self.base = self.base.with_neutral_cwd(cwd);
         self
-    }
-
-    /// The working directory for this request: the requested workspace, or the
-    /// neutral app-controlled directory when none is supplied (§3, MVP). Claude
-    /// inherits its file-access root from the process `cwd` (§1), so no `-C`/
-    /// `--add-dir` flag is needed for the MVP read-only posture.
-    fn resolve_cwd(&self, req: &AdapterRequest) -> PathBuf {
-        req.working_directory
-            .as_ref()
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.neutral_cwd.clone())
     }
 
     /// Construct the `claude -p` argument vector for a request.
@@ -128,22 +112,9 @@ impl CliAdapter for ClaudeAdapter {
         req: AdapterRequest,
         cancel: CancellationToken,
     ) -> Result<AdapterResult, AdapterError> {
-        let program = self.resolver.resolve(AssistantId::Claude).await?;
-        let env = self.env_provider.environment(AssistantId::Claude).await?;
-        let cwd = self.resolve_cwd(&req);
+        let cwd = self.base.resolve_cwd(&req);
         let args = Self::build_args(&req);
-
-        let spec = CommandSpec {
-            program,
-            args,
-            cwd,
-            env,
-            stdin: None,
-            timeout: req.timeout(),
-            cancel,
-        };
-
-        let outcome = self.runner.run(spec).await.map_err(map_runner_io_error)?;
+        let outcome = self.base.dispatch(AssistantId::Claude, args, cwd, &req, cancel).await?;
 
         match outcome {
             RunOutcome::TimedOut => Err(AdapterError::TimedOut),
@@ -164,17 +135,6 @@ impl CliAdapter for ClaudeAdapter {
                     usage: parsed.usage,
                 })
             }
-        }
-    }
-}
-
-fn map_runner_io_error(err: std::io::Error) -> AdapterError {
-    if err.kind() == std::io::ErrorKind::NotFound {
-        AdapterError::BinaryNotFound
-    } else {
-        AdapterError::NonZeroExit {
-            code: None,
-            stderr: err.to_string(),
         }
     }
 }
