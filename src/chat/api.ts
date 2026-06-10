@@ -32,6 +32,8 @@ import type { ProviderRunOutcome as RustProviderRunOutcome } from "./generated/P
 import type { ProviderPreferences } from "./generated/ProviderPreferences";
 import type { GeneralPreferences } from "./generated/GeneralPreferences";
 import type { AssistantId } from "./generated/AssistantId";
+import type { CliIntegration } from "./generated/CliIntegration";
+import type { CliIntegrations } from "./generated/CliIntegrations";
 
 /**
  * The request the UI sends to `run_adapter`. Projected from the Rust
@@ -99,6 +101,12 @@ export interface ChatApi {
   updateProviderPreferences(value: ProviderPreferences): Promise<ProviderPreferences>;
   getGeneralPreferences(): Promise<GeneralPreferences>;
   updateGeneralPreferences(value: GeneralPreferences): Promise<GeneralPreferences>;
+  /** Detect installed CLIs. Returns detection results without persisting. */
+  detectClis(): Promise<CliIntegration[]>;
+  /** Get persisted CLI integrations (enabled flags + last known statuses). */
+  getCliIntegrations(): Promise<CliIntegrations>;
+  /** Persist and activate CLI integration toggles. */
+  updateCliIntegrations(value: CliIntegrations): Promise<CliIntegrations>;
   createSession(title?: string | null): Promise<PersistedSession>;
   appendMessage(message: NewMessage): Promise<PersistedMessage>;
   readHistory(sessionId: string): Promise<PersistedMessage[]>;
@@ -128,6 +136,9 @@ export const tauriChatApi: ChatApi = {
   updateProviderPreferences: (value) => invoke("update_provider_preferences", { value }),
   getGeneralPreferences: () => invoke("get_general_preferences"),
   updateGeneralPreferences: (value) => invoke("update_general_preferences", { value }),
+  detectClis: () => invoke("detect_clis"),
+  getCliIntegrations: () => invoke("get_cli_integrations"),
+  updateCliIntegrations: (value) => invoke("update_cli_integrations", { value }),
   createSession: (title = null) => invoke("create_session", { title }),
   appendMessage: (message) => invoke("append_message", { message }),
   readHistory: (sessionId) => invoke("read_history", { sessionId }),
@@ -153,6 +164,10 @@ export const inertChatApi: ChatApi = {
   updateProviderPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   getGeneralPreferences: () => Promise.reject(new Error("chat backend unavailable")),
   updateGeneralPreferences: () => Promise.reject(new Error("chat backend unavailable")),
+  detectClis: () =>
+    Promise.resolve([]),
+  getCliIntegrations: () => Promise.reject(new Error("chat backend unavailable")),
+  updateCliIntegrations: () => Promise.reject(new Error("chat backend unavailable")),
   createSession: () =>
     Promise.resolve({
       id: "inert-session",

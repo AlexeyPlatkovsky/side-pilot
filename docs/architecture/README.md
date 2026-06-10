@@ -63,6 +63,7 @@ side-pilot/
 │   │   ├── process.rs            # CommandRunner trait + tokio subprocess runner
 │   │   ├── binary.rs             # BinaryResolver — absolute path lookup per AssistantId
 │   │   └── environment.rs        # EnvironmentProvider — shell/process env resolution
+│   ├── cli_integrations.rs        # CLI detection: binary + auth status per provider (SP-038)
 │   ├── routing/
 │   │   └── mod.rs                # Multi-provider route planner, transcript replay, concurrent dispatch (SP-016)
 │   └── storage/
@@ -108,7 +109,7 @@ The current codebase implements the MVP chat shell and Codex-only backend:
 - Codex, Claude, and Gemini CLI adapters registered, running blocking read-only calls (`codex exec --json`; `claude -p --output-format json --permission-mode plan`; `gemini -o json --approval-mode plan --skip-trust`).
 - Multi-provider routing core (SP-016): `run_route` dispatches a prompt to one provider or concurrently to `All`, sending each provider only the context it has not seen via app-owned transcript replay (`message_provider_sends` junction table), with per-slot partial-failure isolation and persisted display-only error rows whose visible CLI diagnostic is reduced to a useful bounded summary.
 - AI switcher UI (SP-017): a provider-logo switcher beside Send opens a vertical picker (All + GPT/Claude/Gemini); the active route drives `run_route`, with each provider's reply shown as a separate labeled transcript slot (per-provider loading + inline error cards), the switcher disabled while any response is in flight.
-- Settings view shell (SP-029, SP-031): a gear control in the panel header opens an in-panel settings view with a left section rail (7 sections: API Keys, CLI Integrations, Themes, General, Keyboard Shortcuts, Account, About); the General pane has operational controls (SP-037): always-on-top toggle, window position mode (pin/track last), and language selector (English/Russian). Other panes are empty placeholders for later features.
+- Settings view shell (SP-029, SP-031): a gear control in the panel header opens an in-panel settings view with a left section rail (7 sections: API Keys, CLI Integrations, Themes, General, Keyboard Shortcuts, Account, About); the General pane has operational controls (SP-037): always-on-top toggle, window position mode (pin/track last), and language selector (English/Russian). The CLI Integrations pane (SP-038) shows per-provider detection statuses (Available / Not installed / Not authenticated / Not detected), enable/disable toggles persisted in preferences.json, and a Re-check button. Disabled providers are hidden from the chat AI switcher; when all three are disabled, the composer shows a warning and Send is blocked. Other panes are empty placeholders for later features.
 
 Deferred from the broader product specification:
 

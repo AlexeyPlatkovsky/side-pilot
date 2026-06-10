@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-cli-integrations"
+description = "Enables the update_cli_integrations command without any pre-configured scope."
+commands.allow = ["update_cli_integrations"]
+
+[[permission]]
+identifier = "deny-update-cli-integrations"
+description = "Denies the update_cli_integrations command without any pre-configured scope."
+commands.deny = ["update_cli_integrations"]

@@ -1,6 +1,7 @@
 import { useState, useCallback, type KeyboardEvent } from "react";
 import type { ChatApi } from "../chat/api";
 import { GeneralSettings } from "./GeneralSettings";
+import { CliIntegrationsSettings } from "./CliIntegrationsSettings";
 import type { Locale, TranslationKey } from "../i18n/types";
 import { useI18n } from "../i18n/useI18n";
 
@@ -128,6 +129,8 @@ export function Settings({ chatApi, locale = "en", onLocaleChange }: SettingsPro
                   locale={locale}
                   onLocaleChange={onLocaleChange}
                 />
+              ) : section.id === "cli-integrations" ? (
+                <CliIntegrationsSettings api={chatApi} locale={locale} />
               ) : (
                 <p className="settings-pane__placeholder">
                   {t("settings_futureUpdate", { section: t(section.labelKey) })}

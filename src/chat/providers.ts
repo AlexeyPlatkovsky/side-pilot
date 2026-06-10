@@ -60,9 +60,24 @@ export function routesEqual(a: ActiveRoute, b: ActiveRoute): boolean {
   return a.provider === b.provider;
 }
 
-/** The ordered provider targets a route resolves to. */
-export function routeTargets(route: ActiveRoute): AssistantId[] {
-  return route.kind === "all" ? [...ALL_PROVIDER_IDS] : [route.provider];
+/**
+ * The ordered provider targets a route resolves to.
+ *
+ * For `All` routes the result is filtered to the providers in `activeProviders`
+ * (preserving the canonical `PROVIDERS` display order). An empty or omitted
+ * `activeProviders` falls back to every provider so legacy callers and tests
+ * that omit the argument are unaffected.
+ */
+export function routeTargets(
+  route: ActiveRoute,
+  activeProviders?: readonly AssistantId[],
+): AssistantId[] {
+  if (route.kind === "all") {
+    const effective = activeProviders?.length ? activeProviders : ALL_PROVIDER_IDS;
+    // Filter in PROVIDERS display order so slot ordering is always consistent.
+    return ALL_PROVIDER_IDS.filter((id) => effective.includes(id));
+  }
+  return [route.provider];
 }
 
 /**

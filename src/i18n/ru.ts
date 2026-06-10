@@ -84,4 +84,12 @@ export const ru: Record<TranslationKey, string> = {
   settings_themes: "Темы",
   time_now: "только что",
   trackLast: "Запоминать позицию",
+  cli_statusAvailable: "Доступен",
+  cli_statusNotInstalled: "Не установлен",
+  cli_statusNotAuthenticated: "Не авторизован",
+  cli_statusNotDetected: "Не обнаружен",
+  cli_recheck: "Проверить",
+  cli_detecting: "Проверка...",
+  cli_noProviders:
+    "Нет доступных AI-провайдеров. Откройте Настройки → CLI-интеграции, чтобы включить хотя бы одного.",
 };

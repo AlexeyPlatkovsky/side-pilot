@@ -86,4 +86,12 @@ export const en: Record<TranslationKey, string> = {
   settings_themes: "Themes",
   time_now: "now",
   trackLast: "Track last position",
+  cli_statusAvailable: "Available",
+  cli_statusNotInstalled: "Not installed",
+  cli_statusNotAuthenticated: "Not authenticated",
+  cli_statusNotDetected: "Not detected",
+  cli_recheck: "Re-check",
+  cli_detecting: "Detecting...",
+  cli_noProviders:
+    "No AI providers are enabled. Check Settings → CLI Integrations to enable at least one.",
 };

@@ -28,7 +28,26 @@ describe("[smoke] providers", () => {
 
   it("resolves route targets for single and All routes", () => {
     expect(routeTargets({ kind: "single", provider: "claude" })).toEqual(["claude"]);
+    // EP: no activeProviders — falls back to ALL_PROVIDER_IDS
     expect(routeTargets({ kind: "all" })).toEqual(["codex", "claude", "gemini"]);
+  });
+
+  it("filters All-route targets to the enabled providers while preserving display order", () => {
+    // EP: partial activeProviders — filters to enabled set, preserves PROVIDERS order.
+    expect(routeTargets({ kind: "all" }, ["claude", "gemini"])).toEqual([
+      "claude",
+      "gemini",
+    ]);
+    // EP: order-scrambled input — canonical PROVIDERS order is always the output order.
+    expect(routeTargets({ kind: "all" }, ["gemini", "claude"])).toEqual([
+      "claude",
+      "gemini",
+    ]);
+    // EP: single active provider — returns only that one.
+    expect(routeTargets({ kind: "all" }, ["gemini"])).toEqual(["gemini"]);
+    // EP: empty activeProviders — falls back to ALL_PROVIDER_IDS (no callers pass
+    // empty intentionally; guard preserves backward compatibility).
+    expect(routeTargets({ kind: "all" }, [])).toEqual(["codex", "claude", "gemini"]);
   });
 
   it("compares routes by target", () => {

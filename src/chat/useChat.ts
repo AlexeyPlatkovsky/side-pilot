@@ -150,7 +150,11 @@ export function useChat(api: ChatApi, enabled = true, locale: Locale = "en") {
   }, [api, applySessions, enabled, setActive, locale]);
 
   const submit = useCallback(
-    async (prompt: string, route: ActiveRoute) => {
+    async (
+      prompt: string,
+      route: ActiveRoute,
+      activeProviders?: AssistantId[],
+    ) => {
       const trimmed = prompt.trim();
       const session = activeRef.current;
       if (!trimmed || !session) return;
@@ -158,7 +162,7 @@ export function useChat(api: ChatApi, enabled = true, locale: Locale = "en") {
       // which the user may switch to another chat; the late reply must land in
       // (and only re-render) its originating chat, never whichever is now active.
       const originId = session.id;
-      const targets = routeTargets(route);
+      const targets = routeTargets(route, activeProviders);
 
       const userMessage: ChatMessage = {
         id: newId(),
@@ -201,7 +205,7 @@ export function useChat(api: ChatApi, enabled = true, locale: Locale = "en") {
           sessionId: session.id,
           route,
           prompt: trimmed,
-          activeProviders: ALL_PROVIDER_IDS as AssistantId[],
+          activeProviders: activeProviders ?? (ALL_PROVIDER_IDS as AssistantId[]),
         });
         knownMessageIdsRef.current.set(
           originId,

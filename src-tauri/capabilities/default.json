@@ -29,6 +29,9 @@
     "allow-delete-session",
     "allow-clear-session",
     "allow-update-codex-session-id",
-    "allow-open-external"
+    "allow-open-external",
+    "allow-detect-clis",
+    "allow-get-cli-integrations",
+    "allow-update-cli-integrations"
   ]
 }

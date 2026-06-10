@@ -12,8 +12,14 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { inertChatApi, type ChatApi } from "../chat/api";
 import { formatMessageTimestamp } from "../chat/history";
-import { DEFAULT_ROUTE, messageLabel, type ActiveRoute } from "../chat/providers";
+import {
+  DEFAULT_ROUTE,
+  ALL_PROVIDER_IDS,
+  messageLabel,
+  type ActiveRoute,
+} from "../chat/providers";
 import { AiSwitcher } from "./AiSwitcher";
+import type { AssistantId } from "../chat/generated/AssistantId";
 import { ChatHistory } from "./ChatHistory";
 import { Dialog } from "./Dialog";
 import { RenameDialog } from "./RenameDialog";
@@ -89,6 +95,9 @@ export function ChatPanel({
   const [railOpen, setRailOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [renamingActive, setRenamingActive] = useState(false);
+  // Initialise to all providers so submissions are never blocked during the async
+  // load. The effect below overwrites with the real persisted set immediately.
+  const [enabledProviders, setEnabledProviders] = useState<AssistantId[]>([...ALL_PROVIDER_IDS]);
   const isPending = state.status.kind === "pending";
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -192,6 +201,26 @@ export function ChatPanel({
     endRef.current?.scrollIntoView?.({ block: "end" });
   }, [state.messages.length, state.status.kind]);
 
+  // Load enabled CLI providers so the switcher hides disabled ones.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getCliIntegrations()
+      .then((integrations) => {
+        if (cancelled) return;
+        const enabled = ALL_PROVIDER_IDS.filter((id) => integrations[id].enabled);
+        setEnabledProviders(enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setEnabledProviders([...ALL_PROVIDER_IDS]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api]);
+
+  const allProvidersDisabled = enabledProviders.length === 0;
+
   const resizeComposerInput = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -218,7 +247,7 @@ export function ChatPanel({
   const onSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (isPending || !draft.trim()) return;
-    void submit(draft, route);
+    void submit(draft, route, enabledProviders);
     setDraft("");
   };
 
@@ -227,7 +256,7 @@ export function ChatPanel({
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       if (!isPending && draft.trim()) {
-        void submit(draft, route);
+        void submit(draft, route, enabledProviders);
         setDraft("");
       }
     }
@@ -404,39 +433,51 @@ export function ChatPanel({
             {state.status.message}
           </p>
         )}
-        <form
-          className="composer"
-          aria-label={t("chat_composerLabel")}
-          onSubmit={onSubmit}
-        >
-          <textarea
-            ref={inputRef}
-            className="composer__input"
-            aria-label={t("chat_askLabel")}
-            placeholder={t("chat_askPlaceholder")}
-            rows={1}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={onKeyDown}
-          />
-          <AiSwitcher
-            route={route}
-            disabled={isPending}
-            onSelect={setActiveRoute}
-            locale={locale}
-          />
-          <button
-            type="submit"
-            className="composer__send"
-            aria-label={t("chat_send")}
-            title={t("chat_sendTitle")}
-            disabled={isPending || !draft.trim()}
+        {allProvidersDisabled && (
+          <p
+            className="composer__no-providers"
+            role="alert"
+            data-testid="no-ai-providers"
           >
-            {/* Return/Enter glyph — the Enter key sends. aria-label keeps the
-                accessible name "Send" for screen readers. */}
-            <span aria-hidden="true">⏎</span>
-          </button>
-        </form>
+            {t("cli_noProviders")}
+          </p>
+        )}
+        {!allProvidersDisabled && (
+          <form
+            className="composer"
+            aria-label={t("chat_composerLabel")}
+            onSubmit={onSubmit}
+          >
+            <textarea
+              ref={inputRef}
+              className="composer__input"
+              aria-label={t("chat_askLabel")}
+              placeholder={t("chat_askPlaceholder")}
+              rows={1}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={onKeyDown}
+            />
+            <AiSwitcher
+              route={route}
+              disabled={isPending}
+              onSelect={setActiveRoute}
+              locale={locale}
+              enabledProviders={enabledProviders}
+            />
+            <button
+              type="submit"
+              className="composer__send"
+              aria-label={t("chat_send")}
+              title={t("chat_sendTitle")}
+              disabled={isPending || !draft.trim()}
+            >
+              {/* Return/Enter glyph — the Enter key sends. aria-label keeps the
+                  accessible name "Send" for screen readers. */}
+              <span aria-hidden="true">⏎</span>
+            </button>
+          </form>
+        )}
       </div>
 
       {renamingActive && activeSession && (

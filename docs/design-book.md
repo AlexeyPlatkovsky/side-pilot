@@ -22,7 +22,7 @@ with `color-mix()`, so changing a primitive updates every tint built from it.
 | Token | Value | Role |
 |---|---|---|
 | `--ink` | `#312522` | Darkest warm brown — primary text, send button |
-| `--muted` | `#7a625b` | Muted brown — secondary text |
+| `--muted` | `#b74f30` | Muted brown — secondary text |
 | `--honey` | `#f7b955` | Warm yellow accent (header glow) |
 | `--coral` | `#dc6b4f` | Coral accent (hover overlay) |
 | `--sage` | `#6b8f83` | Green-grey (assistant message border) |

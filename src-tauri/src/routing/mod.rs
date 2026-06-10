@@ -81,9 +81,20 @@ pub struct RouteRunResult {
 }
 
 /// Resolve a route to its ordered, de-duplicated list of target providers.
+///
+/// For `Single` routes, returns an empty list when the requested provider is
+/// not in `active` (i.e. the user has disabled it) and `active` is non-empty.
+/// An empty `active` list is treated as "no filter" to keep legacy call sites
+/// working when `active_providers` is omitted.
 pub fn plan_targets(route: &Route, active: &[AssistantId]) -> Vec<AssistantId> {
     match route {
-        Route::Single { provider } => vec![*provider],
+        Route::Single { provider } => {
+            if active.is_empty() || active.contains(provider) {
+                vec![*provider]
+            } else {
+                vec![]
+            }
+        }
         Route::All => {
             let mut targets: Vec<AssistantId> = Vec::with_capacity(active.len());
             for provider in active {
@@ -836,6 +847,28 @@ mod tests {
             &[AssistantId::Codex, AssistantId::Claude],
         );
         assert_eq!(targets, vec![AssistantId::Codex]);
+    }
+
+    #[test]
+    fn single_route_excludes_provider_not_in_active_list() {
+        let targets = plan_targets(
+            &Route::Single {
+                provider: AssistantId::Claude,
+            },
+            &[AssistantId::Codex, AssistantId::Gemini],
+        );
+        assert!(targets.is_empty());
+    }
+
+    #[test]
+    fn single_route_empty_active_list_skips_filter() {
+        let targets = plan_targets(
+            &Route::Single {
+                provider: AssistantId::Claude,
+            },
+            &[],
+        );
+        assert_eq!(targets, vec![AssistantId::Claude]);
     }
 
     #[test]

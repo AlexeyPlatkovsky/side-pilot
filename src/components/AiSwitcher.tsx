@@ -24,6 +24,7 @@ import {
 import { AllGlyph, ProviderGlyph, RouteIcon } from "./ProviderIcon";
 import type { Locale } from "../i18n/types";
 import { useI18n } from "../i18n/useI18n";
+import type { AssistantId } from "../chat/generated/AssistantId";
 
 export interface AiSwitcherProps {
   /** The currently selected route (single provider or All). */
@@ -34,6 +35,8 @@ export interface AiSwitcherProps {
   onSelect: (route: ActiveRoute) => void;
   /** Current locale for translations. */
   locale?: Locale;
+  /** Providers currently enabled. When provided, only enabled providers appear. */
+  enabledProviders?: AssistantId[];
 }
 
 const ALL_ROUTE: ActiveRoute = { kind: "all" };
@@ -43,6 +46,7 @@ export function AiSwitcher({
   disabled,
   onSelect,
   locale = "en",
+  enabledProviders,
 }: AiSwitcherProps) {
   const { t } = useI18n(locale);
   const [open, setOpen] = useState(false);
@@ -51,6 +55,12 @@ export function AiSwitcher({
   // A response starting mid-pick locks the picker closed without an effect:
   // visibility is derived, so `open` can stay set but never render while disabled.
   const menuOpen = open && !disabled;
+
+  const visibleProviders =
+    enabledProviders !== undefined
+      ? PROVIDERS.filter((p) => enabledProviders.includes(p.id))
+      : PROVIDERS;
+  const hasAll = enabledProviders === undefined || enabledProviders.length > 1;
 
   // Close on outside click so the picker behaves like a normal menu.
   useEffect(() => {
@@ -94,17 +104,19 @@ export function AiSwitcher({
           role="menu"
           aria-label={t("ai_chooseProvider")}
         >
-          <button
-            type="button"
-            role="menuitemradio"
-            aria-checked={route.kind === "all"}
-            className={`ai-switcher__option${route.kind === "all" ? " ai-switcher__option--active" : ""}`}
-            onClick={() => choose(ALL_ROUTE)}
-          >
-            <AllGlyph />
-            <span className="ai-switcher__option-label">{t("ai_all")}</span>
-          </button>
-          {PROVIDERS.map((provider) => {
+          {hasAll && (
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={route.kind === "all"}
+              className={`ai-switcher__option${route.kind === "all" ? " ai-switcher__option--active" : ""}`}
+              onClick={() => choose(ALL_ROUTE)}
+            >
+              <AllGlyph />
+              <span className="ai-switcher__option-label">{t("ai_all")}</span>
+            </button>
+          )}
+          {visibleProviders.map((provider) => {
             const optionRoute: ActiveRoute = { kind: "single", provider: provider.id };
             const active = routesEqual(optionRoute, route);
             return (
