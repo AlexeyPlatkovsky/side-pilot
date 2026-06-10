@@ -6,7 +6,7 @@ import type { CliDetectionStatus } from "../chat/generated/CliDetectionStatus";
 import type { AssistantId } from "../chat/generated/AssistantId";
 import { mergeDetection, findEntry } from "../chat/cliIntegrationsUtils";
 import { useI18n } from "../i18n/useI18n";
-import type { Locale } from "../i18n/types";
+import type { Locale, TranslationKey } from "../i18n/types";
 
 export interface CliIntegrationsSettingsProps {
   api: ChatApi;
@@ -31,7 +31,7 @@ const STATUS_CLASS: Record<CliDetectionStatus, string> = {
   notDetected: "cli-status--not-detected",
 };
 
-const STATUS_KEY: Record<CliDetectionStatus, string> = {
+const STATUS_KEY: Record<CliDetectionStatus, TranslationKey> = {
   available: "cli_statusAvailable",
   notInstalled: "cli_statusNotInstalled",
   notAuthenticated: "cli_statusNotAuthenticated",
@@ -134,9 +134,7 @@ export function CliIntegrationsSettings({
 
   // During loading, show the full list with "Detecting..." on every row.
   // On error, show the error banner.
-  const integrations = isLoaded
-    ? loadState.integrations
-    : loadingIntegrations();
+  const integrations = isLoaded ? loadState.integrations : loadingIntegrations();
   const all = [integrations.codex, integrations.claude, integrations.gemini];
 
   return (
@@ -149,8 +147,7 @@ export function CliIntegrationsSettings({
       {all.map((item) => {
         const isAvailable = item.detectedStatus === "available";
         const isLoading = !isLoaded;
-        const isDetecting =
-          isLoading || detecting.has(item.assistant);
+        const isDetecting = isLoading || detecting.has(item.assistant);
 
         return (
           <div key={item.assistant} className="cli-integration-row">
@@ -160,9 +157,11 @@ export function CliIntegrationsSettings({
 
             <span
               className={`cli-status ${isDetecting ? "" : STATUS_CLASS[item.detectedStatus]}`}
-              aria-label={isDetecting ? t("cli_detecting") : t(STATUS_KEY[item.detectedStatus] as never)}
+              aria-label={
+                isDetecting ? t("cli_detecting") : t(STATUS_KEY[item.detectedStatus])
+              }
             >
-              {isDetecting ? t("cli_detecting") : t(STATUS_KEY[item.detectedStatus] as never)}
+              {isDetecting ? t("cli_detecting") : t(STATUS_KEY[item.detectedStatus])}
             </span>
 
             <label className="settings-toggle cli-integration-row__toggle">
@@ -200,4 +199,3 @@ function toggleIntegration(
   if (entry) entry.enabled = enabled;
   return next;
 }
-

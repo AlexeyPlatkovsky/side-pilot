@@ -35,6 +35,34 @@ on:
       - "index.html"
 
 jobs:
+  # Validate Rust core compiles, tests pass, and clippy is clean on target
+  # desktop platforms (macOS, Windows) — the main `checks` job only runs on
+  # Linux and would miss macOS-only code paths and Windows-sys code paths.
+  rust-cross:
+    name: Rust checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@cargo-nextest
+
+      - name: Test Rust core
+        run: cargo nextest run --manifest-path src-tauri/Cargo.toml
+
+      - name: Lint Rust core
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
+
   checks:
     runs-on: ubuntu-latest
     permissions:

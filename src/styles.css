@@ -728,6 +728,21 @@ body {
   font-size: var(--font-sm);
 }
 
+.message__retry {
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-danger);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.message__retry:hover {
+  background: var(--surface-danger);
+}
+
 /* Failure banner — keeps the transcript intact while surfacing the error. */
 .conversation__error {
   margin: 0;
@@ -811,6 +826,13 @@ body {
 .composer__send:disabled {
   cursor: default;
   opacity: 0.76;
+}
+
+.composer__no-providers {
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  text-align: center;
 }
 
 /* --- AI switcher (SP-017) -------------------------------------------------- */

@@ -1,6 +1,7 @@
 import {
   type Dispatch,
   type SetStateAction,
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -29,8 +30,9 @@ import {
   type ChatController,
   type RoutesBySession,
 } from "../chat/useChat";
-import type { Locale } from "../i18n/types";
+import type { Locale, TranslationKey } from "../i18n/types";
 import { useI18n } from "../i18n/useI18n";
+import type { ChatMessage } from "../state/chat";
 
 interface ChatPanelBaseProps {
   /** Backend seam; defaults to the no-IPC stub so shell tests stay offline. */
@@ -54,6 +56,96 @@ interface LocalRouteProps {
 }
 
 export type ChatPanelProps = ChatPanelBaseProps & (RetainedRouteProps | LocalRouteProps);
+
+interface MessageRowProps {
+  message: ChatMessage;
+  retryErrorId: string | null;
+  now: number;
+  t: (key: TranslationKey, values?: Record<string, string | number>) => string;
+  markdownComponents: Components;
+  onRetry: (id: string, provider: string) => void;
+}
+
+const MessageRow = memo(function MessageRow({
+  message,
+  retryErrorId,
+  now,
+  t,
+  markdownComponents,
+  onRetry,
+}: MessageRowProps) {
+  if (message.sender !== "assistant") {
+    return (
+      <article key={message.id} className="message message--user">
+        <div className="message__meta">
+          <time className="message__time">
+            {formatMessageTimestamp(message.createdAt, now)}
+          </time>
+        </div>
+        <p>{message.content}</p>
+      </article>
+    );
+  }
+  const label = messageLabel(message.assistantId, message.model, message.reasoningEffort);
+  if (message.pending) {
+    return (
+      <article
+        className="message message--assistant message--thinking"
+        data-testid="thinking"
+        data-provider={message.assistantId}
+      >
+        <span className="message__label">{label}</span>
+        <p className="message__thinking" role="status">
+          {t("chat_thinking")}
+        </p>
+      </article>
+    );
+  }
+  if (message.error) {
+    const showRetry = retryErrorId === message.id;
+    return (
+      <article
+        className="message message--assistant message--error"
+        data-testid="provider-error"
+        data-provider={message.assistantId}
+      >
+        <div className="message__meta">
+          <span className="message__label">{label}</span>
+          <time className="message__time">
+            {formatMessageTimestamp(message.createdAt, now)}
+          </time>
+        </div>
+        <p className="message__error" role="alert">
+          {message.content}
+        </p>
+        {showRetry && (
+          <button
+            type="button"
+            className="message__retry"
+            onClick={() => onRetry(message.id, message.assistantId ?? "")}
+          >
+            {t("chat_retry")}
+          </button>
+        )}
+      </article>
+    );
+  }
+  return (
+    <article className="message message--assistant">
+      <div className="message__meta">
+        <span className="message__label">{label}</span>
+        <time className="message__time">
+          {formatMessageTimestamp(message.createdAt, now)}
+        </time>
+      </div>
+      <div className="message__markdown">
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          {message.content}
+        </ReactMarkdown>
+      </div>
+    </article>
+  );
+});
 
 /**
  * The expanded panel's chat body (SP-006, SP-048–051, SP-017): a collapsible
@@ -97,7 +189,9 @@ export function ChatPanel({
   const [renamingActive, setRenamingActive] = useState(false);
   // Initialise to all providers so submissions are never blocked during the async
   // load. The effect below overwrites with the real persisted set immediately.
-  const [enabledProviders, setEnabledProviders] = useState<AssistantId[]>([...ALL_PROVIDER_IDS]);
+  const [enabledProviders, setEnabledProviders] = useState<AssistantId[]>([
+    ...ALL_PROVIDER_IDS,
+  ]);
   const isPending = state.status.kind === "pending";
   const endRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -324,96 +418,17 @@ export function ChatPanel({
         </div>
 
         <div className="conversation" aria-live="polite">
-          {state.messages.map((message) => {
-            if (message.sender !== "assistant") {
-              // User messages carry only a timestamp; bubble alignment marks the
-              // sender.
-              return (
-                <article key={message.id} className="message message--user">
-                  <div className="message__meta">
-                    <time className="message__time">
-                      {formatMessageTimestamp(message.createdAt, now)}
-                    </time>
-                  </div>
-                  <p>{message.content}</p>
-                </article>
-              );
-            }
-            const label = messageLabel(
-              message.assistantId,
-              message.model,
-              message.reasoningEffort,
-            );
-            // A per-provider slot still awaiting its reply (SP-017).
-            if (message.pending) {
-              return (
-                <article
-                  key={message.id}
-                  className="message message--assistant message--thinking"
-                  data-testid="thinking"
-                  data-provider={message.assistantId}
-                >
-                  <span className="message__label">{label}</span>
-                  <p className="message__thinking" role="status">
-                    {t("chat_thinking")}
-                  </p>
-                </article>
-              );
-            }
-            // A failed provider slot renders as an inline error card in-thread.
-            if (message.error) {
-              const showRetry = retryErrorId === message.id;
-              return (
-                <article
-                  key={message.id}
-                  className="message message--assistant message--error"
-                  data-testid="provider-error"
-                  data-provider={message.assistantId}
-                >
-                  <div className="message__meta">
-                    <span className="message__label">{label}</span>
-                    <time className="message__time">
-                      {formatMessageTimestamp(message.createdAt, now)}
-                    </time>
-                  </div>
-                  <p className="message__error" role="alert">
-                    {message.content}
-                  </p>
-                  {showRetry && (
-                    <button
-                      type="button"
-                      className="message__retry"
-                      onClick={() =>
-                        void handleRetry(message.id, message.assistantId ?? "")
-                      }
-                    >
-                      {t("chat_retry")}
-                    </button>
-                  )}
-                </article>
-              );
-            }
-            return (
-              <article key={message.id} className="message message--assistant">
-                {/* One-row meta: provider/model label then the timestamp. Kept on
-                    a single line (nowrap) so a narrow panel never wraps it. */}
-                <div className="message__meta">
-                  <span className="message__label">{label}</span>
-                  <time className="message__time">
-                    {formatMessageTimestamp(message.createdAt, now)}
-                  </time>
-                </div>
-                <div className="message__markdown">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={markdownComponents}
-                  >
-                    {message.content}
-                  </ReactMarkdown>
-                </div>
-              </article>
-            );
-          })}
+          {state.messages.map((message) => (
+            <MessageRow
+              key={message.id}
+              message={message}
+              retryErrorId={retryErrorId}
+              now={now}
+              t={t}
+              markdownComponents={markdownComponents}
+              onRetry={handleRetry}
+            />
+          ))}
           {/* Defensive fallback for a pending session without recoverable
               provider-slot metadata (for example, state from an older client). */}
           {isPending && !state.messages.some((m) => m.pending) && (

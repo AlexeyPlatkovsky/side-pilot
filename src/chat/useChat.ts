@@ -150,11 +150,7 @@ export function useChat(api: ChatApi, enabled = true, locale: Locale = "en") {
   }, [api, applySessions, enabled, setActive, locale]);
 
   const submit = useCallback(
-    async (
-      prompt: string,
-      route: ActiveRoute,
-      activeProviders?: AssistantId[],
-    ) => {
+    async (prompt: string, route: ActiveRoute, activeProviders?: AssistantId[]) => {
       const trimmed = prompt.trim();
       const session = activeRef.current;
       if (!trimmed || !session) return;

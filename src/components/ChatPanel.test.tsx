@@ -1421,7 +1421,12 @@ describe("[smoke] ChatPanel", () => {
     const api = makeApi({
       history: [
         persisted({ sender: "user", content: "hello codex" }),
-        persisted({ sender: "assistant", content: "hi from codex", assistantId: "codex", seq: 2 }),
+        persisted({
+          sender: "assistant",
+          content: "hi from codex",
+          assistantId: "codex",
+          seq: 2,
+        }),
       ],
     });
     api.getCliIntegrations = vi.fn(() => Promise.resolve(codexDisabled));
@@ -1461,11 +1466,17 @@ describe("[smoke] ChatPanel", () => {
     let resolveRoute!: (r: RouteRunResult) => void;
     const api = makeApi({
       runRoute: vi.fn(
-        () => new Promise<RouteRunResult>((resolve) => { resolveRoute = resolve; }),
+        () =>
+          new Promise<RouteRunResult>((resolve) => {
+            resolveRoute = resolve;
+          }),
       ),
     });
     api.getCliIntegrations = vi.fn(
-      () => new Promise<CliIntegrations>((resolve) => { resolveIntegrations = resolve; }),
+      () =>
+        new Promise<CliIntegrations>((resolve) => {
+          resolveIntegrations = resolve;
+        }),
     );
     render(<ChatPanel api={api} />);
 
@@ -1491,7 +1502,11 @@ describe("[smoke] ChatPanel", () => {
 
     // The in-flight response resolves and must still appear in the transcript.
     await act(async () => {
-      resolveRoute(routeResult("pending claude", [{ provider: "claude", content: "late claude reply" }]));
+      resolveRoute(
+        routeResult("pending claude", [
+          { provider: "claude", content: "late claude reply" },
+        ]),
+      );
       await Promise.resolve();
     });
 

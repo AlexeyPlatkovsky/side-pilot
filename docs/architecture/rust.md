@@ -146,6 +146,7 @@ Binary resolution is cached per assistant. On Unix/macOS it uses `/bin/zsh -lc '
 | `src-tauri/src/adapters/codex.rs` | Codex CLI adapter (`codex exec --json`) |
 | `src-tauri/src/adapters/claude.rs` | Claude Code CLI adapter (`claude -p --output-format json`) |
 | `src-tauri/src/adapters/gemini.rs` | Gemini CLI adapter (`gemini -o json --approval-mode plan --skip-trust`) |
+| `src-tauri/src/adapters/shared.rs` | `AdapterBase` (resolver/runner/env/cwd fields + `resolve_cwd`, `dispatch`) and `map_runner_io_error` — shared by all three adapter impls |
 | `src-tauri/src/adapters/ansi.rs` | Shared defensive ANSI-escape stripper (§5) |
 | `src-tauri/src/adapters/json.rs` | Shared lenient single-document JSON parser (Claude/Gemini) |
 | `src-tauri/src/adapters/process.rs` | `CommandRunner` trait + tokio subprocess runner |

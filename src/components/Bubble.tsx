@@ -60,7 +60,9 @@ export function Bubble({
     Promise.all([chatApi.getCliIntegrations(), chatApi.detectClis()])
       .then(([persisted, detected]) => {
         if (cancelled) return;
-        chatApi.updateCliIntegrations(mergeDetection(persisted, detected)).catch(() => {});
+        chatApi
+          .updateCliIntegrations(mergeDetection(persisted, detected))
+          .catch(() => {});
       })
       .catch(() => {});
     return () => {
@@ -127,7 +129,11 @@ export function Bubble({
   useEffect(() => {
     const api = chatApi;
     if (api === inertChatApi) return;
-    if (typeof (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ === "undefined") return;
+    if (
+      typeof (window as unknown as { __TAURI_INTERNALS__: unknown })
+        .__TAURI_INTERNALS__ === "undefined"
+    )
+      return;
     let cancelled = false;
     let unlistenFn: (() => void) | null = null;
 

@@ -24,6 +24,7 @@ pub mod gemini;
 pub mod json;
 pub mod process;
 pub mod registry;
+pub mod shared;
 
 pub use claude::ClaudeAdapter;
 pub use codex::CodexAdapter;
