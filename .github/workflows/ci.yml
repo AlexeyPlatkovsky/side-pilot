@@ -17,8 +17,6 @@ on:
       - "eslint.config.js"
       - "index.html"
   push:
-    branches:
-      - main
     paths:
       - "src/**"
       - "src-tauri/**"
