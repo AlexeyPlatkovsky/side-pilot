@@ -222,7 +222,9 @@ test.describe("GeneralSettings loading and error states", () => {
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.getByRole("tab", { name: "General" }).click();
     await expect(
-      page.getByRole("tabpanel", { name: "General" }).getByText("Failed to load general settings."),
+      page
+        .getByRole("tabpanel", { name: "General" })
+        .getByText("Failed to load general settings."),
     ).toBeVisible();
   });
 });
