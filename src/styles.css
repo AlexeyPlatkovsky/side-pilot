@@ -394,11 +394,9 @@ body {
 
 .cli-integration-row__name {
   flex-shrink: 0;
-  width: 72px;
+  width: 128px;
   font-weight: var(--font-weight-bold);
   white-space: nowrap;
-  /* Bound long custom-CLI names (≤30 chars) so a name never pushes the row past
-     the narrow settings pane — it truncates with an ellipsis instead (SP-072). */
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -461,6 +459,7 @@ body {
   width: 16px;
   height: 16px;
   display: block;
+  object-fit: cover;
 }
 
 .settings-toggle {
@@ -1448,10 +1447,6 @@ body {
 /* Custom rows carry a 5th control (Delete icon) the built-in rows don't.
    Re-check and Delete are icon buttons so no column narrowing is needed —
    the name/status widths match the built-in rows for visual alignment. */
-.cli-integration-row--custom {
-  gap: var(--space-2);
-}
-
 /* Custom CLIs have no bundled logo: a letter badge stands in for the icon. */
 .provider-icon--custom {
   background: var(--color-accent);
