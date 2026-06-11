@@ -120,15 +120,11 @@ jobs:
         run: |
           EXIT_CODE=0
           npm run test:smoke -- --reporter=json 2>&1 | tee /tmp/smoke-fe.txt || EXIT_CODE=$?
-          node -e "
-          const f=require('fs').readFileSync('/tmp/smoke-fe.txt','utf8');
-          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
-          if(i>=0&&j>i) try {
-            const r=JSON.parse(f.slice(i,j+1));
-            if(typeof r.numTotalTests==='number')
-              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.numPassedTests+'/'+r.numTotalTests+' passed\n');
-          } catch(e){}
-          " 2>/dev/null || true
+          PASSED=$(grep -oP '"numPassedTests":\K\d+' /tmp/smoke-fe.txt | head -1)
+          TOTAL=$(grep -oP '"numTotalTests":\K\d+' /tmp/smoke-fe.txt | head -1)
+          if [ -n "$PASSED" ] && [ -n "$TOTAL" ]; then
+            echo "report=$PASSED/$TOTAL passed" >> $GITHUB_OUTPUT
+          fi
           exit $EXIT_CODE
 
       - name: Test frontend
@@ -137,15 +133,11 @@ jobs:
         run: |
           EXIT_CODE=0
           npm run test -- --reporter=json 2>&1 | tee /tmp/test-fe.txt || EXIT_CODE=$?
-          node -e "
-          const f=require('fs').readFileSync('/tmp/test-fe.txt','utf8');
-          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
-          if(i>=0&&j>i) try {
-            const r=JSON.parse(f.slice(i,j+1));
-            if(typeof r.numTotalTests==='number')
-              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.numPassedTests+'/'+r.numTotalTests+' passed\n');
-          } catch(e){}
-          " 2>/dev/null || true
+          PASSED=$(grep -oP '"numPassedTests":\K\d+' /tmp/test-fe.txt | head -1)
+          TOTAL=$(grep -oP '"numTotalTests":\K\d+' /tmp/test-fe.txt | head -1)
+          if [ -n "$PASSED" ] && [ -n "$TOTAL" ]; then
+            echo "report=$PASSED/$TOTAL passed" >> $GITHUB_OUTPUT
+          fi
           exit $EXIT_CODE
 
       - name: Coverage frontend
@@ -154,15 +146,11 @@ jobs:
         run: |
           EXIT_CODE=0
           npm run test:coverage -- --reporter=json 2>&1 | tee /tmp/coverage.txt || EXIT_CODE=$?
-          node -e "
-          const f=require('fs').readFileSync('/tmp/coverage.txt','utf8');
-          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
-          if(i>=0&&j>i) try {
-            const r=JSON.parse(f.slice(i,j+1));
-            if(typeof r.numTotalTests==='number')
-              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.numPassedTests+'/'+r.numTotalTests+' passed\n');
-          } catch(e){}
-          " 2>/dev/null || true
+          PASSED=$(grep -oP '"numPassedTests":\K\d+' /tmp/coverage.txt | head -1)
+          TOTAL=$(grep -oP '"numTotalTests":\K\d+' /tmp/coverage.txt | head -1)
+          if [ -n "$PASSED" ] && [ -n "$TOTAL" ]; then
+            echo "report=$PASSED/$TOTAL passed" >> $GITHUB_OUTPUT
+          fi
           exit $EXIT_CODE
 
       - name: Install Playwright browsers
@@ -175,15 +163,11 @@ jobs:
         run: |
           EXIT_CODE=0
           npm run test:e2e:smoke -- --reporter=json 2>&1 | tee /tmp/smoke-e2e.txt || EXIT_CODE=$?
-          node -e "
-          const f=require('fs').readFileSync('/tmp/smoke-e2e.txt','utf8');
-          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
-          if(i>=0&&j>i) try {
-            const r=JSON.parse(f.slice(i,j+1));
-            if(r.stats)
-              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.stats.expected+'/'+r.stats.total+' passed\n');
-          } catch(e){}
-          " 2>/dev/null || true
+          EXPECTED=$(grep -oP '"expected":\K\d+' /tmp/smoke-e2e.txt | head -1)
+          TOTAL=$(grep -oP '"total":\K\d+' /tmp/smoke-e2e.txt | head -1)
+          if [ -n "$EXPECTED" ] && [ -n "$TOTAL" ]; then
+            echo "report=$EXPECTED/$TOTAL passed" >> $GITHUB_OUTPUT
+          fi
           exit $EXIT_CODE
 
       - name: Test WebKit runtime harness
@@ -192,15 +176,11 @@ jobs:
         run: |
           EXIT_CODE=0
           npm run test:e2e -- --reporter=json 2>&1 | tee /tmp/e2e.txt || EXIT_CODE=$?
-          node -e "
-          const f=require('fs').readFileSync('/tmp/e2e.txt','utf8');
-          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
-          if(i>=0&&j>i) try {
-            const r=JSON.parse(f.slice(i,j+1));
-            if(r.stats)
-              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.stats.expected+'/'+r.stats.total+' passed\n');
-          } catch(e){}
-          " 2>/dev/null || true
+          EXPECTED=$(grep -oP '"expected":\K\d+' /tmp/e2e.txt | head -1)
+          TOTAL=$(grep -oP '"total":\K\d+' /tmp/e2e.txt | head -1)
+          if [ -n "$EXPECTED" ] && [ -n "$TOTAL" ]; then
+            echo "report=$EXPECTED/$TOTAL passed" >> $GITHUB_OUTPUT
+          fi
           exit $EXIT_CODE
 
       - name: Build frontend
@@ -320,7 +300,7 @@ jobs:
            | $(icon "$TEST_RUST")| Test Rust core  | $(report_or_short "$TEST_RUST" "$TEST_RUST_REPORT")|
            | $(icon "$IPC")      | IPC bindings    | $(report_or_short "$IPC" "")              |
            | $(icon "$CLIPPY")   | Clippy (Rust lint)| $(report_or_short "$CLIPPY" "")          |
-           | $(icon "$CARGO_AUDIT")| Audit Rust deps | $(report_or_short "$CARGO_AUDIT" "$CARGO_AUDIT_REPORT") |
+            | $(icon "$CARGO_AUDIT")| Audit Rust deps | $(report_or_short "$CARGO_AUDIT" "$CARGO_AUDIT_REPORT") |"
 
           pass=$(echo "$table" | grep -cE "✅|➖" || true)
           fail=$(echo "$table" | grep -cE "❌|🚫|❓" || true)
