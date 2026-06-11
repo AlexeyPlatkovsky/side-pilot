@@ -131,9 +131,12 @@ export function AddCliDialog({
           )}
         </label>
 
-        <label className="add-cli__field">
-          <span className="add-cli__label">{t("cli_commandLabel")}</span>
+        <div className="add-cli__field">
+          <label htmlFor="add-cli-command" className="add-cli__label">
+            {t("cli_commandLabel")}
+          </label>
           <input
+            id="add-cli-command"
             className="add-cli__input"
             type="text"
             value={command}
@@ -143,12 +146,13 @@ export function AddCliDialog({
             aria-invalid={commandError !== null}
             onChange={(e) => setCommand(e.target.value)}
           />
+          <span className="add-cli__hint">{t("cli_commandHint")}</span>
           {commandError && (
             <span className="add-cli__error" aria-live="polite">
               {commandError}
             </span>
           )}
-        </label>
+        </div>
 
         {test.kind === "result" && (
           <p

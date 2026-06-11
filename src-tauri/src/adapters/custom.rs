@@ -29,9 +29,24 @@ use super::{AssistantId, CliAdapter};
 /// Add-dialog "Test" and startup detection.
 pub const CUSTOM_CLI_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Build the login-shell [`CommandSpec`] that runs `command` with `prompt` piped
-/// to stdin. The login shell supplies the user's real `PATH`/environment, so no
-/// separate environment capture is needed.
+/// Token a user may embed in their command string to indicate where the prompt
+/// text should be injected as a CLI argument (instead of via stdin).
+///
+/// Example: `opencode --prompt {prompt}` → the adapter replaces the token with
+/// a shell-safe reference and passes the actual prompt as a positional argument.
+const PROMPT_PLACEHOLDER: &str = "{prompt}";
+
+/// Build the login-shell [`CommandSpec`] that runs `command` with the prompt
+/// delivered via one of two mechanisms:
+///
+/// * **Stdin** (default, no placeholder): the prompt is written to the child's
+///   stdin. Use for CLIs that read their prompt from a pipe (e.g. `my-cli -i`).
+/// * **Positional argument** (`{prompt}` present): replace `{prompt}` with a
+///   safe shell reference and pass the actual text as a separate shell argument.
+///   Use for CLIs whose flag takes the text inline (e.g. `opencode --prompt`).
+///   The injection is shell-injection-safe: the prompt value is passed as a
+///   discrete shell positional arg (`$1` on Unix), never interpolated into the
+///   command string, so special characters in the prompt are always literal.
 fn build_spec(
     command: &str,
     prompt: &str,
@@ -41,9 +56,43 @@ fn build_spec(
 ) -> CommandSpec {
     #[cfg(windows)]
     let (program, prefix): (&str, &str) = ("cmd", "/C");
-
     #[cfg(not(windows))]
     let (program, prefix): (&str, &str) = ("/bin/zsh", "-lc");
+
+    if command.contains(PROMPT_PLACEHOLDER) {
+        // Unix: replace {prompt} with "$1" and pass the actual prompt as $1.
+        // The shell expands "$1" to the positional argument value without further
+        // interpretation, so $(...), backticks, and quotes in the prompt are safe.
+        #[cfg(not(windows))]
+        return CommandSpec {
+            program: PathBuf::from(program),
+            args: vec![
+                prefix.to_string(),
+                command.replace(PROMPT_PLACEHOLDER, r#""$1""#),
+                "_".to_string(),       // $0 (dummy script name)
+                prompt.to_string(),    // $1 — the actual prompt value
+            ],
+            cwd,
+            env: Vec::new(),
+            stdin: None,
+            timeout,
+            cancel,
+        };
+        // Windows: inject the prompt via an env var referenced in the command.
+        #[cfg(windows)]
+        return CommandSpec {
+            program: PathBuf::from(program),
+            args: vec![
+                prefix.to_string(),
+                command.replace(PROMPT_PLACEHOLDER, "%SIDE_PILOT_PROMPT%"),
+            ],
+            cwd,
+            env: vec![("SIDE_PILOT_PROMPT".to_string(), prompt.to_string())],
+            stdin: None,
+            timeout,
+            cancel,
+        };
+    }
 
     CommandSpec {
         program: PathBuf::from(program),
@@ -208,6 +257,39 @@ mod tests {
         {
             assert_eq!(spec.program, PathBuf::from("cmd"));
             assert_eq!(spec.args[0], "/C");
+        }
+    }
+
+    #[test]
+    fn build_spec_with_prompt_placeholder_passes_prompt_as_positional_arg() {
+        let spec = build_spec(
+            "opencode --prompt {prompt}",
+            "hello world",
+            PathBuf::from("/neutral"),
+            CUSTOM_CLI_TIMEOUT,
+            CancellationToken::new(),
+        );
+        // The placeholder path never uses stdin.
+        assert_eq!(spec.stdin, None);
+        assert_eq!(spec.cwd, PathBuf::from("/neutral"));
+        #[cfg(not(windows))]
+        {
+            // Script contains "$1" (safe positional reference).
+            assert!(
+                spec.args[1].contains(r#""$1""#),
+                "script should reference $1, got: {:?}",
+                spec.args[1]
+            );
+            // $0 is the dummy name; $1 is the actual prompt.
+            assert_eq!(spec.args[2], "_");
+            assert_eq!(spec.args[3], "hello world");
+            assert!(spec.env.is_empty());
+        }
+        #[cfg(windows)]
+        {
+            assert!(spec.args[1].contains("%SIDE_PILOT_PROMPT%"));
+            assert_eq!(spec.env[0].0, "SIDE_PILOT_PROMPT");
+            assert_eq!(spec.env[0].1, "hello world");
         }
     }
 

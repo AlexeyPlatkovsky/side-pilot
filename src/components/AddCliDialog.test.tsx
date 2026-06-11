@@ -107,6 +107,28 @@ describe("AddCliDialog", () => {
     expect(await screen.findByText("Test timed out")).toBeInTheDocument();
   });
 
+  it("disables Save while a test run is in flight", async () => {
+    let complete!: () => void;
+    const api = makeApi({
+      testCustomCli: vi.fn().mockReturnValue(
+        new Promise<void>((res) => {
+          complete = res;
+        }),
+      ),
+    });
+    renderDialog({ api });
+    await userEvent.type(nameInput(), "OpenCode");
+    await userEvent.type(commandInput(), "opencode --prompt {prompt}");
+
+    expect(saveButton()).toBeEnabled();
+    await userEvent.click(testButton());
+    expect(saveButton()).toBeDisabled();
+
+    complete();
+    expect(await screen.findByText("Test succeeded")).toBeInTheDocument();
+    expect(saveButton()).toBeEnabled();
+  });
+
   it("saves regardless of whether Test was run", async () => {
     const onSave = vi.fn();
     const onClose = vi.fn();

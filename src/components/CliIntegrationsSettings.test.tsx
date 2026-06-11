@@ -146,7 +146,7 @@ describe("CliIntegrationsSettings", () => {
       expect(screen.getByText("Not installed")).toBeDefined();
     });
 
-    const recheckButtons = screen.getAllByText("Re-check");
+    const recheckButtons = screen.getAllByRole("button", { name: "Re-check" });
     await userEvent.click(recheckButtons[1]); // Claude re-check
 
     await waitFor(() => {
@@ -175,7 +175,7 @@ describe("CliIntegrationsSettings", () => {
     await userEvent.click(checkboxes[0]);
 
     // Then re-check Codex
-    const recheckButtons = screen.getAllByText("Re-check");
+    const recheckButtons = screen.getAllByRole("button", { name: "Re-check" });
     await userEvent.click(recheckButtons[0]); // Codex
 
     await waitFor(() => {
@@ -219,7 +219,7 @@ describe("CliIntegrationsSettings", () => {
     await screen.findByText("Codex");
 
     // Start slow re-check on Codex. Codex toggle is now disabled (detecting).
-    const recheckButtons = screen.getAllByText("Re-check");
+    const recheckButtons = screen.getAllByRole("button", { name: "Re-check" });
     const codexRow = recheckButtons[0];
     await userEvent.click(codexRow);
 

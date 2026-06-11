@@ -431,9 +431,36 @@ body {
   margin: 0 var(--space-1);
 }
 
-.cli-integration-row__recheck {
+/* Icon-only action button used for Re-check (all rows) and Delete (custom rows). */
+.cli-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  margin-left: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.65;
+  border-radius: var(--radius-sm);
+}
+
+.cli-btn-icon:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--overlay-hover);
+}
+
+.cli-btn-icon:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.cli-btn-icon img {
+  width: 16px;
+  height: 16px;
+  display: block;
 }
 
 .settings-toggle {
@@ -494,6 +521,11 @@ body {
   padding: var(--space-1) var(--space-3);
   cursor: pointer;
   align-self: flex-start;
+}
+
+.settings-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .settings-field {
@@ -1413,28 +1445,11 @@ body {
   flex-shrink: 0;
 }
 
-.cli-integration-row__delete {
-  flex-shrink: 0;
-  margin-left: 0;
-}
-
-/* A custom row carries a 5th control (Delete) the built-in rows don't, so it
-   tightens the name/status columns and button padding to fit the ≈193px
-   settings pane without horizontal overflow (SP-072). */
+/* Custom rows carry a 5th control (Delete icon) the built-in rows don't.
+   Re-check and Delete are icon buttons so no column narrowing is needed —
+   the name/status widths match the built-in rows for visual alignment. */
 .cli-integration-row--custom {
   gap: var(--space-2);
-}
-
-.cli-integration-row--custom .cli-integration-row__name {
-  width: 56px;
-}
-
-.cli-integration-row--custom .cli-status {
-  width: 84px;
-}
-
-.cli-integration-row--custom .settings-btn {
-  padding: var(--space-1) var(--space-2);
 }
 
 /* Custom CLIs have no bundled logo: a letter badge stands in for the icon. */
@@ -1482,6 +1497,12 @@ body {
 
 .add-cli__input[aria-invalid="true"] {
   border-color: var(--color-danger);
+}
+
+.add-cli__hint {
+  font-size: var(--font-xs);
+  line-height: 1.4;
+  color: var(--color-text-muted);
 }
 
 .add-cli__error {

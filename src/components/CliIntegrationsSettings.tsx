@@ -12,6 +12,8 @@ import { Dialog } from "./Dialog";
 import { Toast } from "./Toast";
 import { useI18n } from "../i18n/useI18n";
 import type { Locale, TranslationKey } from "../i18n/types";
+import recheckIcon from "../assets/recheck.png";
+import deleteIcon from "../assets/delete.png";
 
 export interface CliIntegrationsSettingsProps {
   api: ChatApi;
@@ -259,11 +261,13 @@ export function CliIntegrationsSettings({
 
             <button
               type="button"
-              className="settings-btn cli-integration-row__recheck"
+              className="cli-btn-icon"
               onClick={() => void handleRecheck(item.assistant)}
               disabled={!isLoaded || detecting.has(assistantKey(item.assistant))}
+              aria-label={t("cli_recheck")}
+              title={t("cli_recheck")}
             >
-              {t("cli_recheck")}
+              <img src={recheckIcon} alt="" />
             </button>
           </div>
         );
@@ -300,20 +304,24 @@ export function CliIntegrationsSettings({
 
             <button
               type="button"
-              className="settings-btn cli-integration-row__recheck"
+              className="cli-btn-icon"
               onClick={() => void handleRecheck(assistant)}
               disabled={!isLoaded || detecting.has(key)}
+              aria-label={t("cli_recheck")}
+              title={t("cli_recheck")}
             >
-              {t("cli_recheck")}
+              <img src={recheckIcon} alt="" />
             </button>
 
             <button
               type="button"
-              className="settings-btn cli-integration-row__delete"
+              className="cli-btn-icon"
               onClick={() => setDeleteTarget(entry.name)}
               disabled={!isLoaded || detecting.has(key)}
+              aria-label={t("cli_delete")}
+              title={t("cli_delete")}
             >
-              {t("cli_delete")}
+              <img src={deleteIcon} alt="" />
             </button>
           </div>
         );

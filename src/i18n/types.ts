@@ -100,6 +100,7 @@ export type TranslationKey =
   | "cli_commandLabel"
   | "cli_namePlaceholder"
   | "cli_commandPlaceholder"
+  | "cli_commandHint"
   | "cli_errDuplicateName"
   | "cli_errDuplicateCommand"
   | "cli_errReservedCommand"
