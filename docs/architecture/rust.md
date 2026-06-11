@@ -7,20 +7,38 @@ See `docs/architecture/README.md` for the source tree overview and file routing 
 ## Adapter Seam (`src-tauri/src/adapters/`)
 
 ```
-AdapterRegistry                          # routes AssistantId → CliAdapter
+AdapterRegistry                          # built-ins keyed by AssistantId; one shared custom slot
   └─ CliAdapter trait                   # fn run(req, cancel) → Result<AdapterResult, AdapterError>
        ├─ CodexAdapter                   # drives `codex exec --json`
        ├─ ClaudeAdapter                  # drives `claude -p --output-format json --permission-mode plan`
-       └─ GeminiAdapter                  # drives `gemini -o json --approval-mode plan --skip-trust -p`
-            ├─ BinaryResolver trait      # absolute path lookup → SystemBinaryResolver
-            ├─ CommandRunner trait       # spawn & wait → SystemCommandRunner (tokio)
-            └─ EnvironmentProvider trait # shell/process env → SystemEnvironmentProvider
+       ├─ GeminiAdapter                  # drives `gemini -o json --approval-mode plan --skip-trust -p`
+       │    ├─ BinaryResolver trait      # absolute path lookup → SystemBinaryResolver
+       │    ├─ CommandRunner trait       # spawn & wait → SystemCommandRunner (tokio)
+       │    └─ EnvironmentProvider trait # shell/process env → SystemEnvironmentProvider
+       └─ CustomCliAdapter (SP-072)      # any AssistantId::Custom → login-shell, prompt on stdin, plain stdout
 ```
 
 The default registry shares one `SystemBinaryResolver`, `SystemCommandRunner`, and
-`SystemEnvironmentProvider` across all three adapters; the resolver and env
+`SystemEnvironmentProvider` across all three built-in adapters; the resolver and env
 provider cache per `AssistantId`, so a single instance serves every registered
 adapter.
+
+### `AssistantId::Custom` and custom CLIs (SP-072)
+
+`AssistantId` is `Codex | Claude | Gemini | Custom(String)` (the custom variant
+owns a display name, so the enum is `Clone`, not `Copy`). Its wire form is the
+bare string `"codex"`/`"claude"`/`"gemini"` for built-ins and `{ "custom": "<name>" }`
+for a custom CLI; `as_str()`/`FromStr` use the namespaced key `custom:<name>` for
+DB/run-id identity (so it can never collide with a built-in). The registry routes
+every `Custom(_)` to a single shared `CustomCliAdapter`, which is not resolved
+through `BinaryResolver`: it runs the user's "CLI Prompt Command" through a login
+shell (`/bin/zsh -lc`, Windows `cmd /C`), writes the prompt to **stdin**, and
+treats plain **stdout** as the reply (no output cap, fixed 30 s timeout). The
+resolved command travels in `AdapterRequest::custom_command`, populated by
+`commands.rs` from the persisted `CustomCliEntry` list — so the registry needs no
+handle to the preferences store. `CustomCliEntry { name, command, enabled,
+detected_status }` is stored on `CliIntegrations.custom` (serde `default` = empty,
+so pre-SP-072 `preferences.json` still loads).
 
 Claude differs from Codex in two contract-driven ways: it takes its file-access
 root from the process `cwd` (no `-C`/working-root flag), and its read-only `plan`
@@ -139,10 +157,11 @@ Binary resolution is cached per assistant. On Unix/macOS it uses `/bin/zsh -lc '
 
 | File | Role |
 |---|---|
-| `src-tauri/src/adapters/mod.rs` | `CliAdapter` trait, `AssistantId` enum |
+| `src-tauri/src/adapters/mod.rs` | `CliAdapter` trait, `AssistantId` enum (incl. `Custom(String)`, SP-072) |
+| `src-tauri/src/adapters/custom.rs` | `CustomCliAdapter` + `run_custom_command` — login-shell, stdin prompt, plain stdout, 30 s (SP-072) |
 | `src-tauri/src/adapters/contract.rs` | `AdapterRequest`, `AdapterResult`, `Usage`, `PermissionMode` |
 | `src-tauri/src/adapters/error.rs` | `AdapterError` taxonomy (6 variants) |
-| `src-tauri/src/adapters/registry.rs` | `AdapterRegistry` — routes `AssistantId` → `CliAdapter` |
+| `src-tauri/src/adapters/registry.rs` | `AdapterRegistry` — built-ins by `AssistantId`; any `Custom(_)` → the shared `CustomCliAdapter` slot (SP-072) |
 | `src-tauri/src/adapters/codex.rs` | Codex CLI adapter (`codex exec --json`) |
 | `src-tauri/src/adapters/claude.rs` | Claude Code CLI adapter (`claude -p --output-format json`) |
 | `src-tauri/src/adapters/gemini.rs` | Gemini CLI adapter (`gemini -o json --approval-mode plan --skip-trust`) |

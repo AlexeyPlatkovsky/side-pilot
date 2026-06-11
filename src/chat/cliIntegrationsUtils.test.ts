@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { mergeDetection, findEntry } from "./cliIntegrationsUtils";
+import {
+  mergeDetection,
+  builtinEntry,
+  customEntry,
+  enabledProviderIds,
+  enabledCount,
+} from "./cliIntegrationsUtils";
 import type { CliIntegrations } from "./generated/CliIntegrations";
 
 function base(): CliIntegrations {
@@ -7,6 +13,7 @@ function base(): CliIntegrations {
     codex: { assistant: "codex", enabled: true, detectedStatus: "available" },
     claude: { assistant: "claude", enabled: false, detectedStatus: "notInstalled" },
     gemini: { assistant: "gemini", enabled: true, detectedStatus: "notAuthenticated" },
+    custom: [],
   };
 }
 
@@ -61,26 +68,99 @@ describe("mergeDetection", () => {
   });
 });
 
-describe("findEntry", () => {
+describe("builtinEntry", () => {
   it("returns codex entry for 'codex'", () => {
     const integrations = base();
-    expect(findEntry(integrations, "codex")).toBe(integrations.codex);
+    expect(builtinEntry(integrations, "codex")).toBe(integrations.codex);
   });
 
   it("returns claude entry for 'claude'", () => {
     const integrations = base();
-    expect(findEntry(integrations, "claude")).toBe(integrations.claude);
+    expect(builtinEntry(integrations, "claude")).toBe(integrations.claude);
   });
 
   it("returns gemini entry for 'gemini'", () => {
     const integrations = base();
-    expect(findEntry(integrations, "gemini")).toBe(integrations.gemini);
+    expect(builtinEntry(integrations, "gemini")).toBe(integrations.gemini);
   });
 
   it("returns a mutable reference — mutations via findEntry affect the original", () => {
     const integrations = base();
-    const entry = findEntry(integrations, "codex")!;
+    const entry = builtinEntry(integrations, "codex")!;
     entry.enabled = false;
     expect(integrations.codex.enabled).toBe(false);
+  });
+
+  it("returns null for a custom id (built-in slots only)", () => {
+    expect(builtinEntry(base(), { custom: "OpenCode" })).toBeNull();
+  });
+});
+
+// ---- Custom CLI helpers (SP-072) ----------------------------------------
+
+function withCustom(): CliIntegrations {
+  return {
+    codex: { assistant: "codex", enabled: true, detectedStatus: "available" },
+    claude: { assistant: "claude", enabled: false, detectedStatus: "notInstalled" },
+    gemini: { assistant: "gemini", enabled: true, detectedStatus: "available" },
+    custom: [
+      {
+        name: "OpenCode",
+        command: "opencode --prompt",
+        enabled: true,
+        detectedStatus: "available",
+      },
+      { name: "Cline", command: "cline", enabled: false, detectedStatus: "notDetected" },
+    ],
+  };
+}
+
+describe("mergeDetection (custom)", () => {
+  it("updates a custom entry's status by name and preserves its enabled flag", () => {
+    const result = mergeDetection(withCustom(), [
+      { assistant: { custom: "Cline" }, enabled: true, detectedStatus: "available" },
+    ]);
+    const cline = result.custom.find((e) => e.name === "Cline")!;
+    expect(cline.detectedStatus).toBe("available");
+    expect(cline.enabled).toBe(false); // persisted enabled wins over detected
+  });
+
+  it("ignores a custom detection result with no matching name", () => {
+    const result = mergeDetection(withCustom(), [
+      { assistant: { custom: "Unknown" }, enabled: true, detectedStatus: "available" },
+    ]);
+    expect(result.custom.map((e) => e.detectedStatus)).toEqual([
+      "available",
+      "notDetected",
+    ]);
+  });
+});
+
+describe("customEntry", () => {
+  it("finds a custom entry by name and returns null when absent", () => {
+    const integrations = withCustom();
+    expect(customEntry(integrations, "OpenCode")?.command).toBe("opencode --prompt");
+    expect(customEntry(integrations, "Nope")).toBeNull();
+  });
+});
+
+describe("enabledProviderIds", () => {
+  it("lists enabled built-ins first then enabled custom CLIs", () => {
+    expect(enabledProviderIds(withCustom())).toEqual([
+      "codex",
+      "gemini",
+      { custom: "OpenCode" },
+    ]);
+  });
+
+  it("returns only built-ins when no custom CLI is enabled", () => {
+    expect(enabledProviderIds(base())).toEqual(["codex", "gemini"]);
+  });
+});
+
+describe("enabledCount", () => {
+  it("counts enabled built-ins and custom CLIs together", () => {
+    expect(enabledCount(withCustom())).toBe(3); // codex + gemini + OpenCode
+    expect(enabledCount(base())).toBe(2);
   });
 });

@@ -61,6 +61,24 @@ describe("[smoke] providers", () => {
     expect(routeTargets({ kind: "all" }, [])).toEqual(["codex", "claude", "gemini"]);
   });
 
+  it("includes enabled custom CLIs in All-route targets, built-ins first (SP-072)", () => {
+    expect(
+      routeTargets({ kind: "all" }, ["codex", { custom: "OpenCode" }, "gemini"]),
+    ).toEqual(["codex", "gemini", { custom: "OpenCode" }]);
+  });
+
+  it("routes a single custom provider and respects the active filter (SP-072)", () => {
+    expect(
+      routeTargets({ kind: "single", provider: { custom: "OpenCode" } }, [
+        { custom: "OpenCode" },
+      ]),
+    ).toEqual([{ custom: "OpenCode" }]);
+    // Custom provider not in the active set → no targets.
+    expect(
+      routeTargets({ kind: "single", provider: { custom: "OpenCode" } }, ["codex"]),
+    ).toEqual([]);
+  });
+
   it("compares routes by target", () => {
     expect(routesEqual({ kind: "all" }, { kind: "all" })).toBe(true);
     expect(

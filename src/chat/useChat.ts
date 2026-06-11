@@ -16,6 +16,7 @@ import {
   type ActiveRoute,
 } from "../chat/providers";
 import type { AssistantId } from "../chat/generated/AssistantId";
+import { assistantKey } from "../chat/assistantId";
 import { translate } from "../i18n/translations";
 import type { Locale } from "../i18n/types";
 
@@ -169,9 +170,9 @@ export function useChat(api: ChatApi, enabled = true, locale: Locale = "en") {
       // One labeled pending slot per target provider so the user sees each
       // provider "loading" until the route settles (SP-017).
       const slots: ChatMessage[] = targets.map((provider) => ({
-        id: `pending-${provider}-${newId()}`,
+        id: `pending-${assistantKey(provider)}-${newId()}`,
         sender: "assistant",
-        assistantId: provider,
+        assistantId: assistantKey(provider),
         content: "",
         createdAt: Date.now(),
         pending: true,
@@ -222,9 +223,9 @@ export function useChat(api: ChatApi, enabled = true, locale: Locale = "en") {
           outcome.message
             ? toChatMessage(outcome.message)
             : {
-                id: `error-${outcome.provider}-${newId()}`,
+                id: `error-${assistantKey(outcome.provider)}-${newId()}`,
                 sender: "assistant",
-                assistantId: outcome.provider,
+                assistantId: assistantKey(outcome.provider),
                 content: outcome.error
                   ? describeProviderError(outcome.error, outcome.provider, locale)
                   : translate(locale, "error_requestFailed"),

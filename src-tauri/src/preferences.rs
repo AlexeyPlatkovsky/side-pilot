@@ -63,16 +63,28 @@ impl Default for ProviderPreferences {
 }
 
 impl ProviderPreferences {
-    pub fn for_provider(&self, provider: AssistantId) -> &ProviderPreference {
+    /// The model/effort preference for a built-in provider. Custom providers
+    /// carry no model/effort preference (SP-072); callers special-case them and
+    /// never reach the `Custom` fallback, which returns codex's slot so the
+    /// accessor stays total without panicking.
+    pub fn for_provider(&self, provider: &AssistantId) -> &ProviderPreference {
         match provider {
             AssistantId::Codex => &self.codex,
             AssistantId::Claude => &self.claude,
             AssistantId::Gemini => &self.gemini,
+            AssistantId::Custom(_) => &self.codex,
         }
     }
 
     pub fn apply_to_request(&self, request: &mut AdapterRequest) {
-        let preference = self.for_provider(request.assistant);
+        // A custom CLI takes no model/effort flag — it is driven purely by its
+        // resolved command and stdin prompt (SP-072).
+        if request.assistant.is_custom() {
+            request.model = None;
+            request.reasoning_effort = None;
+            return;
+        }
+        let preference = self.for_provider(&request.assistant);
         request.model = Some(preference.model.clone());
         request.reasoning_effort = if request.assistant == AssistantId::Gemini {
             None
@@ -402,6 +414,9 @@ impl PreferencesStore {
         &self,
         value: CliIntegrations,
     ) -> Result<CliIntegrations, PreferencesError> {
+        value
+            .validate_custom()
+            .map_err(|detail| PreferencesError::Validation { detail })?;
         let provider = self
             .provider_snapshot
             .lock()
@@ -680,6 +695,7 @@ mod tests {
             timeout_ms: 1000,
             resume_session_id: None,
             run_id: None,
+            custom_command: None,
         };
 
         preferences.apply_to_request(&mut request);
@@ -729,6 +745,7 @@ mod tests {
             timeout_ms: 1000,
             resume_session_id: None,
             run_id: None,
+            custom_command: None,
         }
     }
 
@@ -998,6 +1015,94 @@ mod tests {
 
         let reopened = PreferencesStore::open(&path).unwrap();
         assert!(!reopened.cli_integrations_snapshot().gemini.enabled);
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn custom_cli_entries_persist_and_read_back() {
+        use crate::cli_integrations::CustomCliEntry;
+        use crate::cli_integrations::CliDetectionStatus;
+
+        let path = temp_file();
+        let store = PreferencesStore::open(&path).unwrap();
+
+        let mut integrations = store.cli_integrations_snapshot();
+        assert!(integrations.custom.is_empty(), "defaults to empty custom vec");
+        integrations.custom.push(CustomCliEntry {
+            name: "OpenCode".to_string(),
+            command: "opencode --prompt".to_string(),
+            enabled: true,
+            detected_status: CliDetectionStatus::Available,
+        });
+
+        store.update_cli_integrations(integrations).unwrap();
+
+        let reopened = PreferencesStore::open(&path).unwrap();
+        let reloaded = reopened.cli_integrations_snapshot();
+        assert_eq!(reloaded.custom.len(), 1);
+        assert_eq!(reloaded.custom[0].name, "OpenCode");
+        assert_eq!(reloaded.custom[0].command, "opencode --prompt");
+        assert!(reloaded.custom[0].enabled);
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn cli_integrations_without_custom_key_defaults_to_empty_vec() {
+        let path = temp_file();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        // A pre-SP-072 cliIntegrations block has codex/claude/gemini but no `custom`.
+        std::fs::write(
+            &path,
+            r#"{"cliIntegrations": {"codex": {"assistant": "codex", "enabled": true, "detectedStatus": "available"}, "claude": {"assistant": "claude", "enabled": false, "detectedStatus": "notInstalled"}, "gemini": {"assistant": "gemini", "enabled": true, "detectedStatus": "available"}}}"#,
+        )
+        .unwrap();
+
+        let store = PreferencesStore::open(&path).unwrap();
+        let integrations = store.cli_integrations_snapshot();
+        assert!(integrations.custom.is_empty());
+        assert!(!integrations.claude.enabled);
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn update_cli_integrations_rejects_duplicate_custom_names() {
+        use crate::cli_integrations::{CliDetectionStatus, CustomCliEntry};
+        let path = temp_file();
+        let store = PreferencesStore::open(&path).unwrap();
+        let before = store.cli_integrations_snapshot();
+
+        let mut invalid = before.clone();
+        let dup = |command: &str| CustomCliEntry {
+            name: "OpenCode".to_string(),
+            command: command.to_string(),
+            enabled: false,
+            detected_status: CliDetectionStatus::NotDetected,
+        };
+        invalid.custom = vec![dup("opencode --prompt"), dup("opencode --stream")];
+
+        let err = store.update_cli_integrations(invalid).unwrap_err();
+        assert!(matches!(err, PreferencesError::Validation { .. }));
+        // The snapshot is unchanged after a rejected update.
+        assert_eq!(store.cli_integrations_snapshot(), before);
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn update_cli_integrations_rejects_reserved_base_command() {
+        use crate::cli_integrations::{CliDetectionStatus, CustomCliEntry};
+        let path = temp_file();
+        let store = PreferencesStore::open(&path).unwrap();
+        let mut invalid = store.cli_integrations_snapshot();
+        invalid.custom = vec![CustomCliEntry {
+            name: "Mine".to_string(),
+            command: "codex --foo".to_string(),
+            enabled: false,
+            detected_status: CliDetectionStatus::NotDetected,
+        }];
+        assert!(matches!(
+            store.update_cli_integrations(invalid).unwrap_err(),
+            PreferencesError::Validation { .. }
+        ));
         std::fs::remove_dir_all(path.parent().unwrap()).ok();
     }
 

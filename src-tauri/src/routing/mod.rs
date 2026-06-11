@@ -12,6 +12,9 @@
 //! but they are not the source of truth for multi-provider context — app-owned
 //! transcript replay is (`docs/idea.md` §6).
 
+use std::borrow::Cow;
+use std::collections::HashMap;
+
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
@@ -19,7 +22,7 @@ use ts_rs::TS;
 
 use crate::adapters::contract::DEFAULT_TIMEOUT_MS;
 use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AssistantId, PermissionMode};
-use crate::preferences::{ProviderPreference, ProviderPreferences};
+use crate::preferences::ProviderPreferences;
 use crate::storage::{Message, NewMessage, Sender, StorageError, Store};
 
 /// Which provider(s) a prompt is routed to.
@@ -90,7 +93,7 @@ pub fn plan_targets(route: &Route, active: &[AssistantId]) -> Vec<AssistantId> {
     match route {
         Route::Single { provider } => {
             if active.is_empty() || active.contains(provider) {
-                vec![*provider]
+                vec![provider.clone()]
             } else {
                 vec![]
             }
@@ -99,7 +102,7 @@ pub fn plan_targets(route: &Route, active: &[AssistantId]) -> Vec<AssistantId> {
             let mut targets: Vec<AssistantId> = Vec::with_capacity(active.len());
             for provider in active {
                 if !targets.contains(provider) {
-                    targets.push(*provider);
+                    targets.push(provider.clone());
                 }
             }
             targets
@@ -126,8 +129,8 @@ fn format_turn(message: &Message) -> String {
                 .assistant_id
                 .as_deref()
                 .and_then(|id| id.parse::<AssistantId>().ok())
-                .map(AssistantId::display_name)
-                .unwrap_or("Assistant");
+                .map(|id| id.display_name().into_owned())
+                .unwrap_or_else(|| "Assistant".to_string());
             format!("[{label} said]: {content}", content = message.content)
         }
     }
@@ -225,11 +228,13 @@ fn as_sentence(detail: &str) -> String {
     }
 }
 
-fn provider_error_message(provider: AssistantId, error: &AdapterError) -> String {
-    let name = match provider {
-        AssistantId::Codex => "GPT",
-        AssistantId::Claude => "Claude",
-        AssistantId::Gemini => "Gemini",
+fn provider_error_message(provider: &AssistantId, error: &AdapterError) -> String {
+    // Codex is branded "GPT" in the UI; custom providers use their own name.
+    let name: Cow<'static, str> = match provider {
+        AssistantId::Codex => Cow::Borrowed("GPT"),
+        AssistantId::Claude => Cow::Borrowed("Claude"),
+        AssistantId::Gemini => Cow::Borrowed("Gemini"),
+        AssistantId::Custom(name) => Cow::Owned(name.clone()),
     };
     match error {
         AdapterError::BinaryNotFound => {
@@ -254,7 +259,10 @@ fn provider_error_message(provider: AssistantId, error: &AdapterError) -> String
 /// consistent pre-send state so concurrent `All` runs do not race the store.
 struct Prepared {
     provider: AssistantId,
-    preference: ProviderPreference,
+    /// The model/effort actually recorded on the persisted reply. `None` for a
+    /// custom CLI, which takes no model or reasoning-effort flag (SP-072).
+    model: Option<String>,
+    reasoning: Option<String>,
     diff_ids: Vec<String>,
     request: AdapterRequest,
     cancel: CancellationToken,
@@ -271,6 +279,7 @@ pub async fn execute_route_with_preferences(
     store: &Store,
     registry: &AdapterRegistry,
     preferences: &ProviderPreferences,
+    custom_commands: &HashMap<String, String>,
     request: RouteRequest,
     mut make_cancel: impl FnMut(AssistantId) -> CancellationToken,
 ) -> Result<RouteRunResult, StorageError> {
@@ -292,34 +301,60 @@ pub async fn execute_route_with_preferences(
     //    so concurrent runs observe a consistent pre-send transcript.
     let mut prepared: Vec<Prepared> = Vec::with_capacity(targets.len());
     for provider in targets {
-        let preference = preferences.for_provider(provider).clone();
-        let diff = store.unsent_messages(&request.session_id, provider.as_str())?;
+        let provider_key = provider.as_str().into_owned();
+        let diff = store.unsent_messages(&request.session_id, &provider_key)?;
         let diff_ids = diff.iter().map(|m| m.id.clone()).collect();
         let prompt = compose_prompt(&diff);
         // Resume the provider's own native CLI session when one was recorded for
         // this chat, so prior turns are remembered natively and only the diff is
-        // replayed. All three adapters resume by UUID (Claude `-r`, Codex
-        // `codex exec resume`, Gemini `--resume`); any provider that records no
-        // id simply runs fresh and relies on transcript replay.
-        let resume_session_id = store.native_session_id(&request.session_id, provider.as_str())?;
+        // replayed. All three built-in adapters resume by UUID (Claude `-r`,
+        // Codex `codex exec resume`, Gemini `--resume`); custom CLIs and any
+        // provider that records no id simply run fresh and rely on replay.
+        let resume_session_id = store.native_session_id(&request.session_id, &provider_key)?;
+
+        // A custom CLI takes no model/effort flag and carries its resolved
+        // command instead; built-ins apply their persisted model/effort snapshot.
+        // `label_*` is what the persisted reply records (the raw preference,
+        // e.g. "none"); `req_*` is what the adapter actually receives (the
+        // model and the effort *argument*, which is `None` for "none"/Gemini).
+        let (req_model, req_reasoning, custom_command, label_model, label_reasoning) =
+            match &provider {
+                AssistantId::Custom(name) => {
+                    (None, None, custom_commands.get(name).cloned(), None, None)
+                }
+                _ => {
+                    let preference = preferences.for_provider(&provider);
+                    let req_reasoning = if provider == AssistantId::Gemini {
+                        None
+                    } else {
+                        preference.reasoning_argument()
+                    };
+                    (
+                        Some(preference.model.clone()),
+                        req_reasoning,
+                        None,
+                        Some(preference.model.clone()),
+                        Some(preference.reasoning.clone()),
+                    )
+                }
+            };
+
         prepared.push(Prepared {
-            provider,
-            preference: preference.clone(),
+            provider: provider.clone(),
+            model: label_model,
+            reasoning: label_reasoning,
             diff_ids,
             request: AdapterRequest {
-                assistant: provider,
+                assistant: provider.clone(),
                 prompt,
                 working_directory: None,
-                model: Some(preference.model.clone()),
-                reasoning_effort: if provider == AssistantId::Gemini {
-                    None
-                } else {
-                    preference.reasoning_argument()
-                },
+                model: req_model,
+                reasoning_effort: req_reasoning,
                 permission_mode: PermissionMode::ReadOnly,
                 timeout_ms: request.timeout_ms,
                 resume_session_id,
                 run_id: None,
+                custom_command,
             },
             cancel: make_cancel(provider),
         });
@@ -345,28 +380,29 @@ pub async fn execute_route_with_preferences(
                 // resumes this session instead of starting context-less. The
                 // latest id wins (resume can fork the id); a provider that
                 // returns none simply keeps running fresh.
+                let provider_key = prep.provider.as_str();
                 if let Some(native) = &adapter_result.native_session_id {
                     store.set_native_session_id(
                         &request.session_id,
-                        prep.provider.as_str(),
+                        provider_key.as_ref(),
                         native,
                     )?;
                 }
                 let message = store.append_message(NewMessage {
                     session_id: request.session_id.clone(),
                     sender: Sender::Assistant,
-                    assistant_id: Some(prep.provider.as_str().to_string()),
-                    model: Some(prep.preference.model.clone()),
-                    reasoning_effort: Some(prep.preference.reasoning.clone()),
+                    assistant_id: Some(provider_key.clone().into_owned()),
+                    model: prep.model.clone(),
+                    reasoning_effort: prep.reasoning.clone(),
                     content: adapter_result.assistant_text,
                     raw_json: Some(adapter_result.raw_json),
                 })?;
                 // The provider has now seen its diff and its own answer, so
                 // neither is replayed to it next turn.
                 for id in &prep.diff_ids {
-                    store.mark_message_sent(id, prep.provider.as_str())?;
+                    store.mark_message_sent(id, provider_key.as_ref())?;
                 }
-                store.mark_message_sent(&message.id, prep.provider.as_str())?;
+                store.mark_message_sent(&message.id, provider_key.as_ref())?;
                 outcomes.push(ProviderRunOutcome {
                     provider: prep.provider,
                     message: Some(message),
@@ -377,16 +413,17 @@ pub async fn execute_route_with_preferences(
                 // Failed slots are display history, but never provider context:
                 // the store excludes error rows from transcript replay. Mark the
                 // diff as sent so retries do not compound (feedback loop fix).
+                let provider_key = prep.provider.as_str();
                 for id in &prep.diff_ids {
-                    store.mark_message_sent(id, prep.provider.as_str())?;
+                    store.mark_message_sent(id, provider_key.as_ref())?;
                 }
                 let message = store.append_error_message(NewMessage {
                     session_id: request.session_id.clone(),
                     sender: Sender::Assistant,
-                    assistant_id: Some(prep.provider.as_str().to_string()),
-                    model: Some(prep.preference.model.clone()),
-                    reasoning_effort: Some(prep.preference.reasoning.clone()),
-                    content: provider_error_message(prep.provider, &error),
+                    assistant_id: Some(provider_key.into_owned()),
+                    model: prep.model.clone(),
+                    reasoning_effort: prep.reasoning.clone(),
+                    content: provider_error_message(&prep.provider, &error),
                     raw_json: serde_json::to_string(&error).ok(),
                 })?;
                 outcomes.push(ProviderRunOutcome {
@@ -410,6 +447,9 @@ pub struct RetryRequest {
     pub error_message_id: String,
     pub provider: AssistantId,
     pub prompt: String,
+    /// Resolved "CLI Prompt Command" for a custom provider (SP-072); `None` for
+    /// built-ins.
+    pub custom_command: Option<String>,
     pub cancel: CancellationToken,
 }
 
@@ -425,39 +465,59 @@ pub async fn retry_result(
 ) -> Result<ProviderRunOutcome, StorageError> {
     store.delete_message(&request.error_message_id)?;
 
-    let preference = preferences.for_provider(request.provider).clone();
+    let provider = request.provider;
+    let provider_key = provider.as_str().into_owned();
+    // Custom CLIs take no model/effort flag; built-ins apply their snapshot.
+    // `label_*` is what the persisted reply records (the raw preference);
+    // `req_*` is what the adapter receives (the effort *argument*).
+    let (req_model, req_reasoning, custom_command, label_model, label_reasoning) =
+        if provider.is_custom() {
+            (None, None, request.custom_command.clone(), None, None)
+        } else {
+            let preference = preferences.for_provider(&provider);
+            let req_reasoning = if provider == AssistantId::Gemini {
+                None
+            } else {
+                preference.reasoning_argument()
+            };
+            (
+                Some(preference.model.clone()),
+                req_reasoning,
+                None,
+                Some(preference.model.clone()),
+                Some(preference.reasoning.clone()),
+            )
+        };
+
     let adapter_request = AdapterRequest {
-        assistant: request.provider,
+        assistant: provider.clone(),
         prompt: request.prompt,
         working_directory: None,
-        model: Some(preference.model.clone()),
-        reasoning_effort: if request.provider == AssistantId::Gemini {
-            None
-        } else {
-            preference.reasoning_argument()
-        },
+        model: req_model,
+        reasoning_effort: req_reasoning,
         permission_mode: PermissionMode::ReadOnly,
         timeout_ms: DEFAULT_TIMEOUT_MS,
         resume_session_id: None,
         run_id: None,
+        custom_command,
     };
 
     match registry.run(adapter_request, request.cancel).await {
         Ok(adapter_result) => {
             if let Some(native) = &adapter_result.native_session_id {
-                store.set_native_session_id(&request.session_id, request.provider.as_str(), native)?;
+                store.set_native_session_id(&request.session_id, &provider_key, native)?;
             }
             let message = store.append_message(NewMessage {
                 session_id: request.session_id,
                 sender: Sender::Assistant,
-                assistant_id: Some(request.provider.as_str().to_string()),
-                model: Some(preference.model.clone()),
-                reasoning_effort: Some(preference.reasoning.clone()),
+                assistant_id: Some(provider_key),
+                model: label_model.clone(),
+                reasoning_effort: label_reasoning.clone(),
                 content: adapter_result.assistant_text,
                 raw_json: Some(adapter_result.raw_json),
             })?;
             Ok(ProviderRunOutcome {
-                provider: request.provider,
+                provider,
                 message: Some(message),
                 error: None,
             })
@@ -466,14 +526,14 @@ pub async fn retry_result(
             let message = store.append_error_message(NewMessage {
                 session_id: request.session_id,
                 sender: Sender::Assistant,
-                assistant_id: Some(request.provider.as_str().to_string()),
-                model: Some(preference.model.clone()),
-                reasoning_effort: Some(preference.reasoning.clone()),
-                content: provider_error_message(request.provider, &error),
+                assistant_id: Some(provider_key),
+                model: label_model,
+                reasoning_effort: label_reasoning,
+                content: provider_error_message(&provider, &error),
                 raw_json: serde_json::to_string(&error).ok(),
             })?;
             Ok(ProviderRunOutcome {
-                provider: request.provider,
+                provider,
                 message: Some(message),
                 error: Some(error),
             })
@@ -492,6 +552,7 @@ pub async fn execute_route(
         store,
         registry,
         &ProviderPreferences::default(),
+        &HashMap::new(),
         request,
         make_cancel,
     )
@@ -548,7 +609,7 @@ mod tests {
     #[async_trait]
     impl CliAdapter for ResumeEchoAdapter {
         fn id(&self) -> AssistantId {
-            self.id
+            self.id.clone()
         }
 
         async fn run(
@@ -572,7 +633,7 @@ mod tests {
     #[async_trait]
     impl CliAdapter for StubAdapter {
         fn id(&self) -> AssistantId {
-            self.id
+            self.id.clone()
         }
         async fn run(
             &self,
@@ -591,7 +652,7 @@ mod tests {
     #[async_trait]
     impl CliAdapter for ModelEchoAdapter {
         fn id(&self) -> AssistantId {
-            self.id
+            self.id.clone()
         }
 
         async fn run(
@@ -635,6 +696,122 @@ mod tests {
         CancellationToken::new()
     }
 
+    /// A custom-slot adapter that echoes the resolved command and model marker it
+    /// received, so SP-072 routing tests can assert the command reached it and no
+    /// model/effort flag was attached.
+    struct CommandEchoAdapter;
+
+    #[async_trait]
+    impl CliAdapter for CommandEchoAdapter {
+        fn id(&self) -> AssistantId {
+            AssistantId::Custom(String::new())
+        }
+
+        async fn run(
+            &self,
+            req: AdapterRequest,
+            _cancel: CancellationToken,
+        ) -> Result<AdapterResult, AdapterError> {
+            Ok(AdapterResult {
+                assistant_text: "ok".to_string(),
+                raw_json: format!(
+                    "cmd={}|model={}",
+                    req.custom_command.as_deref().unwrap_or("none"),
+                    req.model.as_deref().unwrap_or("none"),
+                ),
+                native_session_id: None,
+                usage: None,
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn custom_provider_routes_with_resolved_command_and_no_model() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let mut registry = AdapterRegistry::new();
+        registry.register_custom(Arc::new(CommandEchoAdapter));
+
+        let mut custom_commands = HashMap::new();
+        custom_commands.insert("OpenCode".to_string(), "opencode --prompt".to_string());
+
+        let result = execute_route_with_preferences(
+            &store,
+            &registry,
+            &ProviderPreferences::default(),
+            &custom_commands,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::Single {
+                    provider: AssistantId::Custom("OpenCode".to_string()),
+                },
+                prompt: "hi".to_string(),
+                active_providers: vec![],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let message = result.outcomes[0].message.as_ref().unwrap();
+        // The reply is attributed to the namespaced custom key and carries no
+        // model/effort label.
+        assert_eq!(message.assistant_id.as_deref(), Some("custom:OpenCode"));
+        assert_eq!(message.model, None);
+        assert_eq!(message.reasoning_effort, None);
+        // The adapter received the resolved command and an empty model.
+        assert_eq!(
+            message.raw_json.as_deref(),
+            Some("cmd=opencode --prompt|model=none")
+        );
+    }
+
+    #[tokio::test]
+    async fn custom_provider_participates_in_all_routing() {
+        let store = Store::in_memory().unwrap();
+        let session = store.create_session(None).unwrap();
+        let mut registry = AdapterRegistry::new();
+        registry.register(Arc::new(StubAdapter {
+            id: AssistantId::Codex,
+            result: ok_result("c"),
+        }));
+        registry.register_custom(Arc::new(CommandEchoAdapter));
+
+        let mut custom_commands = HashMap::new();
+        custom_commands.insert("OpenCode".to_string(), "opencode".to_string());
+
+        let result = execute_route_with_preferences(
+            &store,
+            &registry,
+            &ProviderPreferences::default(),
+            &custom_commands,
+            RouteRequest {
+                session_id: session.id.clone(),
+                route: Route::All,
+                prompt: "to all".to_string(),
+                active_providers: vec![
+                    AssistantId::Codex,
+                    AssistantId::Custom("OpenCode".to_string()),
+                ],
+                timeout_ms: 1000,
+            },
+            no_cancel,
+        )
+        .await
+        .unwrap();
+
+        let providers: Vec<AssistantId> =
+            result.outcomes.iter().map(|o| o.provider.clone()).collect();
+        assert_eq!(
+            providers,
+            vec![
+                AssistantId::Codex,
+                AssistantId::Custom("OpenCode".to_string())
+            ]
+        );
+    }
+
     #[tokio::test]
     async fn route_applies_fixed_provider_snapshot_and_persists_badges() {
         let store = Store::in_memory().unwrap();
@@ -649,6 +826,7 @@ mod tests {
             &store,
             &registry,
             &preferences,
+            &HashMap::new(),
             RouteRequest {
                 session_id: session.id,
                 route: Route::All,
@@ -690,7 +868,7 @@ mod tests {
                 .message
                 .as_ref()
                 .unwrap();
-            let preference = preferences.for_provider(provider);
+            let preference = preferences.for_provider(&provider);
             assert_eq!(message.model.as_deref(), Some(preference.model.as_str()));
             assert_eq!(
                 message.reasoning_effort.as_deref(),
@@ -715,7 +893,7 @@ mod tests {
 
         assert_eq!(
             provider_error_message(
-                AssistantId::Gemini,
+                &AssistantId::Gemini,
                 &AdapterError::NonZeroExit {
                     code: Some(404),
                     stderr,
@@ -728,7 +906,7 @@ mod tests {
     #[test]
     fn provider_error_message_caps_over_length_cli_stderr() {
         let message = provider_error_message(
-            AssistantId::Claude,
+            &AssistantId::Claude,
             &AdapterError::NonZeroExit {
                 code: Some(1),
                 stderr: "x".repeat(2_000),
@@ -743,7 +921,7 @@ mod tests {
     fn provider_error_message_uses_generic_text_for_whitespace_only_stderr() {
         assert_eq!(
             provider_error_message(
-                AssistantId::Codex,
+                &AssistantId::Codex,
                 &AdapterError::NonZeroExit {
                     code: Some(1),
                     stderr: " \n\t ".to_string(),
@@ -757,7 +935,7 @@ mod tests {
     fn provider_error_message_extracts_named_error_from_single_line_dump() {
         assert_eq!(
             provider_error_message(
-                AssistantId::Gemini,
+                &AssistantId::Gemini,
                 &AdapterError::NonZeroExit {
                     code: Some(404),
                     stderr: "warning ModelNotFoundError: Requested entity was not found. at classifyGoogleError (chunk.js:1) { code: 404 }".to_string(),
@@ -786,7 +964,7 @@ mod tests {
         ] {
             assert_eq!(
                 provider_error_message(
-                    AssistantId::Codex,
+                    &AssistantId::Codex,
                     &AdapterError::NonZeroExit {
                         code: Some(1),
                         stderr: stderr.to_string(),
@@ -810,7 +988,7 @@ mod tests {
 
         assert_eq!(
             provider_error_message(
-                AssistantId::Gemini,
+                &AssistantId::Gemini,
                 &AdapterError::NonZeroExit {
                     code: Some(404),
                     stderr,
@@ -1124,7 +1302,7 @@ mod tests {
         .await
         .unwrap();
 
-        let providers: Vec<AssistantId> = result.outcomes.iter().map(|o| o.provider).collect();
+        let providers: Vec<AssistantId> = result.outcomes.iter().map(|o| o.provider.clone()).collect();
         assert_eq!(
             providers,
             vec![AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini]
@@ -1522,6 +1700,7 @@ mod tests {
                 error_message_id: error_msg.id,
                 provider: AssistantId::Gemini,
                 prompt: "retried prompt".to_string(),
+                custom_command: None,
                 cancel: CancellationToken::new(),
             },
         )
@@ -1571,6 +1750,7 @@ mod tests {
                 error_message_id: error_msg.id,
                 provider: AssistantId::Gemini,
                 prompt: "retried prompt".to_string(),
+                custom_command: None,
                 cancel: CancellationToken::new(),
             },
         )

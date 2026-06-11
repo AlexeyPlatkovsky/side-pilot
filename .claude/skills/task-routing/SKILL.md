@@ -91,7 +91,7 @@ When routing implementation, discovery, triage, or review work, include the arch
 | Validate non-trivial completed work with local build/test/manual checks | `.claude/agents/test-runner.md` |
 | Review non-trivial UI design or icon work | `.claude/agents/design-reviewer.md` |
 | Open design decision with meaningful trade-offs | `.claude/skills/brainstorm/SKILL.md` |
-| Instruction system change (root contract, manager, pipelines, skills, agents, conventions) | Direct execution with gates from AGENTS.md §Instruction System Changes. Task-complete still required. |
+| Instruction system change (root contract, manager, pipelines, skills, agents, conventions) | `.claude/pipelines/ai-instructions-changes.md` |
 | Create or update non-instruction reference documentation (e.g. `docs/architecture/README.md`, `.claude/docs/`) | Direct execution — no pipeline, Beads, or git branch required. Post-change documentation maintenance skill does not apply (the change *is* documentation). Task-complete still required. |
 | Review an instruction artifact for quality and compliance | `.claude/agents/instruction-evaluator.md` |
 | Acceptance-test a new or changed instruction artifact | `.claude/agents/artifact-acceptance-tester.md` |

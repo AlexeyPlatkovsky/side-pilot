@@ -10,6 +10,7 @@ function cliIntegrationsDefault(): CliIntegrations {
     codex: { assistant: "codex", enabled: true, detectedStatus: "notDetected" },
     claude: { assistant: "claude", enabled: true, detectedStatus: "notDetected" },
     gemini: { assistant: "gemini", enabled: true, detectedStatus: "notDetected" },
+    custom: [],
   };
 }
 
@@ -50,6 +51,7 @@ function mockChatApi(overrides: Partial<ChatApi> = {}): ChatApi {
     detectClis: vi.fn().mockResolvedValue([]),
     getCliIntegrations: vi.fn().mockResolvedValue(cliIntegrationsDefault()),
     updateCliIntegrations: vi.fn().mockImplementation((v) => Promise.resolve(v)),
+    testCustomCli: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }

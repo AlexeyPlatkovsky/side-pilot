@@ -2,5 +2,13 @@
 
 /**
  * Identifies which local CLI an adapter drives.
+ *
+ * The three built-ins are unit variants; [`AssistantId::Custom`] carries the
+ * user-supplied display name of a user-registered CLI (SP-072). The enum is no
+ * longer `Copy` because the custom variant owns a `String`.
+ *
+ * Wire form (serde external tagging with lowercase keys): built-ins serialize
+ * as the bare strings `"codex"`/`"claude"`/`"gemini"`; a custom provider
+ * serializes as `{ "custom": "<name>" }`.
  */
-export type AssistantId = "codex" | "claude" | "gemini";
+export type AssistantId = "codex" | "claude" | "gemini" | { "custom": string };

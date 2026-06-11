@@ -64,6 +64,31 @@ Build the desktop app package:
 npm run tauri build
 ```
 
+## How to set up a custom CLI
+
+Beyond the three built-in providers (Codex, Claude, Gemini), you can register
+any local CLI tool that reads a prompt from **stdin** and writes its reply to
+**stdout**.
+
+1. Open **Settings → CLI Integrations** and click **Add** (upper-right).
+2. Enter a **CLI name** (≤30 chars, e.g. `OpenCode`) — the label shown in the AI
+   switcher and the transcript.
+3. Enter a **CLI Prompt Command** (≤100 chars, e.g. `opencode --prompt` or
+   `cline`). side-pilot runs this through your login shell, writes the prompt to
+   the process's stdin, and treats plain stdout as the reply.
+4. Optionally click **Test**: it sends `hello` (30 s timeout) and reports whether
+   the CLI is reachable. Success is exit code `0` with non-empty stdout.
+5. Click **Save**. The CLI starts **enabled** if fewer than 3 CLIs are already
+   enabled (the global cap of 3 covers built-ins and custom CLIs combined),
+   otherwise it is saved disabled.
+
+Custom CLIs appear in the AI switcher and participate in **All** routing on the
+same terms as the built-ins. Each registered entry has a **Re-check** button
+(re-runs the stdin test) and a **Delete** button (removes the provider after a
+confirmation; existing chat messages are preserved). The base command (first
+whitespace-delimited token) must be unique and may not be a reserved built-in
+token (`codex`, `claude`, `gemini`). Entries persist in `preferences.json`.
+
 ## Docs
 
 For developers and AI implementers — detailed reference material lives in `docs/`:

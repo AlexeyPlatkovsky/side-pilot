@@ -67,7 +67,7 @@ impl AdapterBase {
         req: &AdapterRequest,
         cancel: CancellationToken,
     ) -> Result<RunOutcome, AdapterError> {
-        let program = self.resolver.resolve(id).await?;
+        let program = self.resolver.resolve(id.clone()).await?;
         let env = self.env_provider.environment(id).await?;
         let spec = CommandSpec {
             program,

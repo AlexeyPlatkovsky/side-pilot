@@ -63,7 +63,7 @@ impl SystemBinaryResolver {
 impl BinaryResolver for SystemBinaryResolver {
     async fn resolve(&self, id: AssistantId) -> Result<PathBuf, AdapterError> {
         self.cache
-            .get_or_try_insert_with(id, || (self.lookup)(id))
+            .get_or_try_insert_with(id.clone(), || (self.lookup)(id))
             .map_err(|_| AdapterError::BinaryNotFound)
     }
 }
@@ -73,7 +73,7 @@ fn os_lookup(id: AssistantId) -> std::io::Result<PathBuf> {
     let bin = id.as_str();
 
     #[cfg(windows)]
-    let output = std::process::Command::new("where").arg(bin).output()?;
+    let output = std::process::Command::new("where").arg(bin.as_ref()).output()?;
 
     #[cfg(not(windows))]
     let output = std::process::Command::new("/bin/zsh")

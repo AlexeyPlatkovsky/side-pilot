@@ -281,6 +281,7 @@ mod tests {
             timeout_ms: 120_000,
             resume_session_id: None,
             run_id: None,
+            custom_command: None,
         }
     }
 

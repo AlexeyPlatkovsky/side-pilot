@@ -63,7 +63,8 @@ pub fn run() {
             commands::open_external,
             commands::detect_clis,
             commands::get_cli_integrations,
-            commands::update_cli_integrations
+            commands::update_cli_integrations,
+            commands::test_custom_cli
         ])
         .run(tauri::generate_context!())
         .expect("error while running side-pilot");

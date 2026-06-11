@@ -46,4 +46,11 @@ resumeSessionId?: string,
  * Front-end-generated run id used by `cancel_adapter_run` to cancel the
  * in-flight subprocess. If omitted, the backend generates an internal id.
  */
-runId?: string, };
+runId?: string, 
+/**
+ * For a custom-CLI route (`assistant` is [`AssistantId::Custom`]), the
+ * resolved "CLI Prompt Command" prefix the backend runs through a login
+ * shell (SP-072). Resolved server-side from the persisted custom entries;
+ * `None` for built-in providers.
+ */
+customCommand?: string, };

@@ -18,7 +18,9 @@ App
       ├─ Settings (Settings.tsx)
        │   ├─ section rail          # 7 tabs (tablist pattern, keyboard nav)
        │   ├─ GeneralSettings       # always-on-top, position mode, language (SP-037)
-       │   ├─ CliIntegrationsSettings # CLI detection status, enable/disable, re-check (SP-038)
+       │   ├─ CliIntegrationsSettings # CLI status, enable/disable, re-check; Add/custom rows/Delete + toast (SP-038/SP-072)
+       │   │   ├─ AddCliDialog       # name + command, validation, Test/Save (SP-072)
+       │   │   └─ Toast              # 3s auto-dismiss max-3 notice (SP-072)
        │   └─ content placeholder   # for sections not yet implemented
       └─ ChatPanel (ChatPanel.tsx)
           ├─ uses chatReducer      # messages[] (incl. pending/error slots), status
@@ -27,7 +29,7 @@ App
           ├─ toolbar               # model label, Rename, Clear
           ├─ transcript            # Markdown replies, per-provider pending slots, inline error cards
           ├─ composer              # textarea + AiSwitcher + Send (hidden when all providers disabled)
-          ├─ AiSwitcher            # provider-logo button + vertical picker; filters by enabledProviders (SP-038)
+          ├─ AiSwitcher            # provider-logo button + vertical picker; lists enabledProviders incl. custom CLIs (SP-038/SP-072)
           ├─ ChatHistory           # session rail (aside)
           └─ Dialogs               # RenameDialog, DeleteDialog, ClearDialog
 ```
@@ -89,16 +91,19 @@ selection target invalidates the pending activation.
 | `src/i18n/translations.ts` | Translation strings for en/ru locales, language name map (SP-037) |
 | `src/i18n/useI18n.ts` | React hook providing locale-aware `t()` function (SP-037) |
 | `src/components/ChatPanel.tsx` | Chat transcript, toolbar, composer, AI switcher, route submission, session management |
-| `src/components/AiSwitcher.tsx` | Provider-logo switcher button + vertical picker (All + GPT/Claude/Gemini) |
-| `src/components/ProviderIcon.tsx` | Provider logo images + the All grid glyph |
-| `src/chat/providers.ts` | Provider registry, `ActiveRoute`, route helpers, per-provider labels/errors |
+| `src/components/AiSwitcher.tsx` | Provider-logo switcher button + vertical picker (All + built-ins + custom CLIs); derives the option list from enabled providers (SP-038/SP-072) |
+| `src/components/ProviderIcon.tsx` | Provider logo images + the All grid glyph + the `provider-icon--custom` letter badge for custom CLIs (SP-072) |
+| `src/chat/providers.ts` | Provider registry, `ActiveRoute`, route helpers, per-provider labels/errors (custom CLIs use their user name) |
+| `src/chat/assistantId.ts` | `AssistantId` union helpers — `isCustomAssistant`, `customName`, `assistantKey` (`"custom:<name>"`), `sameAssistant` (SP-072) |
 | `src/components/ChatHistory.tsx` | Session rail: list, rename, delete, new chat |
 | `src/components/Dialog.tsx` | Accessible modal dialog (focus trap, Escape) |
 | `src/components/RenameDialog.tsx` | Chat rename form inside Dialog |
+| `src/components/AddCliDialog.tsx` | Add-a-custom-CLI dialog: name + command fields, inline validation (duplicate name / duplicate base command / reserved token), Test/Save/Cancel with in-flight disabling; built on `Dialog` (SP-072) |
+| `src/components/Toast.tsx` | Transient, auto-dismissing toast (`role="status"`); `TOAST_DURATION_MS = 3000` is the project-wide default (SP-072) |
 | `src/chat/api.ts` | `ChatApi` interface + Tauri IPC bridge (`tauriChatApi`) |
-| `src/chat/cliIntegrationsUtils.ts` | Shared `mergeDetection` + `findEntry` utilities for merging detection results into persisted integrations (SP-038) |
+| `src/chat/cliIntegrationsUtils.ts` | `mergeDetection` (built-in + custom by name), `builtinEntry`, `customEntry`, `enabledProviderIds`, `enabledCount` (SP-038/SP-072) |
 | `src/chat/providers.ts` | Provider presentation and persisted model/reasoning badge labels |
-| `src/components/CliIntegrationsSettings.tsx` | CLI detection status display, enable/disable toggles, Re-check button (SP-038) |
+| `src/components/CliIntegrationsSettings.tsx` | CLI detection status display, enable/disable toggles, Re-check; plus the Add button, custom rows (status/toggle/Re-check/Delete), max-3 toast, constant "Only 3 CLIs" label, and delete confirmation (SP-038/SP-072) |
 | `src/chat/history.ts` | Title generation, relative time, sorting, selection |
 | `src/state/bubbleState.ts` | Bubble visual state machine |
 | `src/state/chat.ts` | Chat transcript reducer (loaded/submit/success/error) |

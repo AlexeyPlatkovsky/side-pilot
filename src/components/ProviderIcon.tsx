@@ -1,12 +1,14 @@
 /**
- * Provider icons for the AI switcher (SP-017).
+ * Provider icons for the AI switcher (SP-017, SP-072).
  *
- * Each provider is shown as its brand logo PNG; the `All` route is a 2×2 grid
- * glyph. Icons live in `src/assets/` with transparent backgrounds.
+ * A built-in provider is shown as its brand logo PNG (`src/assets/`, transparent
+ * backgrounds); a user-registered custom CLI has no bundled logo, so it shows a
+ * letter badge (first character of its name). The `All` route is a 2×2 grid glyph.
  */
 
 import type { AssistantId } from "../chat/generated/AssistantId";
 import { type ActiveRoute } from "../chat/providers";
+import { assistantKey, isCustomAssistant } from "../chat/assistantId";
 
 import gptIcon from "../assets/chatgpt-128-transparent.png";
 import claudeIcon from "../assets/claude-128-transparent.png";
@@ -18,16 +20,32 @@ const PROVIDER_ICONS: Record<string, string> = {
   gemini: geminiIcon,
 };
 
-/** A single provider's logo image. */
+/**
+ * A single provider's glyph: the brand logo for a built-in, or a letter badge
+ * (first character of the name) for a user-registered custom CLI (SP-072), which
+ * has no bundled icon.
+ */
 export function ProviderGlyph({ provider }: { provider: AssistantId }) {
-  const src = PROVIDER_ICONS[provider];
+  const key = assistantKey(provider);
+  if (isCustomAssistant(provider)) {
+    const initial = provider.custom.trim().charAt(0).toUpperCase() || "?";
+    return (
+      <span
+        className="provider-icon provider-icon--custom"
+        aria-hidden="true"
+        data-provider={key}
+      >
+        {initial}
+      </span>
+    );
+  }
   return (
     <img
       className="provider-icon provider-icon--logo"
-      src={src}
+      src={PROVIDER_ICONS[provider]}
       alt=""
       aria-hidden="true"
-      data-provider={provider}
+      data-provider={key}
     />
   );
 }

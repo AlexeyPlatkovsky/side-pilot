@@ -32,6 +32,7 @@
     "allow-open-external",
     "allow-detect-clis",
     "allow-get-cli-integrations",
-    "allow-update-cli-integrations"
+    "allow-update-cli-integrations",
+    "allow-test-custom-cli"
   ]
 }

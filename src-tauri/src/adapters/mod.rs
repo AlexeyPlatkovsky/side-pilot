@@ -6,6 +6,7 @@
 //! request/result/error contract, binary resolution, the subprocess seam, the
 //! routing [`AdapterRegistry`], and one registered [`CodexAdapter`].
 
+use std::borrow::Cow;
 use std::str::FromStr;
 
 use async_trait::async_trait;
@@ -18,6 +19,7 @@ pub mod cache;
 pub mod claude;
 pub mod codex;
 pub mod contract;
+pub mod custom;
 pub mod environment;
 pub mod error;
 pub mod gemini;
@@ -29,6 +31,7 @@ pub mod shared;
 pub use claude::ClaudeAdapter;
 pub use codex::CodexAdapter;
 pub use contract::{AdapterRequest, AdapterResult, PermissionMode, Usage};
+pub use custom::CustomCliAdapter;
 pub use error::AdapterError;
 pub use gemini::GeminiAdapter;
 pub use registry::AdapterRegistry;
@@ -51,33 +54,54 @@ pub trait CliAdapter: Send + Sync {
 }
 
 /// Identifies which local CLI an adapter drives.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
+///
+/// The three built-ins are unit variants; [`AssistantId::Custom`] carries the
+/// user-supplied display name of a user-registered CLI (SP-072). The enum is no
+/// longer `Copy` because the custom variant owns a `String`.
+///
+/// Wire form (serde external tagging with lowercase keys): built-ins serialize
+/// as the bare strings `"codex"`/`"claude"`/`"gemini"`; a custom provider
+/// serializes as `{ "custom": "<name>" }`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export, export_to = "../../src/chat/generated/")]
 pub enum AssistantId {
     Codex,
     Claude,
     Gemini,
+    /// A user-registered CLI, identified by its display name (SP-072).
+    Custom(String),
 }
 
 impl AssistantId {
-    /// Stable lowercase wire/identifier form.
-    pub fn as_str(self) -> &'static str {
+    /// Stable identifier/key form used for run ids, the message `assistant_id`
+    /// column, and per-provider send tracking. Built-ins use their lowercase
+    /// name; a custom provider is namespaced as `custom:<name>` so it can never
+    /// collide with a built-in key and round-trips through [`FromStr`].
+    pub fn as_str(&self) -> Cow<'static, str> {
         match self {
-            AssistantId::Codex => "codex",
-            AssistantId::Claude => "claude",
-            AssistantId::Gemini => "gemini",
+            AssistantId::Codex => Cow::Borrowed("codex"),
+            AssistantId::Claude => Cow::Borrowed("claude"),
+            AssistantId::Gemini => Cow::Borrowed("gemini"),
+            AssistantId::Custom(name) => Cow::Owned(format!("custom:{name}")),
         }
     }
 
     /// Human-readable provider name used for labeled transcript replay, e.g. the
     /// `[Codex said]:` prefix on a prior response from another provider (SP-016, §6).
-    pub fn display_name(self) -> &'static str {
+    /// A custom provider reports its user-supplied name verbatim.
+    pub fn display_name(&self) -> Cow<'static, str> {
         match self {
-            AssistantId::Codex => "Codex",
-            AssistantId::Claude => "Claude",
-            AssistantId::Gemini => "Gemini",
+            AssistantId::Codex => Cow::Borrowed("Codex"),
+            AssistantId::Claude => Cow::Borrowed("Claude"),
+            AssistantId::Gemini => Cow::Borrowed("Gemini"),
+            AssistantId::Custom(name) => Cow::Owned(name.clone()),
         }
+    }
+
+    /// Whether this id identifies a user-registered custom CLI (SP-072).
+    pub fn is_custom(&self) -> bool {
+        matches!(self, AssistantId::Custom(_))
     }
 }
 
@@ -85,6 +109,11 @@ impl FromStr for AssistantId {
     type Err = String;
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
+        // Custom keys are stored verbatim after the `custom:` prefix and must
+        // preserve their original case (the display name is case-sensitive).
+        if let Some(name) = value.strip_prefix("custom:") {
+            return Ok(AssistantId::Custom(name.to_string()));
+        }
         match value.to_ascii_lowercase().as_str() {
             "codex" => Ok(AssistantId::Codex),
             "claude" => Ok(AssistantId::Claude),
@@ -108,12 +137,49 @@ mod tests {
     #[test]
     fn round_trips_through_as_str() {
         for id in [AssistantId::Codex, AssistantId::Claude, AssistantId::Gemini] {
-            assert_eq!(id.as_str().parse(), Ok(id));
+            assert_eq!(id.as_str().parse(), Ok(id.clone()));
         }
     }
 
     #[test]
     fn rejects_unknown_ids() {
         assert!("openai".parse::<AssistantId>().is_err());
+    }
+
+    #[test]
+    fn custom_round_trips_through_as_str_preserving_case() {
+        let id = AssistantId::Custom("OpenCode".to_string());
+        assert_eq!(id.as_str(), "custom:OpenCode");
+        assert_eq!(id.as_str().parse(), Ok(id));
+    }
+
+    #[test]
+    fn custom_display_name_is_the_user_supplied_name() {
+        assert_eq!(
+            AssistantId::Custom("OpenCode".to_string()).display_name(),
+            "OpenCode"
+        );
+    }
+
+    #[test]
+    fn custom_serializes_externally_tagged_and_builtins_stay_bare_strings() {
+        assert_eq!(
+            serde_json::to_value(AssistantId::Codex).unwrap(),
+            serde_json::json!("codex")
+        );
+        assert_eq!(
+            serde_json::to_value(AssistantId::Custom("OpenCode".to_string())).unwrap(),
+            serde_json::json!({ "custom": "OpenCode" })
+        );
+        // And it round-trips back through serde.
+        let parsed: AssistantId =
+            serde_json::from_value(serde_json::json!({ "custom": "OpenCode" })).unwrap();
+        assert_eq!(parsed, AssistantId::Custom("OpenCode".to_string()));
+    }
+
+    #[test]
+    fn is_custom_distinguishes_user_clis_from_builtins() {
+        assert!(AssistantId::Custom("x".to_string()).is_custom());
+        assert!(!AssistantId::Codex.is_custom());
     }
 }

@@ -20,6 +20,7 @@ import {
   type ActiveRoute,
 } from "../chat/providers";
 import { AiSwitcher } from "./AiSwitcher";
+import { enabledProviderIds } from "../chat/cliIntegrationsUtils";
 import type { AssistantId } from "../chat/generated/AssistantId";
 import { ChatHistory } from "./ChatHistory";
 import { Dialog } from "./Dialog";
@@ -302,8 +303,7 @@ export function ChatPanel({
       .getCliIntegrations()
       .then((integrations) => {
         if (cancelled) return;
-        const enabled = ALL_PROVIDER_IDS.filter((id) => integrations[id].enabled);
-        setEnabledProviders(enabled);
+        setEnabledProviders(enabledProviderIds(integrations));
       })
       .catch(() => {
         if (!cancelled) setEnabledProviders([...ALL_PROVIDER_IDS]);

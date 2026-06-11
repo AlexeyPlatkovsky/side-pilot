@@ -13,6 +13,7 @@
 import type { AssistantId } from "./generated/AssistantId";
 import type { AdapterError } from "./generated/AdapterError";
 import type { Route } from "./generated/Route";
+import { isCustomAssistant, sameAssistant } from "./assistantId";
 import { translate } from "../i18n/translations";
 import type { Locale } from "../i18n/types";
 
@@ -42,8 +43,9 @@ export const ALL_PROVIDER_IDS: readonly AssistantId[] = PROVIDERS.map((p) => p.i
 /** The default active route: a single GPT (Codex) provider. */
 export const DEFAULT_ROUTE: ActiveRoute = { kind: "single", provider: "codex" };
 
-/** Look up a provider's presentation, falling back for unknown ids. */
+/** Look up a provider's presentation. Custom CLIs use their user-supplied name. */
 export function providerInfo(id: AssistantId): ProviderInfo {
+  if (isCustomAssistant(id)) return { id, label: id.custom };
   return PROVIDERS.find((p) => p.id === id) ?? { id, label: id };
 }
 
@@ -57,27 +59,39 @@ export function routeLabel(route: ActiveRoute, locale: Locale = "en"): string {
 /** Whether two routes select the same target(s). */
 export function routesEqual(a: ActiveRoute, b: ActiveRoute): boolean {
   if (a.kind === "all" || b.kind === "all") return a.kind === b.kind;
-  return a.provider === b.provider;
+  return sameAssistant(a.provider, b.provider);
 }
 
 /**
  * The ordered provider targets a route resolves to.
  *
- * For `All` routes the result is filtered to the providers in `activeProviders`
- * (preserving the canonical `PROVIDERS` display order). An empty or omitted
- * `activeProviders` falls back to every provider so legacy callers and tests
- * that omit the argument are unaffected.
+ * For `All` routes the result is the enabled providers in `activeProviders`,
+ * ordered built-ins-first (canonical `PROVIDERS` order) then custom CLIs in their
+ * given order — mirroring the Rust `enabled_providers` (SP-072) so the optimistic
+ * pending slots match what the backend actually dispatches. An empty or omitted
+ * `activeProviders` falls back to the built-in providers so legacy callers and
+ * tests that omit the argument are unaffected.
  */
 export function routeTargets(
   route: ActiveRoute,
   activeProviders?: readonly AssistantId[],
 ): AssistantId[] {
   if (route.kind === "all") {
-    const effective = activeProviders?.length ? activeProviders : ALL_PROVIDER_IDS;
-    // Filter in PROVIDERS display order so slot ordering is always consistent.
-    return ALL_PROVIDER_IDS.filter((id) => effective.includes(id));
+    if (!activeProviders?.length) return [...ALL_PROVIDER_IDS];
+    // Built-ins in canonical display order, then any custom CLIs (which the
+    // static PROVIDERS list cannot enumerate) in activeProviders order.
+    const builtins = ALL_PROVIDER_IDS.filter((id) =>
+      activeProviders.some((active) => sameAssistant(active, id)),
+    );
+    const customs = activeProviders.filter(isCustomAssistant);
+    return [...builtins, ...customs];
   }
-  if (activeProviders?.length && !activeProviders.includes(route.provider)) return [];
+  if (
+    activeProviders?.length &&
+    !activeProviders.some((active) => sameAssistant(active, route.provider))
+  ) {
+    return [];
+  }
   return [route.provider];
 }
 
@@ -93,6 +107,8 @@ export function messageLabel(
 ): string {
   if (model) return `${model}-${reasoningEffort || "none"}`;
   if (!assistantId) return translate(locale, "assistant");
+  // A custom CLI's persisted key is `custom:<name>`; show the bare name (SP-072).
+  if (assistantId.startsWith("custom:")) return assistantId.slice("custom:".length);
   const info = PROVIDERS.find((p) => p.id === assistantId);
   return info?.label ?? assistantId;
 }

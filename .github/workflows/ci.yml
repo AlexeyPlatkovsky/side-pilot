@@ -2,37 +2,21 @@ name: CI
 
 on:
   pull_request:
-    paths:
-      - "src/**"
-      - "src-tauri/**"
-      - "e2e/**"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/ci.yml"
-      - "tsconfig.json"
-      - "tsconfig.node.json"
-      - "vite.config.ts"
-      - "playwright.config.ts"
-      - "vitest.setup.ts"
-      - "eslint.config.js"
-      - "index.html"
+    paths-ignore:
+      - "**/*.md"
+      - ".beads/**"
+      - ".claude/**"
+      - ".manifesto/**"
+      - "docs/**"
+      - "*.md"
   push:
-    branches:
-      - main
-    paths:
-      - "src/**"
-      - "src-tauri/**"
-      - "e2e/**"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/ci.yml"
-      - "tsconfig.json"
-      - "tsconfig.node.json"
-      - "vite.config.ts"
-      - "playwright.config.ts"
-      - "vitest.setup.ts"
-      - "eslint.config.js"
-      - "index.html"
+    paths-ignore:
+      - "**/*.md"
+      - ".beads/**"
+      - ".claude/**"
+      - ".manifesto/**"
+      - "docs/**"
+      - "*.md"
 
 jobs:
   # Validate Rust core compiles, tests pass, and clippy is clean on target
