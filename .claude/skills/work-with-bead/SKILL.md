@@ -195,7 +195,7 @@ Rules:
 - Claim or move an item to in-progress before starting non-trivial implementation work tied to that item.
 - Add comments or notes when important decisions, blockers, or scope changes appear during execution.
 - Update dependency edges when sequencing changes.
-- Close an item only after its acceptance criteria and required validation are satisfied. Before closing a task that has a scenario file, verify that `--spec-id` is set to the correct path.
+- Close an item only after all required validation checks have passed (all `PASS` in `Skill: validate - output below`, or no validation was required for this task) and acceptance criteria are satisfied. Close via `bd close <id>` during the `task-complete` step, not during implementation. Before closing a task that has a scenario file, verify that `--spec-id` is set to the correct path.
 - If implementation reveals that a Beads item is too broad, split it into compliant children and preserve dependencies.
 
 ## Output Contract

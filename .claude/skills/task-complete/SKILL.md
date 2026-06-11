@@ -43,7 +43,11 @@ For planned routed handoffs, `Comment` must reference the step's visible output 
 
 If a required planned output artifact is missing from the conversation, do not declare completion. Report closure as blocked and name the missing artifact so the manager can return to the missing step.
 
-### 6. Final Response Requirement
+### 6. Close Beads Items Before Completion
+
+If a Beads item was claimed or created for this task, close it with `bd close <id>` before declaring task completion. Only close after all required validation checks have passed (per `.claude/skills/work-with-bead/SKILL.md` §Work Update Rules). Include the `bd close <id>` action as a row in the closure table — use `Step` = `Close Beads item <id>`, `Skill / Agent` = `bd`, `Comment` = `Closed after validation passed`.
+
+### 7. Final Response Requirement
 
 For non-trivial routed work, the final response must include the `Skill: task-complete - output below` table. The task is not closed if the table appears only in an intermediate commentary message and is omitted from the final answer.
 
