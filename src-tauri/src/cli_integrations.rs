@@ -46,6 +46,30 @@ impl CliIntegration {
     }
 }
 
+/// A user-registered custom CLI provider (SP-072).
+///
+/// The user supplies a display `name` (≤30 chars) and a `command` prefix (the
+/// "CLI Prompt Command", ≤100 chars, e.g. `opencode --prompt`). side-pilot runs
+/// the command through a login shell, writes the user's prompt to its stdin, and
+/// treats plain stdout as the reply.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export, export_to = "../../src/chat/generated/")]
+pub struct CustomCliEntry {
+    pub name: String,
+    pub command: String,
+    pub enabled: bool,
+    pub detected_status: CliDetectionStatus,
+}
+
+impl CustomCliEntry {
+    /// The first whitespace-delimited token of the command — the "base command"
+    /// used for duplicate/reserved-token detection (SP-072).
+    pub fn base_command(&self) -> &str {
+        self.command.split_whitespace().next().unwrap_or("")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../src/chat/generated/")]
@@ -53,6 +77,10 @@ pub struct CliIntegrations {
     pub codex: CliIntegration,
     pub claude: CliIntegration,
     pub gemini: CliIntegration,
+    /// User-registered custom CLIs (SP-072). Defaults to empty so preferences
+    /// files written before SP-072 still deserialize.
+    #[serde(default)]
+    pub custom: Vec<CustomCliEntry>,
 }
 
 impl Default for CliIntegrations {
@@ -61,6 +89,7 @@ impl Default for CliIntegrations {
             codex: CliIntegration::for_provider(AssistantId::Codex),
             claude: CliIntegration::for_provider(AssistantId::Claude),
             gemini: CliIntegration::for_provider(AssistantId::Gemini),
+            custom: Vec::new(),
         }
     }
 }
@@ -71,6 +100,10 @@ impl CliIntegrations {
             AssistantId::Codex => &self.codex,
             AssistantId::Claude => &self.claude,
             AssistantId::Gemini => &self.gemini,
+            // Custom providers have no built-in slot; callers needing a custom
+            // entry use `custom_entry`. Falling back to codex keeps the legacy
+            // built-in accessor total without panicking.
+            AssistantId::Custom(_) => &self.codex,
         }
     }
 
@@ -79,6 +112,7 @@ impl CliIntegrations {
             AssistantId::Codex => &mut self.codex,
             AssistantId::Claude => &mut self.claude,
             AssistantId::Gemini => &mut self.gemini,
+            AssistantId::Custom(_) => &mut self.codex,
         }
     }
 
@@ -86,12 +120,73 @@ impl CliIntegrations {
         [&self.codex, &self.claude, &self.gemini]
     }
 
+    /// Find a custom entry by its (case-sensitive) display name.
+    pub fn custom_entry(&self, name: &str) -> Option<&CustomCliEntry> {
+        self.custom.iter().find(|entry| entry.name == name)
+    }
+
+    /// The command prefix for a custom provider id, if registered.
+    pub fn custom_command(&self, id: &AssistantId) -> Option<String> {
+        match id {
+            AssistantId::Custom(name) => {
+                self.custom_entry(name).map(|entry| entry.command.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// A name → command map of every registered custom CLI, used by the router
+    /// to resolve a custom provider's "CLI Prompt Command" at dispatch time.
+    pub fn custom_command_map(&self) -> std::collections::HashMap<String, String> {
+        self.custom
+            .iter()
+            .map(|entry| (entry.name.clone(), entry.command.clone()))
+            .collect()
+    }
+
+    /// Enforce the custom-CLI invariants the UI also checks, at the durable
+    /// persistence boundary (SP-072): unique (case-sensitive) names, a non-empty
+    /// base command that is unique and not a reserved built-in token. A duplicate
+    /// name would otherwise collapse two providers onto the same `custom:<name>`
+    /// routing key.
+    pub fn validate_custom(&self) -> Result<(), String> {
+        const RESERVED: [&str; 3] = ["codex", "claude", "gemini"];
+        let mut names = std::collections::HashSet::new();
+        let mut tokens = std::collections::HashSet::new();
+        for entry in &self.custom {
+            if !names.insert(entry.name.as_str()) {
+                return Err(format!("duplicate custom CLI name: {}", entry.name));
+            }
+            let token = entry.base_command();
+            if token.is_empty() {
+                return Err(format!("custom CLI '{}' has an empty command", entry.name));
+            }
+            if RESERVED.contains(&token) {
+                return Err(format!("'{token}' is a reserved command"));
+            }
+            if !tokens.insert(token.to_string()) {
+                return Err(format!("duplicate custom base command: {token}"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Every enabled provider, built-ins first (in fixed order) then custom
+    /// providers in registration order, as routable [`AssistantId`]s.
     pub fn enabled_providers(&self) -> Vec<AssistantId> {
-        self.all()
+        let mut providers: Vec<AssistantId> = self
+            .all()
             .iter()
             .filter(|i| i.enabled)
-            .map(|i| i.assistant)
-            .collect()
+            .map(|i| i.assistant.clone())
+            .collect();
+        providers.extend(
+            self.custom
+                .iter()
+                .filter(|entry| entry.enabled)
+                .map(|entry| AssistantId::Custom(entry.name.clone())),
+        );
+        providers
     }
 }
 
@@ -145,10 +240,17 @@ impl CliDetector {
     }
 
     async fn detect_single(&self, id: AssistantId) -> CliIntegration {
-        let status = match id {
+        let status = match &id {
             AssistantId::Gemini => self.detect_gemini().await,
-            AssistantId::Codex => self.detect_with_auth(id, "codex login status").await,
-            AssistantId::Claude => self.detect_with_auth(id, "claude auth status").await,
+            AssistantId::Codex => {
+                self.detect_with_auth(AssistantId::Codex, "codex login status").await
+            }
+            AssistantId::Claude => {
+                self.detect_with_auth(AssistantId::Claude, "claude auth status").await
+            }
+            // Custom CLIs are detected separately (stdin "hello" test); they are
+            // never passed to `detect_single`.
+            AssistantId::Custom(_) => CliDetectionStatus::NotDetected,
         };
         CliIntegration {
             assistant: id,
@@ -165,7 +267,7 @@ impl CliDetector {
     }
 
     async fn detect_with_auth(&self, id: AssistantId, auth_cmd: &str) -> CliDetectionStatus {
-        if self.resolver.resolve(id).await.is_err() {
+        if self.resolver.resolve(id.clone()).await.is_err() {
             return CliDetectionStatus::NotInstalled;
         }
 
@@ -179,7 +281,7 @@ impl CliDetector {
             Ok(outcome) => match id {
                 AssistantId::Codex => Self::parse_codex_auth(&outcome),
                 AssistantId::Claude => Self::parse_claude_auth(&outcome),
-                AssistantId::Gemini => unreachable!(),
+                AssistantId::Gemini | AssistantId::Custom(_) => unreachable!(),
             },
             Err(_) => CliDetectionStatus::NotDetected,
         }

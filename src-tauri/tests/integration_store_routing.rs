@@ -23,7 +23,7 @@ struct StubAdapter {
 #[async_trait]
 impl CliAdapter for StubAdapter {
     fn id(&self) -> AssistantId {
-        self.id
+        self.id.clone()
     }
 
     async fn run(
@@ -87,6 +87,7 @@ async fn store_and_registry_integration_full_roundtrip() {
                 timeout_ms: 5000,
                 resume_session_id: None,
                 run_id: Some("integration-run-1".to_string()),
+                custom_command: None,
             },
             CancellationToken::new(),
         )
@@ -126,7 +127,7 @@ async fn all_three_registered_adapters_respond() {
         let result = registry
             .run(
                 AdapterRequest {
-                    assistant: id,
+                    assistant: id.clone(),
                     prompt: format!("test {}", id.as_str()),
                     working_directory: None,
                     model: None,
@@ -135,6 +136,7 @@ async fn all_three_registered_adapters_respond() {
                     timeout_ms: 5000,
                     resume_session_id: None,
                     run_id: None,
+                    custom_command: None,
                 },
                 cancel.clone(),
             )

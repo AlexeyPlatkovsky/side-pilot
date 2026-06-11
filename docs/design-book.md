@@ -142,6 +142,7 @@ they are not part of any repeated scale:
 - Chat history rail (SP-048–057): `.chat-rail` `width: 210px` (fixed, ~50% wider than the original 140px so titles and row indicators read inside the 380px expanded panel); `.chat-row__select` `height: 32px` (compact one-line rows); `.chat-row__options` `min-width: 120px` (options popup); `.dialog` `max-width: 280px` (modal width, fits the 380px window). Message bubbles use `min-width: min-content` so a narrowed panel never wraps the one-row `.message__meta` label (model + timestamp). `.chat-row__spinner` uses a `2px` ring stroke (the in-progress indicator's only literal; thicker than the default `1px` borders so the small ring reads).
 - AI switcher (SP-017): `.ai-switcher__toggle` `width: 32px; height: 32px` (icon control beside Send, matches the send button); `.ai-switcher__menu` `min-width: 132px; max-height: 220px` (right-anchored picker that opens inward so it never clips the 380px panel edge); `.provider-icon` `20px` monogram chip; `.provider-icon__grid` uses sub-icon literals (`gap: 2px`, `border-radius: 1px`) for the 12px 2×2 "All" glyph — too small for the spacing/radius scales, same precedent as the spinner stroke.
 - Settings view (SP-031): `.settings-rail` `width: 154px` (fixed-width left section rail; narrower than the 210px chat rail so panes in the right column have more room inside the 380px expanded panel).
+- Custom CLI providers (SP-072): the **toast auto-dismiss is 3 s (3000 ms)** — the project-wide default for transient toasts, defined once as `TOAST_DURATION_MS` in [`src/components/Toast.tsx`](../src/components/Toast.tsx) (timing constant, not a CSS token). `.provider-icon--custom` reuses the `22px` `.provider-icon` chip for the letter-badge a custom CLI shows in place of a bundled logo.
 
 If any of these starts repeating across components, promote it to a token here.
 
@@ -152,6 +153,7 @@ are documented so the vocabulary stays discoverable.
 
 - **Chat history rail & dialogs (SP-048–057):** `.chat-rail` / `.chat-rail__new` / `.chat-rail__list` (collapsible left rail), `.chat-row*` (one-line title + a status slot that shows the relative time, the in-progress `.chat-row__spinner`, or the unread `.chat-row__unread` dot in `--color-unread`, plus the `⋯` options trigger + `.chat-row__options` menu), `.chat__toolbar` (rail toggle + active title + `.chat__edit` pencil/rename + Clear; the toggle carries a `.chat__rail-toggle-badge` unread dot in `--color-unread` while the rail is collapsed and a background chat has an unread answer), and `.dialog*` (shared modal chrome behind `--surface-scrim` with `--shadow-dialog`, including `.dialog__hint` — the `--color-danger` inline validation note under the rename input for an invalid title).
 - **Message meta (SP-055):** `.message__meta` (single nowrap row) holds the assistant `.message__label` model badge and the `.message__time` 24h timestamp (date-prefixed when not today); user bubbles carry just `.message__time`. `.message` uses `min-width: min-content` so the meta row never wraps.
+- **Custom CLI providers (SP-072):** `.cli-integrations-settings__header` (constant max-3 label + upper-right Add button), `.cli-integration-row--custom` with `.cli-integration-row__delete`, `.provider-icon--custom` (letter-badge stand-in for a custom CLI's missing logo), `.add-cli*` (the Add dialog form inside shared `.dialog` chrome, with `.add-cli__error` danger hints and the `.add-cli__test-result--ok/--error` Test feedback), `.settings-btn--primary` / `.settings-btn--danger` (dialog action variants), and `.toast` (bottom-center, `--shadow-dialog`, auto-dismissing after the 3 s default).
 
 All spacing/radius/color/type go through the tokens above; the only literals are the one-offs listed in the previous section.
 
@@ -168,6 +170,7 @@ into four banner-delimited sections (a matching index sits at the top of the fil
 | §2 App shell | transparent window, collapsed bubble, expanded panel + header |
 | §3 Transcript | messages, meta line, assistant Markdown, thinking, error banner |
 | §4 History rail, toolbar & dialogs | rail, row status, options menu, modal dialogs |
+| §5 Custom CLI providers (SP-072) | Add button, custom rows, Add dialog, toast |
 
 **Why one file (SP-069):** the app has no CSS preprocessor and rule order is
 load-bearing for the cascade. Splitting into `@import`-ed partials would add a

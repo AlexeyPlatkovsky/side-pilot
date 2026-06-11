@@ -75,6 +75,13 @@ pub struct AdapterRequest {
     #[serde(default)]
     #[ts(optional)]
     pub run_id: Option<String>,
+    /// For a custom-CLI route (`assistant` is [`AssistantId::Custom`]), the
+    /// resolved "CLI Prompt Command" prefix the backend runs through a login
+    /// shell (SP-072). Resolved server-side from the persisted custom entries;
+    /// `None` for built-in providers.
+    #[serde(default)]
+    #[ts(optional)]
+    pub custom_command: Option<String>,
 }
 
 fn default_timeout_ms() -> u64 {
@@ -199,6 +206,7 @@ mod tests {
             timeout_ms: 90_000,
             resume_session_id: Some("sid-42".to_string()),
             run_id: Some("run-99".to_string()),
+            custom_command: None,
         };
         let json = serde_json::to_value(&original).unwrap();
         let round_tripped: AdapterRequest = serde_json::from_value(json).unwrap();

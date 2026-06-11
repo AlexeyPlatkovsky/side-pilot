@@ -51,7 +51,7 @@ impl SystemEnvironmentProvider {
 impl EnvironmentProvider for SystemEnvironmentProvider {
     async fn environment(&self, id: AssistantId) -> Result<Vec<(String, String)>, AdapterError> {
         self.cache
-            .get_or_try_insert_with(id, || (self.lookup)(id))
+            .get_or_try_insert_with(id.clone(), || (self.lookup)(id))
             .map_err(|err| AdapterError::NonZeroExit {
                 code: None,
                 stderr: format!("failed to resolve CLI environment: {err}"),

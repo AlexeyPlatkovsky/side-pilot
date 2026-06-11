@@ -21,6 +21,7 @@ import {
   providerInfo,
   routesEqual,
 } from "../chat/providers";
+import { assistantKey } from "../chat/assistantId";
 import { AllGlyph, ProviderGlyph, RouteIcon } from "./ProviderIcon";
 import type { Locale } from "../i18n/types";
 import { useI18n } from "../i18n/useI18n";
@@ -56,10 +57,11 @@ export function AiSwitcher({
   // visibility is derived, so `open` can stay set but never render while disabled.
   const menuOpen = open && !disabled;
 
+  // Built-ins keep their canonical order; custom CLIs (SP-072) follow, mapped to
+  // their presentation. Deriving from `enabledProviders` (rather than filtering
+  // the static `PROVIDERS`) lets custom providers appear in the picker.
   const visibleProviders =
-    enabledProviders !== undefined
-      ? PROVIDERS.filter((p) => enabledProviders.includes(p.id))
-      : PROVIDERS;
+    enabledProviders !== undefined ? enabledProviders.map(providerInfo) : PROVIDERS;
   const hasAll = enabledProviders === undefined || enabledProviders.length > 1;
 
   // Close on outside click so the picker behaves like a normal menu.
@@ -121,7 +123,7 @@ export function AiSwitcher({
             const active = routesEqual(optionRoute, route);
             return (
               <button
-                key={provider.id}
+                key={assistantKey(provider.id)}
                 type="button"
                 role="menuitemradio"
                 aria-checked={active}

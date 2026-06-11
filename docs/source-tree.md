@@ -41,6 +41,12 @@ understand what each file does and where to make changes.
   1–40 chars) used by both the rail's per-row menu and the toolbar pencil
 - `src/components/Dialog.tsx` — shared modal chrome (focus trap, Escape-to-close,
   focus restore) used by the rename/delete/clear dialogs
+- `src/components/CliIntegrationsSettings.tsx` — Settings → CLI Integrations pane:
+  built-in + custom CLI rows (status, toggle, Re-check, Delete), the Add button,
+  the constant "Only 3 CLIs" cap label, and the max-3 toast (SP-038/SP-072)
+- `src/components/AddCliDialog.tsx` — add-a-custom-CLI form (name + command,
+  inline validation, Test/Save) built on `Dialog`; `src/components/Toast.tsx` —
+  transient 3 s auto-dismiss toast (SP-072)
 
 ### Chat & State
 
@@ -67,8 +73,10 @@ understand what each file does and where to make changes.
   …) are rejected before reaching the OS opener
 - `src-tauri/src/adapters/` — CLI routing seam: the `CliAdapter` trait, typed
   request/result/error contract, binary and environment resolution, the
-  `AdapterRegistry`, and the read-only Codex adapter behind the `run_adapter`
-  and `cancel_adapter_run` commands
+  `AdapterRegistry`, the read-only Codex/Claude/Gemini adapters behind the
+  `run_adapter`/`run_route`/`cancel_adapter_run` commands, and `custom.rs` —
+  the `CustomCliAdapter` driving any `AssistantId::Custom` user CLI (login-shell,
+  prompt on stdin, plain stdout, 30 s) behind `test_custom_cli` (SP-072)
 - `src-tauri/src/storage/` — local SQLite store (bundled `rusqlite`) for chat
   sessions and messages: the display/history source of truth, behind the
   `create_session`, `append_message`, `read_history`, `list_sessions`,

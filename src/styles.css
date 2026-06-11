@@ -397,6 +397,10 @@ body {
   width: 72px;
   font-weight: var(--font-weight-bold);
   white-space: nowrap;
+  /* Bound long custom-CLI names (≤30 chars) so a name never pushes the row past
+     the narrow settings pane — it truncates with an ellipsis instead (SP-072). */
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cli-status {
@@ -1383,4 +1387,157 @@ body {
 .dialog__button:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+/* =============================================================================
+   §5  CUSTOM CLI PROVIDERS (SP-072) — Add button, custom rows, Add dialog,
+   toast. Tokens only; see docs/design-book.md.
+   ========================================================================== */
+
+/* Header above the provider rows: the constant max-3 label on the left, the
+   Add button pinned upper-right. */
+.cli-integrations-settings__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.cli-integrations-settings__cap-label {
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+}
+
+.cli-integrations-settings__add {
+  margin-left: 0;
+  flex-shrink: 0;
+}
+
+.cli-integration-row__delete {
+  flex-shrink: 0;
+  margin-left: 0;
+}
+
+/* A custom row carries a 5th control (Delete) the built-in rows don't, so it
+   tightens the name/status columns and button padding to fit the ≈193px
+   settings pane without horizontal overflow (SP-072). */
+.cli-integration-row--custom {
+  gap: var(--space-2);
+}
+
+.cli-integration-row--custom .cli-integration-row__name {
+  width: 56px;
+}
+
+.cli-integration-row--custom .cli-status {
+  width: 84px;
+}
+
+.cli-integration-row--custom .settings-btn {
+  padding: var(--space-1) var(--space-2);
+}
+
+/* Custom CLIs have no bundled logo: a letter badge stands in for the icon. */
+.provider-icon--custom {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/* Add-a-custom-CLI dialog form. Reuses the modal chrome from `.dialog`. */
+.add-cli {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.add-cli__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.add-cli__label {
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.add-cli__input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-md);
+}
+
+.add-cli__input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+.add-cli__error {
+  font-size: var(--font-xs);
+  line-height: 1.4;
+  color: var(--color-danger);
+}
+
+.add-cli__test-result {
+  margin: 0;
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
+.add-cli__test-result--ok {
+  color: var(--color-accent);
+}
+
+.add-cli__test-result--error {
+  color: var(--color-danger);
+}
+
+.add-cli__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+/* `settings-btn` variants for the dialog/confirmation actions. */
+.settings-btn--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.settings-btn--danger {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: var(--color-on-accent);
+}
+
+/* Auto-dismissing toast (3 s default). Anchored bottom-center over the window. */
+.toast {
+  position: fixed;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  max-width: 280px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-dialog);
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  text-align: center;
 }

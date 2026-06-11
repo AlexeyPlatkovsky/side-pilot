@@ -9,13 +9,20 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
+use std::sync::Arc;
+
+use futures::future::join_all;
 use tauri::State;
 use tokio_util::sync::CancellationToken;
 
 use crate::adapters::{AdapterError, AdapterRegistry, AdapterRequest, AdapterResult, AssistantId};
 use crate::adapters::binary::SystemBinaryResolver;
+use crate::adapters::custom::{run_custom_command, CUSTOM_CLI_TIMEOUT};
 use crate::adapters::environment::SystemEnvironmentProvider;
-use crate::cli_integrations::{CliDetector, CliIntegration, CliIntegrations};
+use crate::adapters::process::{CommandRunner, SystemCommandRunner};
+use crate::cli_integrations::{
+    CliDetectionStatus, CliDetector, CliIntegration, CliIntegrations, CustomCliEntry,
+};
 use crate::preferences::{GeneralPreferences, PreferencesError, PreferencesStore, ProviderPreferences};
 use crate::routing::{
     execute_route_with_preferences, retry_result, ProviderRunOutcome, RetryRequest, RouteRequest,
@@ -26,6 +33,8 @@ use crate::storage::{Message, NewMessage, Session, StorageError, Store};
 pub struct AppState {
     registry: AdapterRegistry,
     detector: CliDetector,
+    /// Command runner used for custom-CLI tests and startup detection (SP-072).
+    custom_runner: Arc<dyn CommandRunner>,
     active_runs: Mutex<HashMap<String, CancellationToken>>,
     next_run: AtomicU64,
 }
@@ -35,9 +44,10 @@ impl Default for AppState {
         Self {
             registry: AdapterRegistry::with_default_adapters(),
             detector: CliDetector::new(
-                std::sync::Arc::new(SystemBinaryResolver::new()),
-                std::sync::Arc::new(SystemEnvironmentProvider::new()),
+                Arc::new(SystemBinaryResolver::new()),
+                Arc::new(SystemEnvironmentProvider::new()),
             ),
+            custom_runner: Arc::new(SystemCommandRunner),
             active_runs: Mutex::new(HashMap::new()),
             next_run: AtomicU64::new(1),
         }
@@ -171,8 +181,16 @@ async fn run_route_with_state(
             state.register_run(run_id)
         };
         let snapshot = preferences.snapshot();
-        execute_route_with_preferences(store, &state.registry, &snapshot, request, make_cancel)
-            .await
+        let custom_commands = preferences.cli_integrations_snapshot().custom_command_map();
+        execute_route_with_preferences(
+            store,
+            &state.registry,
+            &snapshot,
+            &custom_commands,
+            request,
+            make_cancel,
+        )
+        .await
     };
 
     for run_id in registered {
@@ -200,6 +218,9 @@ pub async fn retry_route(
         run_id,
     };
     let snapshot = preferences.snapshot();
+    // Resolve the custom provider's command from the persisted entries; `None`
+    // for built-ins.
+    let custom_command = preferences.cli_integrations_snapshot().custom_command(&provider);
     retry_result(
         &store,
         &state.registry,
@@ -209,6 +230,7 @@ pub async fn retry_route(
             error_message_id,
             provider,
             prompt,
+            custom_command,
             cancel,
         },
     )
@@ -335,13 +357,78 @@ pub fn open_external(url: String) -> Result<(), crate::links::OpenError> {
 }
 
 /// Detect installed CLIs concurrently and return their statuses.
-/// Results are not persisted — the front-end is responsible for merging
-/// detection results with existing enabled flags and calling
+///
+/// Built-in providers (Codex/Claude/Gemini) and every registered custom CLI are
+/// detected together; the custom CLIs use the same 30 s stdin "hello" test as
+/// the Add-dialog "Test" button (SP-072). Results are not persisted — the
+/// front-end merges them with existing enabled flags and calls
 /// `update_cli_integrations`.
 #[tauri::command]
-pub async fn detect_clis(state: State<'_, AppState>) -> Result<Vec<CliIntegration>, String> {
-    let results = state.detector.detect_all().await;
+pub async fn detect_clis(
+    state: State<'_, AppState>,
+    preferences: State<'_, PreferencesStore>,
+) -> Result<Vec<CliIntegration>, String> {
+    let custom_entries = preferences.cli_integrations_snapshot().custom;
+    let builtins_fut = state.detector.detect_all();
+    let customs_fut = detect_custom_clis(state.custom_runner.clone(), custom_entries);
+    let (mut results, customs) = tokio::join!(builtins_fut, customs_fut);
+    results.extend(customs);
     Ok(results)
+}
+
+/// Detect every custom CLI concurrently via the 30 s stdin "hello" test.
+/// Success (exit 0 + non-empty stdout) → `Available`; anything else →
+/// `NotDetected`. Returned entries are keyed by [`AssistantId::Custom`].
+async fn detect_custom_clis(
+    runner: Arc<dyn CommandRunner>,
+    entries: Vec<CustomCliEntry>,
+) -> Vec<CliIntegration> {
+    join_all(entries.into_iter().map(|entry| {
+        let runner = runner.clone();
+        async move {
+            let detected = run_custom_command(
+                runner.as_ref(),
+                &entry.command,
+                "hello",
+                std::env::temp_dir(),
+                CUSTOM_CLI_TIMEOUT,
+                CancellationToken::new(),
+            )
+            .await;
+            CliIntegration {
+                assistant: AssistantId::Custom(entry.name),
+                enabled: entry.enabled,
+                detected_status: if detected.is_ok() {
+                    CliDetectionStatus::Available
+                } else {
+                    CliDetectionStatus::NotDetected
+                },
+            }
+        }
+    }))
+    .await
+}
+
+/// Test a custom CLI's "CLI Prompt Command" (SP-072): run it through a login
+/// shell with `hello` on stdin (30 s timeout). `Ok(())` means success (exit 0
+/// with non-empty stdout). On failure the typed [`AdapterError`] lets the dialog
+/// distinguish a timeout (`timedOut` → "Test timed out") from a not-ready CLI
+/// (anything else → "Ensure that CLI tool is installed and authenticated").
+#[tauri::command]
+pub async fn test_custom_cli(
+    state: State<'_, AppState>,
+    command: String,
+) -> Result<(), AdapterError> {
+    run_custom_command(
+        state.custom_runner.as_ref(),
+        &command,
+        "hello",
+        std::env::temp_dir(),
+        CUSTOM_CLI_TIMEOUT,
+        CancellationToken::new(),
+    )
+    .await
+    .map(|_| ())
 }
 
 /// Return the in-memory CLI integrations snapshot (enabled flags + last known
@@ -368,8 +455,47 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
 
+    use crate::adapters::process::{MockCommandRunner, RunOutcome};
     use crate::adapters::{AssistantId, CliAdapter, PermissionMode};
     use async_trait::async_trait;
+
+    fn custom_entry(name: &str, command: &str) -> CustomCliEntry {
+        CustomCliEntry {
+            name: name.to_string(),
+            command: command.to_string(),
+            enabled: true,
+            detected_status: CliDetectionStatus::NotDetected,
+        }
+    }
+
+    #[tokio::test]
+    async fn detect_custom_clis_maps_success_to_available_and_failure_to_not_detected() {
+        let mut runner = MockCommandRunner::new();
+        // First custom (ok output) → Available; second (empty output) → NotDetected.
+        runner.expect_run().times(2).returning(|spec| {
+            let ok = spec.args.last().map(String::as_str) == Some("good-cli");
+            Ok(RunOutcome::Completed {
+                exit_code: Some(0),
+                stdout: if ok { "hi".to_string() } else { String::new() },
+                stderr: String::new(),
+            })
+        });
+
+        let results = detect_custom_clis(
+            Arc::new(runner),
+            vec![
+                custom_entry("Good", "good-cli"),
+                custom_entry("Bad", "bad-cli"),
+            ],
+        )
+        .await;
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].assistant, AssistantId::Custom("Good".to_string()));
+        assert_eq!(results[0].detected_status, CliDetectionStatus::Available);
+        assert_eq!(results[1].assistant, AssistantId::Custom("Bad".to_string()));
+        assert_eq!(results[1].detected_status, CliDetectionStatus::NotDetected);
+    }
 
     fn request(run_id: &str) -> AdapterRequest {
         AdapterRequest {
@@ -382,6 +508,7 @@ mod tests {
             timeout_ms: 1000,
             resume_session_id: None,
             run_id: Some(run_id.to_string()),
+            custom_command: None,
         }
     }
 
@@ -433,9 +560,10 @@ mod tests {
         AppState {
             registry,
             detector: CliDetector::new(
-                std::sync::Arc::new(SystemBinaryResolver::new()),
-                std::sync::Arc::new(SystemEnvironmentProvider::new()),
+                Arc::new(SystemBinaryResolver::new()),
+                Arc::new(SystemEnvironmentProvider::new()),
             ),
+            custom_runner: Arc::new(SystemCommandRunner),
             active_runs: Default::default(),
             next_run: AtomicU64::new(1),
         }

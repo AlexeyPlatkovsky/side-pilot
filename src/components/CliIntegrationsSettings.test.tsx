@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CliIntegrationsSettings } from "./CliIntegrationsSettings";
 import type { ChatApi } from "../chat/api";
@@ -19,6 +19,7 @@ function cliIntegrationsDefault(): CliIntegrations {
       enabled: false,
       detectedStatus: "notAuthenticated",
     },
+    custom: [],
   };
 }
 
@@ -34,6 +35,7 @@ function buildApi(overrides: Partial<ChatApi> = {}): ChatApi {
   return {
     getCliIntegrations: vi.fn().mockResolvedValue(cliIntegrationsDefault()),
     updateCliIntegrations: vi.fn().mockImplementation((v) => Promise.resolve(v)),
+    testCustomCli: vi.fn().mockResolvedValue(undefined),
     detectClis: vi.fn().mockResolvedValue(detectedAll()),
     getGeneralPreferences: vi.fn(),
     updateGeneralPreferences: vi.fn(),
@@ -201,6 +203,7 @@ describe("CliIntegrationsSettings", () => {
         codex: { assistant: "codex", enabled: true, detectedStatus: "available" },
         claude: { assistant: "claude", enabled: false, detectedStatus: "notInstalled" },
         gemini: { assistant: "gemini", enabled: false, detectedStatus: "available" },
+        custom: [],
       }),
       detectClis: vi.fn().mockReturnValue(
         new Promise<import("../chat/generated/CliIntegration").CliIntegration[]>(
@@ -252,5 +255,152 @@ describe("CliIntegrationsSettings", () => {
     unmount();
 
     // No state update on unmounted component — test passes if no error thrown
+  });
+
+  // ---- Custom CLI provider (SP-072) --------------------------------------
+
+  function allEnabled(): CliIntegrations {
+    return {
+      codex: { assistant: "codex", enabled: true, detectedStatus: "available" },
+      claude: { assistant: "claude", enabled: true, detectedStatus: "available" },
+      gemini: { assistant: "gemini", enabled: true, detectedStatus: "available" },
+      custom: [],
+    };
+  }
+
+  it("always shows the constant 'Only 3 CLIs' label above the rows", async () => {
+    const api = buildApi();
+    render(<CliIntegrationsSettings api={api} />);
+    await screen.findByText("Codex");
+    expect(screen.getByText("Only 3 CLIs can be enabled at a time")).toBeInTheDocument();
+  });
+
+  it("does not render a Delete button for built-in rows", async () => {
+    const api = buildApi();
+    render(<CliIntegrationsSettings api={api} />);
+    await screen.findByText("Codex");
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+
+  it("adds a custom CLI row via the Add dialog and persists it", async () => {
+    const api = buildApi();
+    render(<CliIntegrationsSettings api={api} />);
+    await screen.findByText("Codex");
+
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await userEvent.type(screen.getByLabelText("CLI name"), "OpenCode");
+    await userEvent.type(
+      screen.getByLabelText("CLI Prompt Command"),
+      "opencode --prompt",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText("OpenCode")).toBeInTheDocument();
+    const calls = (api.updateCliIntegrations as ReturnType<typeof vi.fn>).mock.calls;
+    const saved = calls[calls.length - 1][0] as CliIntegrations;
+    expect(saved.custom).toHaveLength(1);
+    expect(saved.custom[0]).toMatchObject({
+      name: "OpenCode",
+      command: "opencode --prompt",
+    });
+  });
+
+  it("saves a new custom CLI disabled when 3 CLIs are already enabled", async () => {
+    const api = buildApi({ getCliIntegrations: vi.fn().mockResolvedValue(allEnabled()) });
+    render(<CliIntegrationsSettings api={api} />);
+    await screen.findByText("Codex");
+
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await userEvent.type(screen.getByLabelText("CLI name"), "OpenCode");
+    await userEvent.type(screen.getByLabelText("CLI Prompt Command"), "opencode");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await screen.findByText("OpenCode");
+    const calls = (api.updateCliIntegrations as ReturnType<typeof vi.fn>).mock.calls;
+    const saved = calls[calls.length - 1][0] as CliIntegrations;
+    expect(saved.custom[0].enabled).toBe(false);
+  });
+
+  it("shows the max-3 toast and leaves the checkbox unchanged when enabling a 4th CLI", async () => {
+    const withDisabledCustom: CliIntegrations = {
+      ...allEnabled(),
+      custom: [
+        {
+          name: "OpenCode",
+          command: "opencode",
+          enabled: false,
+          detectedStatus: "available",
+        },
+      ],
+    };
+    const api = buildApi({
+      getCliIntegrations: vi.fn().mockResolvedValue(withDisabledCustom),
+    });
+    render(<CliIntegrationsSettings api={api} />);
+    await screen.findByText("OpenCode");
+
+    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    const customCheckbox = checkboxes[3];
+    expect(customCheckbox.checked).toBe(false);
+    await userEvent.click(customCheckbox);
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Only 3 CLIs can be enabled at a time",
+    );
+    expect(customCheckbox.checked).toBe(false);
+    // The toggle was rejected, so no persist happened for it.
+    expect(api.updateCliIntegrations).not.toHaveBeenCalled();
+  });
+
+  it("deletes a custom CLI after confirmation", async () => {
+    const withCustom: CliIntegrations = {
+      ...allEnabled(),
+      gemini: { assistant: "gemini", enabled: false, detectedStatus: "available" },
+      custom: [
+        {
+          name: "OpenCode",
+          command: "opencode",
+          enabled: true,
+          detectedStatus: "available",
+        },
+      ],
+    };
+    const api = buildApi({ getCliIntegrations: vi.fn().mockResolvedValue(withCustom) });
+    render(<CliIntegrationsSettings api={api} />);
+    await screen.findByText("OpenCode");
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    // Confirmation dialog with its own Delete button.
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() => expect(screen.queryByText("OpenCode")).toBeNull());
+    const calls = (api.updateCliIntegrations as ReturnType<typeof vi.fn>).mock.calls;
+    const saved = calls[calls.length - 1][0] as CliIntegrations;
+    expect(saved.custom).toHaveLength(0);
+  });
+
+  it("keeps the custom CLI when delete is cancelled", async () => {
+    const withCustom: CliIntegrations = {
+      ...allEnabled(),
+      gemini: { assistant: "gemini", enabled: false, detectedStatus: "available" },
+      custom: [
+        {
+          name: "OpenCode",
+          command: "opencode",
+          enabled: true,
+          detectedStatus: "available",
+        },
+      ],
+    };
+    const api = buildApi({ getCliIntegrations: vi.fn().mockResolvedValue(withCustom) });
+    render(<CliIntegrationsSettings api={api} />);
+    await screen.findByText("OpenCode");
+
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = screen.getByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+
+    expect(screen.getByText("OpenCode")).toBeInTheDocument();
   });
 });

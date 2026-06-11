@@ -18,6 +18,7 @@ import type {
   RouteRunResult,
 } from "../chat/api";
 import type { AssistantId } from "../chat/generated/AssistantId";
+import { assistantKey } from "../chat/assistantId";
 import type { AdapterError } from "../chat/generated/AdapterError";
 import type { CliIntegrations } from "../chat/generated/CliIntegrations";
 
@@ -61,9 +62,9 @@ function routeResult(prompt: string, outcomes: OutcomeSpec[]): RouteRunResult {
       message: o.error
         ? undefined
         : persisted({
-            id: `a-${o.provider}`,
+            id: `a-${assistantKey(o.provider)}`,
             sender: "assistant",
-            assistantId: o.provider,
+            assistantId: assistantKey(o.provider),
             content: o.content ?? "ok",
             seq: i + 2,
           }),
@@ -124,6 +125,7 @@ function makeApi(
     detectClis: vi.fn(() => Promise.resolve([])),
     getCliIntegrations: vi.fn(() => Promise.reject(new Error("unused"))),
     updateCliIntegrations: vi.fn(() => Promise.reject(new Error("unused"))),
+    testCustomCli: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -1383,6 +1385,7 @@ describe("[smoke] ChatPanel", () => {
       codex: { assistant: "codex", enabled: false, detectedStatus: "available" },
       claude: { assistant: "claude", enabled: true, detectedStatus: "available" },
       gemini: { assistant: "gemini", enabled: true, detectedStatus: "available" },
+      custom: [],
     };
     const api = makeApi({
       runRoute: vi.fn(() => new Promise<RouteRunResult>(() => {})),
@@ -1417,6 +1420,7 @@ describe("[smoke] ChatPanel", () => {
       codex: { assistant: "codex", enabled: false, detectedStatus: "available" },
       claude: { assistant: "claude", enabled: true, detectedStatus: "available" },
       gemini: { assistant: "gemini", enabled: true, detectedStatus: "available" },
+      custom: [],
     };
     const api = makeApi({
       history: [
@@ -1496,6 +1500,7 @@ describe("[smoke] ChatPanel", () => {
         codex: { assistant: "codex", enabled: true, detectedStatus: "available" },
         claude: { assistant: "claude", enabled: false, detectedStatus: "available" },
         gemini: { assistant: "gemini", enabled: true, detectedStatus: "available" },
+        custom: [],
       });
       await Promise.resolve();
     });
@@ -1533,6 +1538,7 @@ describe("[smoke] ChatPanel", () => {
       codex: { assistant: "codex", enabled: false, detectedStatus: "available" },
       claude: { assistant: "claude", enabled: false, detectedStatus: "available" },
       gemini: { assistant: "gemini", enabled: false, detectedStatus: "available" },
+      custom: [],
     };
     const api = makeApi();
     api.getCliIntegrations = vi.fn(() => Promise.resolve(allDisabled));

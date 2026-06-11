@@ -29,9 +29,10 @@ The React front-end never calls Tauri `invoke` directly outside the API bridge. 
 | `clear_session` | `commands::clear_session` | Delete messages + reset `codex_session_id` |
 | `update_codex_session_id` | `commands::update_codex_session_id` | Record native CLI resume id |
 | `open_external` | `commands::open_external` | Open http/https/mailto in browser |
-| `detect_clis` | `commands::detect_clis` | Detect installed CLI binaries + auth status for all three providers (SP-038) |
-| `get_cli_integrations` | `commands::get_cli_integrations` | Read persisted CLI integration toggles and detection statuses (SP-038) |
-| `update_cli_integrations` | `commands::update_cli_integrations` | Persist and immediately activate CLI integration toggle state (SP-038) |
+| `detect_clis` | `commands::detect_clis` | Detect the three built-ins (binary + auth) **and** every registered custom CLI (30 s stdin "hello" test) concurrently; returns built-in + `Custom(name)` statuses (SP-038/SP-072) |
+| `get_cli_integrations` | `commands::get_cli_integrations` | Read persisted CLI integration toggles, detection statuses, and the custom-CLI list (SP-038/SP-072) |
+| `update_cli_integrations` | `commands::update_cli_integrations` | Persist and immediately activate CLI integration toggle state + custom entries (SP-038/SP-072) |
+| `test_custom_cli` | `commands::test_custom_cli` | Run a custom CLI's "CLI Prompt Command" with `hello` on stdin (30 s); `Ok(())` on success, else a typed `AdapterError` (`timedOut` vs not-ready) for the Add dialog (SP-072) |
 | `app_version` | `commands::app_version` | Cargo version string; registered backend command, not currently exposed on `ChatApi` |
 
 All IPC types serialize with `#[serde(rename_all = "camelCase")]` — Rust `snake_case` fields become JS `camelCase`.

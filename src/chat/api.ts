@@ -107,6 +107,12 @@ export interface ChatApi {
   getCliIntegrations(): Promise<CliIntegrations>;
   /** Persist and activate CLI integration toggles. */
   updateCliIntegrations(value: CliIntegrations): Promise<CliIntegrations>;
+  /**
+   * Test a custom CLI's "CLI Prompt Command" (SP-072): runs it with `hello` on
+   * stdin (30 s). Resolves on success; rejects with a typed `AdapterError`
+   * (`timedOut` for a timeout, otherwise a not-ready CLI).
+   */
+  testCustomCli(command: string): Promise<void>;
   createSession(title?: string | null): Promise<PersistedSession>;
   appendMessage(message: NewMessage): Promise<PersistedMessage>;
   readHistory(sessionId: string): Promise<PersistedMessage[]>;
@@ -139,6 +145,7 @@ export const tauriChatApi: ChatApi = {
   detectClis: () => invoke("detect_clis"),
   getCliIntegrations: () => invoke("get_cli_integrations"),
   updateCliIntegrations: (value) => invoke("update_cli_integrations", { value }),
+  testCustomCli: (command) => invoke("test_custom_cli", { command }),
   createSession: (title = null) => invoke("create_session", { title }),
   appendMessage: (message) => invoke("append_message", { message }),
   readHistory: (sessionId) => invoke("read_history", { sessionId }),
@@ -167,6 +174,7 @@ export const inertChatApi: ChatApi = {
   detectClis: () => Promise.resolve([]),
   getCliIntegrations: () => Promise.reject(new Error("chat backend unavailable")),
   updateCliIntegrations: () => Promise.reject(new Error("chat backend unavailable")),
+  testCustomCli: () => Promise.reject(new Error("chat backend unavailable")),
   createSession: () =>
     Promise.resolve({
       id: "inert-session",

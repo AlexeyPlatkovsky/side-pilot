@@ -193,16 +193,17 @@ const api: ChatApi = {
               ? request.activeProviders
               : [request.route.provider];
           const outcomes = targets.map((provider) => {
+            const pid = provider as "codex" | "claude" | "gemini";
             if (fixtureParams.get("route") === "error") {
               const row: PersistedMessage = {
                 id: `m${nextSeq++}`,
                 sessionId: request.sessionId,
                 seq: list.length + 1,
                 sender: "assistant",
-                assistantId: provider,
-                model: providerPreference[provider].model,
-                reasoningEffort: providerPreference[provider].reasoningEffort,
-                content: `${provider === "gemini" ? "Gemini" : provider} exited with an error: Requested entity was not found.`,
+                assistantId: pid,
+                model: providerPreference[pid].model,
+                reasoningEffort: providerPreference[pid].reasoningEffort,
+                content: `${pid === "gemini" ? "Gemini" : pid} exited with an error: Requested entity was not found.`,
                 rawJson:
                   '{"kind":"nonZeroExit","code":404,"stderr":"Full report available at: /tmp/gemini-error.json\\nModelNotFoundError: Requested entity was not found.\\n at classifyGoogleError (chunk.js:1)"}',
                 isError: true,
@@ -225,10 +226,10 @@ const api: ChatApi = {
               sessionId: request.sessionId,
               seq: list.length + 1,
               sender: "assistant",
-              assistantId: provider,
-              model: providerPreference[provider].model,
-              reasoningEffort: providerPreference[provider].reasoningEffort,
-              content: `A short **${provider}** reply for the runtime fixture.`,
+              assistantId: pid,
+              model: providerPreference[pid].model,
+              reasoningEffort: providerPreference[pid].reasoningEffort,
+              content: `A short **${pid}** reply for the runtime fixture.`,
               rawJson: "{}",
               isError: false,
               createdAt: Date.now(),
@@ -267,6 +268,7 @@ const api: ChatApi = {
   detectClis: () => Promise.resolve([]),
   getCliIntegrations: () => Promise.reject(new Error("unused in e2e")),
   updateCliIntegrations: (value) => Promise.resolve(value),
+  testCustomCli: () => Promise.resolve(),
   retryRoute: (request) => {
     if (retryFails) {
       return Promise.reject(new Error("Retry failed"));
@@ -275,15 +277,16 @@ const api: ChatApi = {
     const list = messages[request.sessionId] ?? [];
     const idx = list.findIndex((m) => m.id === request.errorMessageId);
     if (idx >= 0) list.splice(idx, 1);
+    const rpid = request.provider as "codex" | "claude" | "gemini";
     const row: PersistedMessage = {
       id: `m${nextSeq++}`,
       sessionId: request.sessionId,
       seq: (messages[request.sessionId]?.length ?? 0) + 1,
       sender: "assistant",
-      assistantId: request.provider,
-      model: providerPreference[request.provider].model,
-      reasoningEffort: providerPreference[request.provider].reasoningEffort,
-      content: `A retried **${request.provider}** reply.`,
+      assistantId: rpid,
+      model: providerPreference[rpid].model,
+      reasoningEffort: providerPreference[rpid].reasoningEffort,
+      content: `A retried **${rpid}** reply.`,
       rawJson: "{}",
       isError: false,
       createdAt: Date.now(),
