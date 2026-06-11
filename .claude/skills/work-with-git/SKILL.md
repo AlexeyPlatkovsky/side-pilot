@@ -17,7 +17,7 @@ For trivial work, do not create or switch branches by default. Perform the chang
 
 ## Branch Rules
 
-- Non-trivial tasks must not be implemented on `main` unless the user explicitly says to work on `main`.
+- Non-trivial tasks must not be implemented on `main` unless the user explicitly says to work on `main`. If the current branch is `main` or `master` and the user has not given this explicit permission, report `Status: blocked` and ask the user to name a target feature branch before any edits begin.
 - Create new task branches only from `origin/main` unless the user explicitly names another base.
 - If the task has a Beads ID, name the branch:
 

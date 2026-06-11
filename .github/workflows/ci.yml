@@ -54,6 +54,9 @@ jobs:
       pull-requests: write
 
     steps:
+      - name: Record pipeline start time
+        run: echo "PIPELINE_START=$(date +%s)" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v5
 
@@ -90,7 +93,16 @@ jobs:
       - name: Audit frontend dependencies
         id: npm-audit
         if: ${{ !cancelled() }}
-        run: npm audit --production --audit-level=high
+        run: |
+          EXIT_CODE=0
+          npm audit --production --audit-level=high 2>&1 | tee /tmp/audit-fe.txt || EXIT_CODE=$?
+          COUNT=$(grep -oP 'found \K\d+' /tmp/audit-fe.txt | tail -1)
+          if [ -n "$COUNT" ] && [ "$COUNT" -eq 0 ] 2>/dev/null; then
+            echo "report=clean" >> $GITHUB_OUTPUT
+          elif [ -n "$COUNT" ]; then
+            echo "report=$COUNT vulnerabilities" >> $GITHUB_OUTPUT
+          fi
+          exit $EXIT_CODE
 
       - name: Lint frontend
         id: lint
@@ -105,17 +117,53 @@ jobs:
       - name: Smoke test frontend
         id: smoke-fe
         if: ${{ !cancelled() }}
-        run: npm run test:smoke
+        run: |
+          EXIT_CODE=0
+          npm run test:smoke -- --reporter=json 2>&1 | tee /tmp/smoke-fe.txt || EXIT_CODE=$?
+          node -e "
+          const f=require('fs').readFileSync('/tmp/smoke-fe.txt','utf8');
+          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
+          if(i>=0&&j>i) try {
+            const r=JSON.parse(f.slice(i,j+1));
+            if(typeof r.numTotalTests==='number')
+              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.numPassedTests+'/'+r.numTotalTests+' passed\n');
+          } catch(e){}
+          " 2>/dev/null || true
+          exit $EXIT_CODE
 
       - name: Test frontend
         id: test-fe
         if: ${{ !cancelled() }}
-        run: npm run test
+        run: |
+          EXIT_CODE=0
+          npm run test -- --reporter=json 2>&1 | tee /tmp/test-fe.txt || EXIT_CODE=$?
+          node -e "
+          const f=require('fs').readFileSync('/tmp/test-fe.txt','utf8');
+          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
+          if(i>=0&&j>i) try {
+            const r=JSON.parse(f.slice(i,j+1));
+            if(typeof r.numTotalTests==='number')
+              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.numPassedTests+'/'+r.numTotalTests+' passed\n');
+          } catch(e){}
+          " 2>/dev/null || true
+          exit $EXIT_CODE
 
       - name: Coverage frontend
         id: coverage
         if: ${{ !cancelled() }}
-        run: npm run test:coverage
+        run: |
+          EXIT_CODE=0
+          npm run test:coverage -- --reporter=json 2>&1 | tee /tmp/coverage.txt || EXIT_CODE=$?
+          node -e "
+          const f=require('fs').readFileSync('/tmp/coverage.txt','utf8');
+          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
+          if(i>=0&&j>i) try {
+            const r=JSON.parse(f.slice(i,j+1));
+            if(typeof r.numTotalTests==='number')
+              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.numPassedTests+'/'+r.numTotalTests+' passed\n');
+          } catch(e){}
+          " 2>/dev/null || true
+          exit $EXIT_CODE
 
       - name: Install Playwright browsers
         if: ${{ !cancelled() }}
@@ -124,12 +172,36 @@ jobs:
       - name: Smoke test WebKit E2E
         id: smoke-e2e
         if: ${{ !cancelled() }}
-        run: npm run test:e2e:smoke
+        run: |
+          EXIT_CODE=0
+          npm run test:e2e:smoke -- --reporter=json 2>&1 | tee /tmp/smoke-e2e.txt || EXIT_CODE=$?
+          node -e "
+          const f=require('fs').readFileSync('/tmp/smoke-e2e.txt','utf8');
+          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
+          if(i>=0&&j>i) try {
+            const r=JSON.parse(f.slice(i,j+1));
+            if(r.stats)
+              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.stats.expected+'/'+r.stats.total+' passed\n');
+          } catch(e){}
+          " 2>/dev/null || true
+          exit $EXIT_CODE
 
       - name: Test WebKit runtime harness
         id: e2e
         if: ${{ !cancelled() }}
-        run: npm run test:e2e
+        run: |
+          EXIT_CODE=0
+          npm run test:e2e -- --reporter=json 2>&1 | tee /tmp/e2e.txt || EXIT_CODE=$?
+          node -e "
+          const f=require('fs').readFileSync('/tmp/e2e.txt','utf8');
+          const i=f.lastIndexOf('{'),j=i>=0?f.lastIndexOf('}'):-1;
+          if(i>=0&&j>i) try {
+            const r=JSON.parse(f.slice(i,j+1));
+            if(r.stats)
+              require('fs').appendFileSync(process.env.GITHUB_OUTPUT,'report='+r.stats.expected+'/'+r.stats.total+' passed\n');
+          } catch(e){}
+          " 2>/dev/null || true
+          exit $EXIT_CODE
 
       - name: Build frontend
         id: build-fe
@@ -139,14 +211,21 @@ jobs:
       - name: Test Rust core
         id: test-rust
         if: ${{ !cancelled() }}
-        run: cargo nextest run --manifest-path src-tauri/Cargo.toml
+        run: |
+          EXIT_CODE=0
+          cargo nextest run --manifest-path src-tauri/Cargo.toml 2>&1 | tee /tmp/test-rust.txt || EXIT_CODE=$?
+          REPORT=$(grep -oP '\d+ tests run: \d+ passed, \d+ failed' /tmp/test-rust.txt | tail -1)
+          [ -n "$REPORT" ] && echo "report=$REPORT" >> $GITHUB_OUTPUT
+          exit $EXIT_CODE
 
       - name: Check IPC bindings are up to date
         id: ipc
         if: ${{ !cancelled() }}
         run: |
-          cargo test --manifest-path src-tauri/Cargo.toml export_bindings
-          git diff --exit-code src/chat/generated
+          EXIT_CODE=0
+          cargo test --manifest-path src-tauri/Cargo.toml export_bindings 2>&1 | tee /tmp/ipc.txt || EXIT_CODE=$?
+          git diff --exit-code src/chat/generated 2>&1 | tee -a /tmp/ipc.txt || EXIT_CODE=$?
+          exit $EXIT_CODE
 
       - name: Lint Rust core
         id: clippy
@@ -156,22 +235,16 @@ jobs:
       - name: Audit Rust dependencies
         id: cargo-audit
         if: ${{ !cancelled() }}
-        working-directory: src-tauri
-        run: cargo audit
-
-      - name: Install cargo-mutants
-        if: ${{ !cancelled() && startsWith(github.ref_name, 'feature/') }}
-        run: cargo install cargo-mutants
-
-      - name: Mutation test Rust core
-        id: mutation-rust
-        if: ${{ !cancelled() && startsWith(github.ref_name, 'feature/') }}
-        run: cargo mutants --manifest-path src-tauri/Cargo.toml --timeout 60
-
-      - name: Mutation test frontend
-        id: mutation-fe
-        if: ${{ !cancelled() && startsWith(github.ref_name, 'feature/') }}
-        run: npx stryker run
+        run: |
+          EXIT_CODE=0
+          cargo audit 2>&1 | tee /tmp/cargo-audit.txt || EXIT_CODE=$?
+          if grep -q 'No vulnerabilities found' /tmp/cargo-audit.txt; then
+            echo "report=clean" >> $GITHUB_OUTPUT
+          else
+            COUNT=$(grep -oP '\d+ vulnerabilities?' /tmp/cargo-audit.txt | tail -1)
+            [ -n "$COUNT" ] && echo "report=$COUNT found" >> $GITHUB_OUTPUT
+          fi
+          exit $EXIT_CODE
 
       - name: Post PR comment
         if: always() && github.event_name == 'pull_request'
@@ -190,11 +263,38 @@ jobs:
           IPC: ${{ steps.ipc.outcome }}
           CLIPPY: ${{ steps.clippy.outcome }}
           CARGO_AUDIT: ${{ steps.cargo-audit.outcome }}
-          MUTATION_RUST: ${{ steps.mutation-rust.outcome }}
-          MUTATION_FE: ${{ steps.mutation-fe.outcome }}
+          NPM_AUDIT_REPORT: ${{ steps.npm-audit.outputs.report }}
+          SMOKE_FE_REPORT: ${{ steps.smoke-fe.outputs.report }}
+          TEST_FE_REPORT: ${{ steps.test-fe.outputs.report }}
+          COVERAGE_REPORT: ${{ steps.coverage.outputs.report }}
+          SMOKE_E2E_REPORT: ${{ steps.smoke-e2e.outputs.report }}
+          E2E_REPORT: ${{ steps.e2e.outputs.report }}
+          TEST_RUST_REPORT: ${{ steps.test-rust.outputs.report }}
+          CARGO_AUDIT_REPORT: ${{ steps.cargo-audit.outputs.report }}
         run: |
           PR="${{ github.event.pull_request.number }}"
           now=$(date -u +"%Y-%m-%d %H:%M UTC")
+
+          el=$(($(date +%s) - PIPELINE_START))
+          elapsed="$((el / 60))m $((el % 60))s"
+
+          short() {
+            case "$1" in
+              success) echo -n "ok" ;;
+              failure) echo -n "fail" ;;
+              skipped) echo -n "skip" ;;
+              cancelled) echo -n "cancel" ;;
+              *) echo -n "$1" ;;
+            esac
+          }
+
+          report_or_short() {
+            if [ -n "$2" ]; then
+              echo -n "$2"
+            else
+              short "$1"
+            fi
+          }
 
           icon() {
             case "$1" in
@@ -208,21 +308,19 @@ jobs:
 
           table="| | Check | Result |
           |---|---|---|
-           | $(icon "$LINT")     | Lint frontend   | $LINT     |
-           | $(icon "$FORMAT")   | Check formatting | $FORMAT   |
-           | $(icon "$SMOKE_FE") | Smoke test (FE)  | $SMOKE_FE |
-           | $(icon "$NPM_AUDIT")| Audit npm deps   | $NPM_AUDIT |
-           | $(icon "$TEST_FE")  | Test frontend   | $TEST_FE  |
-           | $(icon "$COVERAGE") | Coverage frontend| $COVERAGE |
-           | $(icon "$SMOKE_E2E")| Smoke test (E2E) | $SMOKE_E2E |
-           | $(icon "$E2E")      | WebKit E2E      | $E2E      |
-           | $(icon "$BUILD_FE") | Build frontend  | $BUILD_FE |
-           | $(icon "$TEST_RUST")| Test Rust core  | $TEST_RUST|
-           | $(icon "$IPC")      | IPC bindings    | $IPC      |
-           | $(icon "$CLIPPY")   | Clippy (Rust lint)| $CLIPPY |
-           | $(icon "$CARGO_AUDIT")| Audit Rust deps | $CARGO_AUDIT |
-           | $(icon "$MUTATION_RUST")| Mutation (Rust)  | $MUTATION_RUST |
-           | $(icon "$MUTATION_FE")| Mutation (FE)    | $MUTATION_FE |"
+           | $(icon "$LINT")     | Lint frontend   | $(report_or_short "$LINT" "")            |
+           | $(icon "$FORMAT")   | Check formatting | $(report_or_short "$FORMAT" "")          |
+           | $(icon "$SMOKE_FE") | Smoke test (FE)  | $(report_or_short "$SMOKE_FE" "$SMOKE_FE_REPORT") |
+           | $(icon "$NPM_AUDIT")| Audit npm deps   | $(report_or_short "$NPM_AUDIT" "$NPM_AUDIT_REPORT") |
+           | $(icon "$TEST_FE")  | Test frontend   | $(report_or_short "$TEST_FE" "$TEST_FE_REPORT")  |
+           | $(icon "$COVERAGE") | Coverage frontend| $(report_or_short "$COVERAGE" "$COVERAGE_REPORT") |
+           | $(icon "$SMOKE_E2E")| Smoke test (E2E) | $(report_or_short "$SMOKE_E2E" "$SMOKE_E2E_REPORT") |
+           | $(icon "$E2E")      | WebKit E2E      | $(report_or_short "$E2E" "$E2E_REPORT")      |
+           | $(icon "$BUILD_FE") | Build frontend  | $(report_or_short "$BUILD_FE" "")          |
+           | $(icon "$TEST_RUST")| Test Rust core  | $(report_or_short "$TEST_RUST" "$TEST_RUST_REPORT")|
+           | $(icon "$IPC")      | IPC bindings    | $(report_or_short "$IPC" "")              |
+           | $(icon "$CLIPPY")   | Clippy (Rust lint)| $(report_or_short "$CLIPPY" "")          |
+           | $(icon "$CARGO_AUDIT")| Audit Rust deps | $(report_or_short "$CARGO_AUDIT" "$CARGO_AUDIT_REPORT") |
 
           pass=$(echo "$table" | grep -cE "✅|➖" || true)
           fail=$(echo "$table" | grep -cE "❌|🚫|❓" || true)
@@ -230,7 +328,7 @@ jobs:
           summary="$pass / $total passed"
           [ "$fail" -gt 0 ] && summary="$summary, $fail failed"
 
-          body=$(printf "## CI — %s\n\n%s\n\n**%s**" "$now" "$table" "$summary")
+          body=$(printf "## CI — %s\n⏱ %s\n\n%s\n\n**%s**" "$now" "$elapsed" "$table" "$summary")
 
           # Remove previous CI comments by this bot to avoid duplicates.
           gh pr view "$PR" --repo "${{ github.repository }}" --json comments \

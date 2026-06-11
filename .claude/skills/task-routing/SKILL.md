@@ -58,6 +58,8 @@ For every non-trivial task, route `.claude/skills/work-with-git/SKILL.md` after 
 
 The manager only routes the git branch gate. The skill decides whether to create a branch, stay on the current branch, or ask the user when branch ownership is ambiguous.
 
+Trivial work is exempt from this gate and does not route through the git branch skill. The main-branch guard for trivial work is enforced at the `AGENTS.md` §Task Classification level before the manager is reached.
+
 ## Architecture Documentation Gate
 
 For non-trivial product or engineering work that touches or depends on existing UI, IPC, Rust core, adapters, CLI process execution, links, storage, sessions, or messages, require focused architecture loading:
@@ -111,6 +113,8 @@ After the substantive implementation step and before task-complete:
 4. Before declaring task-complete, verify every required planned output artifact is present in the conversation. If any is missing, return to the missing step or report it as a blocker.
 
 Apply AGENTS.md §Final Response Gate before sending the final response.
+
+**Ad-hoc / unmatched-task pipeline suggestion:** If the task was executed without a matching pipeline route (user chose to proceed ad-hoc) and required more than 3 discrete steps or involved reasoning across multiple files, append a free-form paragraph after the `task-complete` closure: recommend creating a named pipeline for this task type and briefly describe its proposed purpose and scope. This is advisory and does not gate task-complete.
 
 ## Risk Escalation
 

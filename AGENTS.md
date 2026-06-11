@@ -20,8 +20,9 @@ Project profile: `.claude/docs/project_specification.md`
 
 Before making any tool call that reads, writes, or modifies project files in response to a task request — classify the task out loud:
 
-**Trivial** — single-step, low-risk, no behavioral change.
+**Trivial** — single-step, low-risk, no behavioral change. Explicit examples: editing CI/CD or build workflow files (e.g. `.github/workflows/*.yml`), updating config or settings files, and any other isolated single-file change that affects only build, CI, or tooling — not application runtime behavior.
 Proceed directly. State the classification.
+**Main-branch guard (trivial work):** If the current branch is `main` or `master`, ask the user to switch to a feature branch before making any file changes. For non-trivial work on `main`, the same protection is enforced by the `work-with-git` skill's §Branch Rules.
 
 **Non-trivial** — multi-step, or changes behavior, structure, commands, contracts, or domain facts:
 1. Stop.
