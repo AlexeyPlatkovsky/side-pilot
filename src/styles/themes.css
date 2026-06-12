@@ -98,3 +98,224 @@
   /* Focus ring — matches --teal to stay in sync if teal changes */
   --focus-ring: var(--teal);
 }
+
+/* =============================================================================
+   Sepia / Paper — warm yellowed-paper background, dark brown ink,
+   muted tea-stain accents. Evokes writing in a journal.
+   ========================================================================== */
+
+[data-theme="sepia"] {
+  --ink: #3d2b1f;
+  --muted: #6a5540;
+  --honey: #d4a04a;
+  --coral: #b85c4a;
+  --sage: #7a8a5a;
+  --clay: #9a6a5a;
+  --cream: #f5e6c8;
+  --teal: #2a6a5a;
+  --orange: #c07030;
+
+  --color-text: #3d2b1f;
+  --color-text-muted: #6a5540;
+  --color-accent: #2a6a5a;
+  --color-on-accent: #f5e6c8;
+  --color-on-accent-muted: rgba(245, 230, 200, 0.82);
+  --color-danger: #8a3a2a;
+  --color-unread: #a05020;
+
+  --surface-panel: rgba(245, 230, 200, 0.95);
+  --surface-panel-soft: rgba(245, 230, 200, 0.82);
+  --surface-warm: rgba(240, 224, 185, 0.96);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(252, 242, 218, 0.82);
+  --surface-body-top: rgba(250, 240, 215, 0.75);
+  --surface-body-bottom: rgba(245, 230, 200, 0.55);
+  --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
+
+  --border-soft: color-mix(in srgb, var(--clay) 16%, transparent);
+  --border-accent: color-mix(in srgb, var(--teal) 20%, transparent);
+  --overlay-hover: color-mix(in srgb, var(--coral) 12%, transparent);
+  --tint-honey: color-mix(in srgb, var(--honey) 34%, transparent);
+
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.16);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.22);
+
+  --focus-ring: var(--teal);
+}
+
+/* =============================================================================
+   Forest / Verdant — deep green panel, sage surfaces, amber and
+   mushroom accents. Calm, grounded, earthy.
+   ========================================================================== */
+
+[data-theme="forest"] {
+  --ink: #1a2e1a;
+  --muted: #4a6a4a;
+  --honey: #c4a040;
+  --coral: #b05a40;
+  --sage: #4a7a6a;
+  --clay: #6a5a4a;
+  --cream: #e5f0e0;
+  --teal: #2a6a5a;
+  --orange: #b08030;
+
+  --color-text: #1a2e1a;
+  --color-text-muted: #4a6a4a;
+  --color-accent: #2a6a5a;
+  --color-on-accent: #e5f0e0;
+  --color-on-accent-muted: rgba(229, 240, 224, 0.82);
+  --color-danger: #8e3a2a;
+  --color-unread: #906820;
+
+  --surface-panel: rgba(229, 240, 224, 0.95);
+  --surface-panel-soft: rgba(225, 236, 218, 0.82);
+  --surface-warm: rgba(215, 232, 206, 0.96);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(242, 248, 238, 0.82);
+  --surface-body-top: rgba(235, 244, 230, 0.75);
+  --surface-body-bottom: rgba(225, 238, 218, 0.55);
+  --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
+
+  --border-soft: color-mix(in srgb, var(--clay) 16%, transparent);
+  --border-accent: color-mix(in srgb, var(--teal) 20%, transparent);
+  --overlay-hover: color-mix(in srgb, var(--coral) 12%, transparent);
+  --tint-honey: color-mix(in srgb, var(--honey) 34%, transparent);
+
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.16);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.22);
+
+  --focus-ring: var(--teal);
+}
+
+/* =============================================================================
+   Midnight / Slate — dark blue-gray panel, cool silver-grey text,
+   steel-blue accent. Professional dark mode — less flashy than Cyberpunk.
+   ========================================================================== */
+
+[data-theme="midnight"] {
+  --ink: #e0e4e8;
+  --muted: #8896a8;
+  --honey: #c8b060;
+  --coral: #d06060;
+  --sage: #6a9a8a;
+  --clay: #8a7a8a;
+  --cream: #1a1e28;
+  --teal: #6a9ad0;
+  --orange: #c08040;
+
+  --color-text: #e0e4e8;
+  --color-text-muted: #8896a8;
+  --color-accent: #6a9ad0;
+  --color-on-accent: #1a1e28;
+  --color-on-accent-muted: rgba(26, 30, 40, 0.78);
+  --color-danger: #ff6060;
+  --color-unread: #e09040;
+
+  --surface-panel: rgba(26, 30, 42, 0.96);
+  --surface-panel-soft: rgba(36, 40, 54, 0.88);
+  --surface-warm: rgba(32, 36, 50, 0.96);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(42, 46, 60, 0.88);
+  --surface-body-top: rgba(30, 34, 46, 0.8);
+  --surface-body-bottom: rgba(24, 28, 40, 0.6);
+  --surface-scrim: rgba(0, 0, 0, 0.42);
+
+  --border-soft: rgba(128, 144, 168, 0.2);
+  --border-accent: rgba(106, 154, 208, 0.28);
+  --overlay-hover: rgba(128, 144, 168, 0.14);
+  --tint-honey: rgba(200, 176, 96, 0.22);
+
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.42);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.58);
+
+  --focus-ring: var(--teal);
+}
+
+/* =============================================================================
+   Retro Terminal — black panel, green monochrome text, amber
+   highlights. Matrix / Fallout terminal vibe.
+   ========================================================================== */
+
+[data-theme="retro"] {
+  --ink: #90c090;
+  --muted: #508050;
+  --honey: #d0b040;
+  --coral: #c06050;
+  --sage: #50a050;
+  --clay: #706050;
+  --cream: #0a120a;
+  --teal: #50b080;
+  --orange: #c09040;
+
+  --color-text: #90c090;
+  --color-text-muted: #62a062;
+  --color-accent: #50b080;
+  --color-on-accent: #0a120a;
+  --color-on-accent-muted: rgba(10, 18, 10, 0.78);
+  --color-danger: #d06850;
+  --color-unread: #d0b040;
+
+  --surface-panel: rgba(10, 18, 12, 0.97);
+  --surface-panel-soft: rgba(16, 26, 18, 0.88);
+  --surface-warm: rgba(14, 22, 16, 0.97);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(22, 34, 26, 0.88);
+  --surface-body-top: rgba(14, 22, 16, 0.82);
+  --surface-body-bottom: rgba(10, 16, 12, 0.6);
+  --surface-scrim: rgba(0, 0, 0, 0.52);
+
+  --border-soft: rgba(80, 128, 80, 0.22);
+  --border-accent: rgba(80, 176, 128, 0.28);
+  --overlay-hover: rgba(80, 176, 128, 0.14);
+  --tint-honey: rgba(208, 176, 64, 0.22);
+
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.52);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.68);
+
+  --focus-ring: var(--teal);
+}
+
+/* =============================================================================
+   High Contrast / A11y — pure white panel, pure black text, distinctly
+   coloured semantic tokens. Engineered to meet WCAG AAA on critical pairs
+   and AA on all pairs.
+   ========================================================================== */
+
+[data-theme="high-contrast"] {
+  --ink: #000000;
+  --muted: #444444;
+  --honey: #b8860b;
+  --coral: #cc3333;
+  --sage: #2a6a5a;
+  --clay: #993366;
+  --cream: #ffffff;
+  --teal: #2266cc;
+  --orange: #b05a00;
+
+  --color-text: #000000;
+  --color-text-muted: #444444;
+  --color-accent: #2266cc;
+  --color-on-accent: #ffffff;
+  --color-on-accent-muted: rgba(255, 255, 255, 0.82);
+  --color-danger: #cc3333;
+  --color-unread: #b05a00;
+
+  --surface-panel: rgba(255, 255, 255, 0.97);
+  --surface-panel-soft: rgba(248, 248, 248, 0.88);
+  --surface-warm: rgba(240, 240, 240, 0.97);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(255, 255, 255, 0.85);
+  --surface-body-top: rgba(248, 248, 248, 0.78);
+  --surface-body-bottom: rgba(240, 240, 240, 0.58);
+  --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
+
+  --border-soft: rgba(0, 0, 0, 0.15);
+  --border-accent: rgba(34, 102, 204, 0.2);
+  --overlay-hover: rgba(34, 102, 204, 0.1);
+  --tint-honey: rgba(184, 134, 11, 0.2);
+
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.14);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.2);
+
+  --focus-ring: var(--teal);
+}

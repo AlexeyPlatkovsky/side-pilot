@@ -2,11 +2,16 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { THEMES, THEME_LABELS, applyTheme, isValidTheme } from "./theme";
 
 describe("theme constants", () => {
-  it("THEMES contains default, cyberpunk, and minimalist", () => {
+  it("THEMES contains all theme IDs", () => {
     expect(THEMES).toContain("default");
     expect(THEMES).toContain("cyberpunk");
     expect(THEMES).toContain("minimalist");
-    expect(THEMES).toHaveLength(3);
+    expect(THEMES).toContain("sepia");
+    expect(THEMES).toContain("forest");
+    expect(THEMES).toContain("midnight");
+    expect(THEMES).toContain("retro");
+    expect(THEMES).toContain("high-contrast");
+    expect(THEMES).toHaveLength(8);
   });
 
   it("THEME_LABELS has an entry for each theme", () => {

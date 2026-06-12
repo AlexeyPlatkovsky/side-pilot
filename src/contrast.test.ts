@@ -170,11 +170,19 @@ interface ThemeTokens {
   colours: Map<string, Color>;
 }
 
-const themeSelectors: [string, string][] = [
-  ["default", ":root"],
-  ["cyberpunk", '[data-theme="cyberpunk"]'],
-  ["minimalist", '[data-theme="minimalist"]'],
+// Discover all theme selectors from the CSS: :root (default) + each [data-theme="…"] block
+const themeNames: string[] = [
+  "default",
+  ...Array.from(ALL_CSS.matchAll(/\[data-theme="([^"]+)"\]/g))
+    .map((m) => m[1])
+    .filter((n) => n !== "..." && n.length <= 20),
 ];
+
+const themeSelectors: [string, string][] = themeNames.map((name) =>
+  name === "default"
+    ? ["default", ":root"] as const
+    : [name, `[data-theme="${name}"]`] as const,
+);
 
 const themes: ThemeTokens[] = themeSelectors.map(([name, sel]) => {
   const vars = parseCssVars(ALL_CSS, sel);

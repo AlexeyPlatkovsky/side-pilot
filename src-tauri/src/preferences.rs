@@ -216,7 +216,7 @@ impl GeneralPreferences {
             }
         }
         match self.theme.as_str() {
-            "default" | "cyberpunk" | "minimalist" => {}
+            "default" | "cyberpunk" | "minimalist" | "sepia" | "forest" | "midnight" | "retro" | "high-contrast" => {}
             other => {
                 return Err(PreferencesError::Validation {
                     detail: format!("unsupported theme: {other}"),
@@ -937,7 +937,7 @@ mod tests {
 
     #[test]
     fn general_preferences_accepts_valid_themes() {
-        for theme in ["default", "cyberpunk", "minimalist"] {
+        for theme in ["default", "cyberpunk", "minimalist", "sepia", "forest", "midnight", "retro", "high-contrast"] {
             let general = GeneralPreferences { theme: theme.to_string(), ..Default::default() };
             assert!(general.normalized().is_ok(), "theme '{theme}' should be valid");
         }
