@@ -78,6 +78,14 @@ Box-shadow tokens for floating layers above the panel surface.
 
 Apply as `outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset);` on every `:focus-visible` interactive element.
 
+### Theme variants
+
+Theme variants re-value the shared color, surface, border, overlay, shadow, and
+focus tokens without changing the token vocabulary. Cyberpunk uses bright cyan,
+electric blue, hot pink, yellow, and orange accents over deep-space
+purple/indigo surfaces, with stronger neon borders and subtle cyan elevation
+glows. Minimalist uses restrained neutral surfaces and muted accents.
+
 ---
 
 ## Spacing

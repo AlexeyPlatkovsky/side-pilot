@@ -11,44 +11,44 @@
 
 [data-theme="cyberpunk"] {
   /* Color primitives */
-  --ink: #dde4ff;
-  --muted: #8fa4f8;
-  --honey: #f7ca4a;
-  --coral: #ff4d6d;
-  --sage: #00cfee;
-  --clay: #c084fc;
-  --cream: #0d0d1a;
-  --teal: #00cfee;
-  --orange: #ff6b35;
+  --ink: #eef4ff;
+  --muted: #7ab0ff;
+  --honey: #ffe047;
+  --coral: #ff4d9a;
+  --sage: #00e8ff;
+  --clay: #ff4d9a;
+  --cream: #030310;
+  --teal: #00e8ff;
+  --orange: #ff9a00;
 
   /* Semantic color tokens */
-  --color-text: #dde4ff;
-  --color-text-muted: #8fa4f8;
-  --color-accent: #00cfee;
-  --color-on-accent: #0d0d1a;
-  --color-on-accent-muted: rgba(13, 13, 26, 0.78);
-  --color-danger: #c084fc;
-  --color-unread: #ff6b35;
+  --color-text: #eef4ff;
+  --color-text-muted: #7ab0ff;
+  --color-accent: #00e8ff;
+  --color-on-accent: #000914;
+  --color-on-accent-muted: rgba(0, 9, 20, 0.78);
+  --color-danger: #ff4d9a;
+  --color-unread: #ff9a00;
 
-  /* Surfaces */
-  --surface-panel: rgba(13, 13, 26, 0.96);
-  --surface-panel-soft: rgba(13, 13, 26, 0.84);
-  --surface-warm: rgba(16, 14, 46, 0.97);
+  /* Surfaces — lifted deep-space bases with saturated purple/indigo shifts */
+  --surface-panel: rgba(12, 12, 32, 0.96);
+  --surface-panel-soft: rgba(20, 18, 50, 0.88);
+  --surface-warm: rgba(30, 18, 70, 0.96);
   --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
-  --surface-raised: rgba(28, 24, 72, 0.85);
-  --surface-body-top: rgba(13, 13, 26, 0.78);
-  --surface-body-bottom: rgba(10, 10, 34, 0.58);
-  --surface-scrim: rgba(0, 0, 0, 0.52);
+  --surface-raised: rgba(36, 24, 86, 0.9);
+  --surface-body-top: rgba(14, 14, 38, 0.82);
+  --surface-body-bottom: rgba(18, 12, 54, 0.68);
+  --surface-scrim: rgba(0, 0, 0, 0.48);
 
-  /* Borders & overlays */
-  --border-soft: rgba(91, 140, 255, 0.22);
-  --border-accent: rgba(0, 207, 238, 0.28);
-  --overlay-hover: rgba(91, 140, 255, 0.14);
-  --tint-honey: rgba(247, 202, 74, 0.22);
+  /* Borders & overlays — brighter neon glow */
+  --border-soft: rgba(100, 160, 255, 0.35);
+  --border-accent: rgba(0, 232, 255, 0.45);
+  --overlay-hover: rgba(100, 160, 255, 0.22);
+  --tint-honey: rgba(255, 224, 71, 0.28);
 
-  /* Elevation */
-  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.42);
-  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.58);
+  /* Elevation — cyan glow halo on popups and dialogs */
+  --shadow-popup: 0 6px 24px rgba(0, 0, 0, 0.52), 0 0 12px rgba(0, 232, 255, 0.1);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.68), 0 0 24px rgba(0, 232, 255, 0.08);
 
   /* Focus ring — matches --teal to stay in sync if teal changes */
   --focus-ring: var(--teal);

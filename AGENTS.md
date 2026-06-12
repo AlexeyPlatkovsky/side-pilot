@@ -20,7 +20,9 @@ Project profile: `.claude/docs/project_specification.md`
 
 Before making any tool call that reads, writes, or modifies project files in response to a task request — classify the task out loud:
 
-**Trivial** — single-step, low-risk, no behavioral change. Explicit examples: editing CI/CD or build workflow files (e.g. `.github/workflows/*.yml`), updating config or settings files, and any other isolated single-file change that affects only build, CI, or tooling — not application runtime behavior.
+**Trivial** — single-step and low-risk, normally with no behavioral change. Explicit examples: editing CI/CD or build workflow files (e.g. `.github/workflows/*.yml`), updating config or settings files, and any other isolated single-file change that affects only build, CI, or tooling — not application runtime behavior.
+
+**Narrow visual exception:** A request to adjust the brightness, color, or intensity of one existing visual theme may be provisionally classified as trivial, allowing focused read-only inspection before edits. It remains trivial when implementation only re-values existing tokens for that one theme and updates the matching design-book description. If inspection shows that selectors, token names, components, interactions, theme structure, or multiple themes must change, reclassify the task as non-trivial before making edits.
 Proceed directly. State the classification.
 **Main-branch guard (trivial work):** If the current branch is `main` or `master`, ask the user to switch to a feature branch before making any file changes. For non-trivial work on `main`, the same protection is enforced by the `work-with-git` skill's §Branch Rules.
 
@@ -29,7 +31,7 @@ Proceed directly. State the classification.
 2. Load `.claude/skills/task-routing/SKILL.md`.
 3. Do not implement until the manager emits its visible routing plan (`Manager: manager - output below`).
 
-Non-trivial by default (no judgment required): any numbered list of issues to fix, any change touching more than one element, any UI or interaction change.
+Non-trivial by default (no judgment required): any numbered list of issues to fix, any change touching more than one element, any UI or interaction change. The narrow visual exception above remains trivial even though it changes UI appearance and may include the required matching design-book update; broader theme changes and all interaction changes remain non-trivial.
 
 When unsure, treat as non-trivial.
 

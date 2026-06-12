@@ -283,3 +283,31 @@ test.describe("ThemesSettings pane (SP-041/SP-043)", () => {
     expect(dataTheme).toBeNull();
   });
 });
+
+test("Cyberpunk secondary settings buttons remain readable", async ({ page }) => {
+  await page.goto("/e2e/seeded.html");
+  await expect(page.getByTestId("panel")).toBeVisible();
+  await page.getByRole("button", { name: "Open settings" }).click();
+
+  await page.getByRole("tab", { name: "Themes" }).click();
+  await page
+    .getByRole("tabpanel", { name: "Themes" })
+    .getByRole("radio", { name: "Cyberpunk" })
+    .click();
+
+  await page.getByRole("tab", { name: "CLI Integrations" }).click();
+  const add = page.getByRole("button", { name: "Add" });
+  await expect(add).toHaveCSS("color", "rgb(238, 244, 255)");
+  await expect(add).toHaveCSS("background-color", "rgba(36, 24, 86, 0.9)");
+  await add.click();
+
+  const dialog = page.getByRole("dialog", { name: "Add a custom CLI" });
+  const cancel = dialog.getByRole("button", { name: "Cancel" });
+  await expect(cancel).toHaveCSS("color", "rgb(238, 244, 255)");
+  await expect(cancel).toHaveCSS("background-color", "rgba(36, 24, 86, 0.9)");
+
+  await page.screenshot({
+    path: "e2e/.artifacts/cyberpunk-add-cli-dialog.png",
+    fullPage: false,
+  });
+});

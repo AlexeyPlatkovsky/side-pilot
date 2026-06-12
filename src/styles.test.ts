@@ -21,7 +21,7 @@ function cssRule(selector: string): string {
 
 function cssDeclaration(rule: string, property: string): string | undefined {
   const escapedProperty = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`${escapedProperty}\\s*:\\s*([^;]+)`).exec(rule);
+  const match = new RegExp(`(?:^|\\n)\\s*${escapedProperty}\\s*:\\s*([^;]+)`).exec(rule);
   return match?.[1]?.trim();
 }
 
@@ -63,5 +63,15 @@ describe("floating shell styles", () => {
     // the rounded corners never paint an opaque square on the transparent window.
     expect(background).toBe("var(--surface-panel)");
     expect(rgbaAlpha(rootToken("--surface-panel")!)).toBeLessThanOrEqual(0.95);
+  });
+});
+
+describe("settings button styles", () => {
+  it("uses readable semantic colors for secondary actions", () => {
+    const buttonRule = cssRule(".settings-btn");
+
+    expect(cssDeclaration(buttonRule, "background")).toBe("var(--surface-raised)");
+    expect(cssDeclaration(buttonRule, "border-color")).toBe("var(--border-soft)");
+    expect(cssDeclaration(buttonRule, "color")).toBe("var(--color-text)");
   });
 });

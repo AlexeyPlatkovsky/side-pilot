@@ -267,7 +267,13 @@ const api: ChatApi = {
   },
   openExternal: () => Promise.resolve(),
   detectClis: () => Promise.resolve([]),
-  getCliIntegrations: () => Promise.reject(new Error("unused in e2e")),
+  getCliIntegrations: () =>
+    Promise.resolve({
+      codex: { assistant: "codex", enabled: true, detectedStatus: "available" },
+      claude: { assistant: "claude", enabled: true, detectedStatus: "notInstalled" },
+      gemini: { assistant: "gemini", enabled: false, detectedStatus: "notAuthenticated" },
+      custom: [],
+    }),
   updateCliIntegrations: (value) => Promise.resolve(value),
   testCustomCli: () => Promise.resolve(),
   retryRoute: (request) => {

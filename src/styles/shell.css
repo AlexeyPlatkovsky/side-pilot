@@ -478,9 +478,11 @@ body {
 .settings-btn {
   margin-left: var(--space-3);
   padding: var(--space-1) var(--space-3);
+  border-color: var(--border-soft);
+  background: var(--surface-raised);
   cursor: pointer;
   align-self: flex-start;
-  color: inherit;
+  color: var(--color-text);
 }
 
 .settings-btn:disabled {
