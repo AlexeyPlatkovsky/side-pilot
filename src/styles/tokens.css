@@ -1,0 +1,86 @@
+/* =============================================================================
+   §1  DESIGN TOKENS
+   The single source of truth for spacing, radius, type, icon sizes, and color.
+   Change a value here and it propagates everywhere.
+   ========================================================================== */
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+  /* --- Color primitives (the warm palette) --------------------------------
+     Raw brand hues. Components never reference these directly; they use the
+     semantic tokens below. Alpha variants are derived with color-mix() so a
+     single primitive change updates every tint built from it. */
+  --ink: #312522;
+  --muted: #b74f30;
+  --honey: #f7b955;
+  --coral: #dc6b4f;
+  --sage: #6b8f83;
+  --clay: #8a4f3f;
+  --cream: #fffaf2;
+  --teal: #2f6f63;
+  /* Notable orange — distinct from coral (danger) and honey (tints). Kept dark
+     enough that the small unread dot clears the 3:1 non-text contrast bar. */
+  --orange: #c75a00;
+
+  /* --- Semantic color tokens ---------------------------------------------- */
+  --color-text: var(--ink);
+  --color-text-muted: var(--muted);
+  --color-accent: var(--teal);
+  --color-on-accent: var(--cream);
+  --color-on-accent-muted: color-mix(in srgb, var(--cream) 78%, transparent);
+  /* Error / failure state — clay reads clearly on the warm cream surfaces. */
+  --color-danger: var(--clay);
+  /* Unread-answer indicator dot in the chat list (notable orange). */
+  --color-unread: var(--orange);
+
+  /* Surfaces */
+  --surface-panel: rgba(255, 248, 238, 0.95);
+  --surface-panel-soft: rgba(255, 248, 238, 0.82);
+  --surface-warm: rgba(255, 242, 223, 0.96);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(255, 255, 255, 0.82);
+  --surface-body-top: rgba(255, 250, 242, 0.75);
+  --surface-body-bottom: rgba(255, 242, 223, 0.55);
+  /* Modal scrim behind dialogs (rename / delete / clear). */
+  --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
+
+  /* Borders & overlays (derived from primitives) */
+  --border-soft: color-mix(in srgb, var(--clay) 16%, transparent);
+  --border-accent: color-mix(in srgb, var(--sage) 20%, transparent);
+  --overlay-hover: color-mix(in srgb, var(--coral) 12%, transparent);
+  --tint-honey: color-mix(in srgb, var(--honey) 34%, transparent);
+
+  /* Elevation — popups (row options menu) and modal dialogs. */
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.16);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.22);
+
+  /* Focus ring */
+  --focus-ring: var(--teal);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* --- Spacing scale (4px base) ------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  /* --- Border radius scale ------------------------------------------------ */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-pill: 999px; /* Fully rounded — circular dots and the spinner ring. */
+
+  /* --- Icon / mark sizes -------------------------------------------------- */
+  --icon-sm: 22px; /* header control button */
+  --icon-md: 42px; /* bubble + header mark */
+  --icon-lg: 56px; /* bubble drag/hit area */
+
+  /* --- Type scale --------------------------------------------------------- */
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-md: 14px;
+  --font-lg: 18px;
+  --font-weight-bold: 700;
+}

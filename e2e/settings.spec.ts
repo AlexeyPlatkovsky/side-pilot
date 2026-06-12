@@ -228,3 +228,58 @@ test.describe("GeneralSettings loading and error states", () => {
     ).toBeVisible();
   });
 });
+
+test.describe("ThemesSettings pane (SP-041/SP-043)", () => {
+  test("shows three theme radio options in the Themes pane", async ({ page }) => {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "Themes" }).click();
+
+    const pane = page.getByRole("tabpanel", { name: "Themes" });
+    await expect(pane.getByRole("radio", { name: "Default" })).toBeVisible();
+    await expect(pane.getByRole("radio", { name: "Cyberpunk" })).toBeVisible();
+    await expect(pane.getByRole("radio", { name: "Minimalist" })).toBeVisible();
+
+    await page.screenshot({
+      path: "e2e/.artifacts/themes-pane-default.png",
+      fullPage: false,
+    });
+  });
+
+  test("selecting Cyberpunk applies data-theme to <html>", async ({ page }) => {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "Themes" }).click();
+
+    const pane = page.getByRole("tabpanel", { name: "Themes" });
+    await pane.getByRole("radio", { name: "Cyberpunk" }).click();
+
+    const dataTheme = await page.evaluate(() =>
+      document.documentElement.getAttribute("data-theme"),
+    );
+    expect(dataTheme).toBe("cyberpunk");
+
+    await page.screenshot({
+      path: "e2e/.artifacts/themes-pane-cyberpunk.png",
+      fullPage: false,
+    });
+  });
+
+  test("selecting Default removes data-theme from <html>", async ({ page }) => {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "Themes" }).click();
+
+    const pane = page.getByRole("tabpanel", { name: "Themes" });
+    await pane.getByRole("radio", { name: "Cyberpunk" }).click();
+    await pane.getByRole("radio", { name: "Default" }).click();
+
+    const dataTheme = await page.evaluate(() =>
+      document.documentElement.getAttribute("data-theme"),
+    );
+    expect(dataTheme).toBeNull();
+  });
+});

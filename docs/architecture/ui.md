@@ -21,6 +21,7 @@ App
        │   ├─ CliIntegrationsSettings # CLI status, enable/disable, re-check; Add/custom rows/Delete + toast (SP-038/SP-072)
        │   │   ├─ AddCliDialog       # name + command, validation, Test/Save (SP-072)
        │   │   └─ Toast              # 3s auto-dismiss max-3 notice (SP-072)
+       │   ├─ ThemesSettings        # radio group: Default / Cyberpunk / Minimalist; persists via updateGeneralPreferences (SP-041/SP-043)
        │   └─ content placeholder   # for sections not yet implemented
       └─ ChatPanel (ChatPanel.tsx)
           ├─ uses chatReducer      # messages[] (incl. pending/error slots), status
@@ -83,11 +84,13 @@ selection target invalidates the pending activation.
 
 | File | Role |
 |---|---|
-| `src/App.tsx` | Root — renders `<Bubble>` with `tauriChatApi` |
+| `src/App.tsx` | Root — renders `<Bubble>` with `tauriChatApi`; reads saved theme on startup and applies via `applyTheme()` (SP-041) |
+| `src/theme.ts` | Theme constants (`THEMES`, `THEME_LABELS`), `ThemeId`, `isValidTheme`, `applyTheme` — sets/removes `data-theme` on `<html>` (SP-041) |
 | `src/main.tsx` | Vite entry point |
 | `src/components/Bubble.tsx` | Floating bubble shell: collapsed dot → expanded panel |
-| `src/components/Settings.tsx` | Settings view: section rail (tablist) + GeneralSettings + placeholder panes (SP-031, SP-037) |
+| `src/components/Settings.tsx` | Settings view: section rail (tablist) + GeneralSettings + ThemesSettings + placeholder panes (SP-031, SP-037) |
 | `src/components/GeneralSettings.tsx` | General settings controls: always-on-top, position mode, pin, language (SP-037) |
+| `src/components/ThemesSettings.tsx` | Theme selector pane: radio group for Default / Cyberpunk / Minimalist; applies theme immediately, persists via `updateGeneralPreferences` (SP-041/SP-043) |
 | `src/i18n/translations.ts` | Translation strings for en/ru locales, language name map (SP-037) |
 | `src/i18n/useI18n.ts` | React hook providing locale-aware `t()` function (SP-037) |
 | `src/components/ChatPanel.tsx` | Chat transcript, toolbar, composer, AI switcher, route submission, session management |

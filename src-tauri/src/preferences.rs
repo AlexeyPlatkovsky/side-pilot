@@ -175,6 +175,10 @@ pub enum PositionMode {
     TrackLast,
 }
 
+fn default_theme() -> String {
+    "default".to_string()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../src/chat/generated/")]
@@ -184,6 +188,8 @@ pub struct GeneralPreferences {
     pub pinned_position: Option<Position>,
     pub last_known_position: Option<Position>,
     pub language: String,
+    #[serde(default = "default_theme")]
+    pub theme: String,
 }
 
 impl Default for GeneralPreferences {
@@ -194,6 +200,7 @@ impl Default for GeneralPreferences {
             pinned_position: None,
             last_known_position: None,
             language: "en".to_string(),
+            theme: default_theme(),
         }
     }
 }
@@ -205,6 +212,14 @@ impl GeneralPreferences {
             other => {
                 return Err(PreferencesError::Validation {
                     detail: format!("unsupported language: {other}"),
+                });
+            }
+        }
+        match self.theme.as_str() {
+            "default" | "cyberpunk" | "minimalist" => {}
+            other => {
+                return Err(PreferencesError::Validation {
+                    detail: format!("unsupported theme: {other}"),
                 });
             }
         }
@@ -910,6 +925,71 @@ mod tests {
         assert_eq!(in_flight.language, "en");
         assert_eq!(store.general_snapshot().language, "ru");
         std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    // --- Theme field tests ---
+
+    #[test]
+    fn general_preferences_default_theme_is_default() {
+        let general = GeneralPreferences::default();
+        assert_eq!(general.theme, "default");
+    }
+
+    #[test]
+    fn general_preferences_accepts_valid_themes() {
+        for theme in ["default", "cyberpunk", "minimalist"] {
+            let general = GeneralPreferences { theme: theme.to_string(), ..Default::default() };
+            assert!(general.normalized().is_ok(), "theme '{theme}' should be valid");
+        }
+    }
+
+    #[test]
+    fn general_preferences_rejects_invalid_theme() {
+        let general = GeneralPreferences { theme: "ocean".to_string(), ..Default::default() };
+        let err = general.normalized().unwrap_err();
+        assert!(matches!(err, PreferencesError::Validation { .. }));
+    }
+
+    #[test]
+    fn theme_persists_and_reads_back() {
+        let path = temp_file();
+        let store = PreferencesStore::open(&path).unwrap();
+
+        let general = GeneralPreferences { theme: "cyberpunk".to_string(), ..Default::default() };
+        let saved = store.update_general(general).unwrap();
+
+        assert_eq!(saved.theme, "cyberpunk");
+        assert_eq!(store.general_snapshot().theme, "cyberpunk");
+
+        let reopened = PreferencesStore::open(&path).unwrap();
+        assert_eq!(reopened.general_snapshot().theme, "cyberpunk");
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn old_preferences_without_theme_key_uses_default_theme() {
+        let path = temp_file();
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"codex": {"model": "gpt-5.5", "reasoning": "low"}, "claude": {"model": "haiku", "reasoning": "low"}, "gemini": {"model": "gemini-3-flash-preview", "reasoning": "none"}, "general": {"alwaysOnTop": true, "positionMode": "trackLast", "pinnedPosition": null, "lastKnownPosition": null, "language": "en"}}"#,
+        )
+        .unwrap();
+
+        let store = PreferencesStore::open(&path).unwrap();
+        assert_eq!(store.general_snapshot().theme, "default");
+        std::fs::remove_dir_all(path.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn update_general_rejects_invalid_theme_without_changing_snapshot() {
+        let path = temp_file();
+        let store = PreferencesStore::open(&path).unwrap();
+        let before = store.general_snapshot();
+        let general = GeneralPreferences { theme: "ocean".to_string(), ..before.clone() };
+
+        assert!(store.update_general(general).is_err());
+        assert_eq!(store.general_snapshot(), before);
     }
 
     #[test]

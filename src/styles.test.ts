@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
 
-const styles = readFileSync("src/styles.css", "utf8");
+function loadStylesheet(path: string): string {
+  const content = readFileSync(path, "utf8");
+  const dir = dirname(path);
+  return content.replace(/@import\s+"([^"]+)";/g, (_, importPath: string) => {
+    const resolved = resolve(dir, importPath);
+    return loadStylesheet(resolved);
+  });
+}
+
+const styles = loadStylesheet("src/styles.css");
 
 function cssRule(selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

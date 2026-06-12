@@ -1,8 +1,17 @@
+import { useEffect } from "react";
 import { Bubble } from "./components/Bubble";
 import { tauriChatApi } from "./chat/api";
+import { applyTheme, isValidTheme } from "./theme";
 
 export default function App() {
-  // Wire the floating bubble to the real Tauri chat backend (run_adapter +
-  // SQLite history). Tests render <Bubble /> with an injected api instead.
+  useEffect(() => {
+    tauriChatApi
+      .getGeneralPreferences()
+      .then((prefs) => {
+        if (isValidTheme(prefs.theme)) applyTheme(prefs.theme);
+      })
+      .catch(() => {});
+  }, []);
+
   return <Bubble chatApi={tauriChatApi} />;
 }

@@ -23,11 +23,13 @@ This file is the index. Read the sub-file that matches your focus area:
 ```
 side-pilot/
 ├── src/                          # React/TypeScript front-end
-│   ├── App.tsx                   # Root — renders <Bubble> with tauriChatApi
+│   ├── App.tsx                   # Root — renders <Bubble> with tauriChatApi; applies saved theme on startup (SP-041)
 │   ├── main.tsx                  # Vite entry point
+│   ├── theme.ts                  # Theme constants, ThemeId type, isValidTheme, applyTheme (SP-041)
 │   ├── components/
 │   │   ├── Bubble.tsx            # Floating bubble shell: collapsed dot → expanded panel
-│   │   ├── Settings.tsx           # Settings view: section rail + empty placeholder panes (SP-031)
+│   │   ├── Settings.tsx          # Settings view: section rail + panes (SP-031)
+│   │   ├── ThemesSettings.tsx    # Theme selector pane: radio group for Default/Cyberpunk/Minimalist (SP-041/SP-043)
 │   │   ├── ChatPanel.tsx         # Chat transcript, toolbar, composer, AI switcher, route submission
 │   │   ├── AiSwitcher.tsx        # Provider switcher button + vertical picker (All + GPT/Claude/Gemini)
 │   │   ├── ProviderIcon.tsx      # Provider logo images + the All grid glyph
@@ -43,7 +45,7 @@ side-pilot/
 │   │   ├── chat.ts               # Chat transcript reducer (loaded/submit/success/error/route*)
 │   │   ├── drag.ts               # Click-vs-drag discrimination threshold
 │   │   └── windowResize.ts       # Tauri window resize bridge
-│   └── styles.css                # All CSS (design tokens, component styles)
+│   └── styles.css                # All CSS (design tokens, §1b theme variants, component styles)
 │
 ├── src-tauri/src/                # Rust/Tauri core
 │   ├── main.rs                   # Binary entry point → side_pilot_lib::run()

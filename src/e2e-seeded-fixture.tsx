@@ -105,6 +105,7 @@ const api: ChatApi = {
                 pinnedPosition: null,
                 lastKnownPosition: null,
                 language: "en",
+                theme: "default",
               }),
             generalLoadDelay,
           ),

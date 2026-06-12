@@ -32,6 +32,7 @@ function defaultGeneral(): GeneralPreferences {
     pinnedPosition: null,
     lastKnownPosition: null,
     language: "en",
+    theme: "default",
   };
 }
 

@@ -1,0 +1,599 @@
+/* =============================================================================
+   §2  APP SHELL — transparent window, collapsed bubble, expanded panel + header
+   ========================================================================== */
+
+/* The Tauri window itself is transparent and undecorated; the bubble/panel
+   paint their own rounded surfaces so they float cleanly over other apps.
+   Note: `color-scheme` is intentionally not set — on a transparent window it
+   makes the WebView paint an opaque themed canvas behind the page, which would
+   show as an opaque square around the rounded shapes. */
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  background-color: transparent;
+}
+
+body {
+  overflow: hidden;
+}
+
+.bubble {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  background: transparent;
+}
+
+.bubble__dot {
+  margin: auto;
+  /* Generous transparent hit/drag area around the icon for easy clicking. */
+  display: grid;
+  place-items: center;
+  height: var(--icon-lg);
+  width: var(--icon-lg);
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Matches the header mark icon (.panel__mark-icon) exactly so the bubble and
+   header read at the same size. */
+.bubble__icon {
+  display: block;
+  width: var(--icon-md);
+  height: var(--icon-md);
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  -webkit-user-drag: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.bubble__dot:active {
+  transform: scale(0.97);
+}
+
+.bubble__dot:focus-visible,
+.panel__control:focus-visible,
+.composer__send:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  background: var(--surface-panel);
+  color: var(--color-text);
+  box-shadow: none;
+  border: 1px solid var(--border-soft);
+}
+
+.panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+  background:
+    radial-gradient(circle at 8% -12%, var(--tint-honey), transparent 42%),
+    linear-gradient(180deg, var(--surface-warm), var(--surface-panel-soft));
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.panel__identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.panel__mark {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: var(--icon-md);
+  height: var(--icon-md);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: transparent;
+  cursor: pointer;
+}
+
+.panel__mark:active {
+  transform: scale(0.96);
+}
+
+.panel__mark:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.panel__mark-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
+  -webkit-user-drag: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+.panel__title {
+  margin: 0;
+  font-weight: var(--font-weight-bold);
+  font-size: var(--font-md);
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.panel__status {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.panel__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.panel__control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--icon-sm);
+  height: var(--icon-sm);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--clay);
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.panel__control:hover {
+  background: var(--overlay-hover);
+}
+
+.panel__close {
+  font-size: var(--font-md);
+}
+
+.panel__settings {
+  font-size: var(--font-md);
+}
+
+.panel__back {
+  font-size: var(--font-lg);
+}
+
+/* --- Settings view: section rail + content pane (SP-031) ----------------- */
+.settings-view {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+.settings-rail {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 154px;
+  padding: var(--space-1);
+  border-right: 1px solid var(--border-soft);
+  overflow-y: auto;
+  gap: var(--space-1);
+}
+
+.settings-rail__item {
+  padding: var(--space-2) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  font-weight: var(--font-weight-bold);
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-rail__item:hover {
+  background: var(--overlay-hover);
+}
+
+.settings-rail__item:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+.settings-rail__item--active {
+  background: var(--tint-honey);
+}
+
+.settings-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+.settings-pane__content {
+  outline: none; /* The tabpanel itself should not show a focus ring — the active tab handles it. */
+}
+
+.settings-pane__title {
+  margin: 0;
+  font-size: var(--font-md);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.settings-pane__placeholder {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
+.settings-pane__error {
+  margin: var(--space-2) 0 0;
+  color: var(--color-danger);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
+/* --- Themes settings (SP-041/SP-043) --- */
+
+.themes-settings {
+  margin-top: var(--space-2);
+}
+
+.themes-settings__fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.themes-settings__legend {
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+.themes-settings__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.themes-settings__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-sm);
+  color: var(--color-text);
+  /* Known one-off: 120ms background transition matches the settings-toggle
+     hover feel; no project-wide transition token exists for this duration. */
+  transition: background 0.12s ease;
+}
+
+.themes-settings__option:has(input:checked) {
+  background: var(--overlay-hover);
+  font-weight: var(--font-weight-bold);
+}
+
+.themes-settings__option:hover {
+  background: var(--overlay-hover);
+}
+
+.themes-settings__radio {
+  accent-color: var(--color-accent);
+  /* Known one-off: 14px is between --space-3 (12px) and --space-4 (16px).
+     It is the standard browser intrinsic size for radio controls; the explicit
+     value locks the hit-area when accent-color overrides native rendering. */
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.themes-settings__label {
+  flex: 1;
+}
+
+.general-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+/* --- CLI Integrations settings (SP-038) --- */
+
+.cli-integrations-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.cli-integration-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: nowrap;
+  min-height: 32px;
+  padding: var(--space-1) 0;
+}
+
+.cli-integration-row__name {
+  flex-shrink: 0;
+  width: 128px;
+  font-weight: var(--font-weight-bold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cli-status {
+  flex-shrink: 0;
+  width: 128px;
+  font-size: 0.875em;
+  white-space: nowrap;
+}
+
+.cli-status--available {
+  color: var(--color-accent);
+}
+
+.cli-status--not-installed {
+  color: var(--color-text-muted);
+}
+
+.cli-status--not-authenticated {
+  color: var(--color-unread);
+}
+
+.cli-status--not-detected {
+  color: var(--color-danger);
+}
+
+.cli-integration-row__toggle {
+  flex-shrink: 0;
+  margin: 0 var(--space-1);
+}
+
+/* Icon-only action button used for Re-check (all rows) and Delete (custom rows). */
+.cli-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.65;
+  border-radius: var(--radius-sm);
+}
+
+.cli-btn-icon:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--overlay-hover);
+}
+
+.cli-btn-icon:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.cli-btn-icon img {
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: cover;
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  flex-wrap: nowrap;
+}
+
+.settings-toggle span {
+  white-space: nowrap;
+}
+
+.settings-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.settings-group legend {
+  padding: 0;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
+}
+
+.settings-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  margin-left: var(--space-3);
+  flex-wrap: nowrap;
+}
+
+.settings-radio span {
+  white-space: nowrap;
+}
+
+.settings-radio input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.settings-btn {
+  margin-left: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.settings-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.settings-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: nowrap;
+  /* Fixed row height so the field keeps the same Y position from first paint,
+     independent of font-metric settling or label-text changes. */
+  min-height: 32px;
+}
+
+.settings-field > span {
+  flex-shrink: 0;
+  white-space: nowrap;
+  /* Fixed label column so switching locales (e.g. "Language" -> "Язык") does
+     not change the label width and shift the dropdown that follows it. */
+  width: 96px;
+}
+
+.settings-field select {
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+}
+
+.lang-select {
+  position: relative;
+}
+
+.lang-select__current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  min-width: 110px;
+  text-align: left;
+}
+
+.lang-select__current::after {
+  content: "▾";
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+}
+
+.lang-select__menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 2px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  min-width: 100%;
+  z-index: 10;
+  overflow: hidden;
+  box-shadow: var(--shadow-popup);
+}
+
+.lang-select__option {
+  display: block;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.lang-select__option:hover {
+  background: var(--tint-honey);
+}
+
+.lang-select__option--active {
+  font-weight: var(--font-weight-bold);
+}
+
+.lang-select__option + .lang-select__option {
+  border-top: 1px solid var(--border-soft);
+}
+
+.panel__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  /* The body itself does not scroll; only the conversation does, so the
+     composer (and any error banner) stay pinned and always visible. */
+  overflow: hidden;
+  min-height: 0;
+  background:
+    linear-gradient(180deg, var(--surface-body-top), var(--surface-body-bottom)),
+    var(--cream);
+}
+
+.conversation {
+  flex: 1;
+  min-height: 0;
+  /* Vertical scroll for history; horizontal scroll only kicks in when a narrow
+     panel can't fit a message's one-row meta label (SP-055). */
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

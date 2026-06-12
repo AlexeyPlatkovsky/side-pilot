@@ -143,6 +143,7 @@ they are not part of any repeated scale:
 - AI switcher (SP-017): `.ai-switcher__toggle` `width: 32px; height: 32px` (icon control beside Send, matches the send button); `.ai-switcher__menu` `min-width: 132px; max-height: 220px` (right-anchored picker that opens inward so it never clips the 380px panel edge); `.provider-icon` `20px` monogram chip; `.provider-icon__grid` uses sub-icon literals (`gap: 2px`, `border-radius: 1px`) for the 12px 2×2 "All" glyph — too small for the spacing/radius scales, same precedent as the spinner stroke.
 - Settings view (SP-031): `.settings-rail` `width: 154px` (fixed-width left section rail; narrower than the 210px chat rail so panes in the right column have more room inside the 380px expanded panel).
 - Custom CLI providers (SP-072): the **toast auto-dismiss is 3 s (3000 ms)** — the project-wide default for transient toasts, defined once as `TOAST_DURATION_MS` in [`src/components/Toast.tsx`](../src/components/Toast.tsx) (timing constant, not a CSS token). `.provider-icon--custom` reuses the `22px` `.provider-icon` chip for the letter-badge a custom CLI shows in place of a bundled logo.
+- Themes settings (SP-041/SP-043): `.themes-settings__radio` `width: 14px; height: 14px` — between `--space-3` (12 px) and `--space-4` (16 px); locks the radio hit-area when `accent-color` overrides native rendering. `transition: background 0.12s ease` on `.themes-settings__option` — 120 ms matches the existing hover feel of toggle controls; no project-wide transition token exists for this duration.
 
 If any of these starts repeating across components, promote it to a token here.
 
@@ -154,6 +155,7 @@ are documented so the vocabulary stays discoverable.
 - **Chat history rail & dialogs (SP-048–057):** `.chat-rail` / `.chat-rail__new` / `.chat-rail__list` (collapsible left rail), `.chat-row*` (one-line title + a status slot that shows the relative time, the in-progress `.chat-row__spinner`, or the unread `.chat-row__unread` dot in `--color-unread`, plus the `⋯` options trigger + `.chat-row__options` menu), `.chat__toolbar` (rail toggle + active title + `.chat__edit` pencil/rename + Clear; the toggle carries a `.chat__rail-toggle-badge` unread dot in `--color-unread` while the rail is collapsed and a background chat has an unread answer), and `.dialog*` (shared modal chrome behind `--surface-scrim` with `--shadow-dialog`, including `.dialog__hint` — the `--color-danger` inline validation note under the rename input for an invalid title).
 - **Message meta (SP-055):** `.message__meta` (single nowrap row) holds the assistant `.message__label` model badge and the `.message__time` 24h timestamp (date-prefixed when not today); user bubbles carry just `.message__time`. `.message` uses `min-width: min-content` so the meta row never wraps.
 - **Custom CLI providers (SP-072):** `.cli-integrations-settings__header` (constant max-3 label + upper-right Add button), `.cli-integration-row--custom` with `.cli-integration-row__delete`, `.provider-icon--custom` (letter-badge stand-in for a custom CLI's missing logo), `.add-cli*` (the Add dialog form inside shared `.dialog` chrome, with `.add-cli__error` danger hints and the `.add-cli__test-result--ok/--error` Test feedback), `.settings-btn--primary` / `.settings-btn--danger` (dialog action variants), and `.toast` (bottom-center, `--shadow-dialog`, auto-dismissing after the 3 s default).
+- **Themes settings (SP-041/SP-043):** `.themes-settings` (pane wrapper), `.themes-settings__fieldset` / `.themes-settings__legend` (radio group with accessible legend), `.themes-settings__options` (column of options), `.themes-settings__option` (flex row — radio + label, highlighted with `--overlay-hover` when checked or hovered; uses `:has(input:checked)` for CSS-only selection highlight), `.themes-settings__radio` (radio input with `accent-color: var(--color-accent)`), `.themes-settings__label`. The active theme is applied by setting `data-theme="<id>"` on `<html>`; Default removes the attribute. `[data-theme="cyberpunk"]` and `[data-theme="minimalist"]` attribute selectors in §1b override color/surface/border/shadow tokens without touching spacing, radius, or type tokens.
 
 All spacing/radius/color/type go through the tokens above; the only literals are the one-offs listed in the previous section.
 
@@ -161,30 +163,30 @@ All spacing/radius/color/type go through the tokens above; the only literals are
 
 ## Stylesheet organization
 
-All styles live in a single file, [`src/styles.css`](../src/styles.css), organized
-into four banner-delimited sections (a matching index sits at the top of the file):
+Styles are split across section files in [`src/styles/`](../src/styles/), imported in
+order by [`src/styles.css`](../src/styles.css) (the single entry point). Vite inlines
+the `@import`s at build / dev time, so the cascade is identical to a single file.
 
-| Section | Covers |
-|---|---|
-| §1 Design tokens | the `:root` palette, spacing, radius, type, and icon tokens above |
-| §2 App shell | transparent window, collapsed bubble, expanded panel + header |
-| §3 Transcript | messages, meta line, assistant Markdown, thinking, error banner |
-| §4 History rail, toolbar & dialogs | rail, row status, options menu, modal dialogs |
-| §5 Custom CLI providers (SP-072) | Add button, custom rows, Add dialog, toast |
+| Section | File | Covers |
+|---|---|---|
+| §1 Design tokens | [`tokens.css`](../src/styles/tokens.css) | the `:root` palette, spacing, radius, type, and icon tokens above |
+| §1b Theme variants | [`themes.css`](../src/styles/themes.css) | `[data-theme]` token overrides for Cyberpunk and Minimalist (SP-041) |
+| §2 App shell | [`shell.css`](../src/styles/shell.css) | transparent window, collapsed bubble, expanded panel + header, settings views |
+| §3 Transcript | [`transcript.css`](../src/styles/transcript.css) | messages, meta line, assistant Markdown, thinking, error banner, composer |
+| §4 History rail, toolbar & dialogs | [`history.css`](../src/styles/history.css) | rail, row status, options menu, modal dialogs |
+| §5 Custom CLI providers (SP-072) | [`custom-cli.css`](../src/styles/custom-cli.css) | Add button, custom rows, Add dialog, toast |
 
-**Why one file (SP-069):** the app has no CSS preprocessor and rule order is
-load-bearing for the cascade. Splitting into `@import`-ed partials would add a
-brittle load-order dependency and risk silent cascade drift for no runtime
-benefit at the current ~950-line size. Strong in-file sectioning keeps the file
-navigable without that risk. Revisit a split only if the file outgrows
-comfortable navigation *and* a bundling strategy can guarantee identical rule
-order (e.g. a single entry that imports partials in the section order above).
+**Why `@import` (SP-069):** the original monolithic file was split when it
+outgrew comfortable navigation (~950 → ~1730 lines) and the bundler (Vite)
+inlines CSS `@import`s deterministically, guaranteeing identical cascade order
+without the brittle load-order risk of native CSS `@import` in the browser.
 
 ---
 
 ## Changing the system
 
-1. Edit the token value in [`src/styles.css`](../src/styles.css) `:root`.
+1. Edit the token value in [`src/styles/tokens.css`](../src/styles/tokens.css) `:root`,
+   or add a new `[data-theme="…"]` block to [`src/styles/themes.css`](../src/styles/themes.css).
 2. Update the matching row in this document.
 3. Run the design workflow: see [`.claude/skills/design/SKILL.md`](../.claude/skills/design/SKILL.md)
    and the [`design-system` pipeline](../.claude/pipelines/design-system.md).

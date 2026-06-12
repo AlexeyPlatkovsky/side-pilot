@@ -1,0 +1,351 @@
+/* =============================================================================
+   §3  TRANSCRIPT — messages, meta line, assistant Markdown, thinking, error
+   ========================================================================== */
+
+.message {
+  max-width: 86%;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  line-height: 1.35;
+}
+
+.message p {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-md);
+  letter-spacing: 0;
+}
+
+.message__label {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+/* Per-message meta line: model badge (assistant only) + timestamp. Kept on one
+   row (nowrap), and its intrinsic width sets the message's minimum width so a
+   narrowed panel never wraps the label (SP-055). */
+.message__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+
+.message {
+  /* Don't shrink a bubble below its meta line's single-row width. */
+  min-width: min-content;
+}
+
+.message__time {
+  color: var(--color-text-muted);
+  font-size: var(--font-xs);
+  letter-spacing: 0;
+}
+
+/* Timestamp on the accent-filled user bubble: full on-accent cream so the small
+   text clears AA contrast against the teal bubble. */
+.message--user .message__time {
+  color: var(--color-on-accent);
+}
+
+.message--assistant {
+  align-self: flex-start;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-accent);
+}
+
+.message--user {
+  align-self: flex-end;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* Assistant Markdown — react-markdown emits standard block/inline elements;
+   keep their rhythm aligned with the plain-text message bubbles. */
+.message__markdown > :first-child {
+  margin-top: var(--space-1);
+}
+
+.message__markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.message__markdown p,
+.message__markdown ul,
+.message__markdown ol,
+.message__markdown pre {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-md);
+}
+
+.message__markdown ul,
+.message__markdown ol {
+  padding-left: var(--space-4);
+}
+
+.message__markdown code {
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--tint-honey);
+  font-size: var(--font-sm);
+}
+
+.message__markdown pre {
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--tint-honey);
+  overflow-x: auto;
+}
+
+.message__markdown pre code {
+  padding: 0;
+  background: transparent;
+}
+
+/* Blocking "thinking" turn shown while a CLI call is in flight. */
+.message__thinking {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+/* A failed provider slot rendered inline in the thread (SP-017): the assistant
+   bubble takes the danger border/tint so a partial All-route failure reads as an
+   error without removing it from the conversation flow. */
+.message--error {
+  border-color: var(--color-danger);
+  background: var(--surface-danger);
+}
+
+.message__error {
+  margin: var(--space-1) 0 0;
+  color: var(--color-danger);
+  font-size: var(--font-sm);
+}
+
+.message__retry {
+  margin-top: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-danger);
+  font-size: var(--font-sm);
+  cursor: pointer;
+}
+
+.message__retry:hover {
+  background: var(--surface-danger);
+}
+
+/* Failure banner — keeps the transcript intact while surfacing the error. */
+.conversation__error {
+  margin: 0;
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--surface-danger);
+  color: var(--color-danger);
+  font-size: var(--font-sm);
+}
+
+.composer {
+  display: flex;
+  /* Align to the bottom so Send stays anchored as the input grows taller. */
+  align-items: flex-end;
+  gap: var(--space-1);
+  /* Pinned below the scrolling conversation — always visible. */
+  flex-shrink: 0;
+  /* border-box so min-height is the total height (not height + padding +
+     border) — keeps a single-row composer compact. */
+  box-sizing: border-box;
+  min-height: 42px;
+  padding: var(--space-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.composer__input {
+  flex: 1;
+  min-width: 0;
+  /* Auto-grows from one row (rows=1) via JS up to this cap, then scrolls.
+     border-box keeps the measured scrollHeight aligned with the set height.
+     (The field is a flex item, so it is already blockified — no inline-block
+     line-box gap applies here.) */
+  box-sizing: border-box;
+  min-height: 32px;
+  max-height: 96px;
+  overflow-y: auto;
+  /* Tight vertical padding so a single row stays compact. */
+  padding: var(--space-1) 0;
+  border: none;
+  background: transparent;
+  resize: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-md);
+  line-height: 24px;
+  letter-spacing: 0;
+}
+
+.composer__input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.composer__input:focus {
+  outline: none;
+}
+
+.composer:focus-within {
+  border-color: var(--focus-ring);
+}
+
+.composer__send {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--ink);
+  color: var(--color-on-accent);
+  /* The Enter/return glyph reads larger than body text. */
+  font-size: var(--font-lg);
+  line-height: 1;
+  cursor: pointer;
+  letter-spacing: 0;
+}
+
+.composer__send:disabled {
+  cursor: default;
+  opacity: 0.76;
+}
+
+.composer__no-providers {
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-sm);
+  text-align: center;
+}
+
+/* --- AI switcher (SP-017) -------------------------------------------------- */
+/* The provider switcher sits between the input and Send. `position: relative`
+   anchors the picker, which opens upward above the composer. */
+.ai-switcher {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ai-switcher__toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.ai-switcher__toggle:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ai-switcher__toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Vertical picker, opened upward so it never spills below the pinned composer.
+   Anchored to the switcher's right edge (the switcher sits near the panel's
+   right edge, beside Send) so the menu opens inward and never clips the panel. */
+.ai-switcher__menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-1));
+  right: 0;
+  left: auto;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 132px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-popup);
+}
+
+.ai-switcher__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ai-switcher__option:hover {
+  background: var(--overlay-hover);
+}
+
+.ai-switcher__option:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: -1px;
+}
+
+/* The currently active route has a distinct background (Scenario 2). */
+.ai-switcher__option--active {
+  background: var(--tint-honey);
+  font-weight: var(--font-weight-bold);
+}
+
+.ai-switcher__option-label {
+  letter-spacing: 0;
+}
+
+/* Provider logo used in the toggle face and picker rows. Image-based icons
+   use `provider-icon--logo`; the All glyph keeps the 2×2 dot grid. */
+.provider-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+}
+
+.provider-icon--logo {
+  object-fit: contain;
+}
+
+/* The All icon: a 2×2 grid of dots suggesting every provider at once. */
+.provider-icon--all {
+  background: var(--ink);
+  border-radius: var(--radius-pill);
+}
+
+.provider-icon__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  width: 14px;
+  height: 14px;
+}
+
+.provider-icon__grid i {
+  border-radius: 1px;
+  background: var(--color-on-accent);
+}

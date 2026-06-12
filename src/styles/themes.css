@@ -1,0 +1,100 @@
+/* =============================================================================
+   §1b  THEME VARIANTS
+   Override only the color/surface tokens; spacing, radius, type, and icon
+   tokens are theme-independent and remain untouched.
+
+   Applied by setting data-theme="<id>" on <html>; Default is the base :root
+   so no attribute is set for it.
+
+   Add new themes as additional [data-theme="..."] blocks below.
+   ========================================================================== */
+
+[data-theme="cyberpunk"] {
+  /* Color primitives */
+  --ink: #dde4ff;
+  --muted: #8fa4f8;
+  --honey: #f7ca4a;
+  --coral: #ff4d6d;
+  --sage: #00cfee;
+  --clay: #c084fc;
+  --cream: #0d0d1a;
+  --teal: #00cfee;
+  --orange: #ff6b35;
+
+  /* Semantic color tokens */
+  --color-text: #dde4ff;
+  --color-text-muted: #8fa4f8;
+  --color-accent: #00cfee;
+  --color-on-accent: #0d0d1a;
+  --color-on-accent-muted: rgba(13, 13, 26, 0.78);
+  --color-danger: #c084fc;
+  --color-unread: #ff6b35;
+
+  /* Surfaces */
+  --surface-panel: rgba(13, 13, 26, 0.96);
+  --surface-panel-soft: rgba(13, 13, 26, 0.84);
+  --surface-warm: rgba(16, 14, 46, 0.97);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(28, 24, 72, 0.85);
+  --surface-body-top: rgba(13, 13, 26, 0.78);
+  --surface-body-bottom: rgba(10, 10, 34, 0.58);
+  --surface-scrim: rgba(0, 0, 0, 0.52);
+
+  /* Borders & overlays */
+  --border-soft: rgba(91, 140, 255, 0.22);
+  --border-accent: rgba(0, 207, 238, 0.28);
+  --overlay-hover: rgba(91, 140, 255, 0.14);
+  --tint-honey: rgba(247, 202, 74, 0.22);
+
+  /* Elevation */
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.42);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.58);
+
+  /* Focus ring — matches --teal to stay in sync if teal changes */
+  --focus-ring: var(--teal);
+}
+
+[data-theme="minimalist"] {
+  /* Color primitives */
+  --ink: #1a1a1a;
+  --muted: #787878;
+  --honey: #d4c8b0;
+  --coral: #c04040;
+  --sage: #4a7070;
+  --clay: #805050;
+  --cream: #fafafa;
+  --teal: #3a6060;
+  --orange: #b04c00;
+
+  /* Semantic color tokens */
+  --color-text: #1a1a1a;
+  --color-text-muted: #787878;
+  --color-accent: #3a6060;
+  --color-on-accent: #fafafa;
+  --color-on-accent-muted: rgba(250, 250, 250, 0.78);
+  --color-danger: #805050;
+  --color-unread: #b04c00;
+
+  /* Surfaces */
+  --surface-panel: rgba(250, 250, 250, 0.97);
+  --surface-panel-soft: rgba(250, 250, 250, 0.9);
+  --surface-warm: rgba(244, 244, 244, 0.97);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(255, 255, 255, 0.92);
+  --surface-body-top: rgba(250, 250, 250, 0.8);
+  --surface-body-bottom: rgba(244, 244, 244, 0.62);
+  --surface-scrim: rgba(0, 0, 0, 0.18);
+
+  /* Borders & overlays */
+  --border-soft: rgba(0, 0, 0, 0.1);
+  --border-accent: rgba(58, 96, 96, 0.16);
+  --overlay-hover: rgba(0, 0, 0, 0.05);
+  --tint-honey: rgba(180, 168, 144, 0.22);
+
+  /* Elevation */
+  --shadow-popup: 0 4px 14px rgba(0, 0, 0, 0.1);
+  --shadow-dialog: 0 8px 24px rgba(0, 0, 0, 0.16);
+
+  /* Focus ring — matches --teal to stay in sync if teal changes */
+  --focus-ring: var(--teal);
+}
