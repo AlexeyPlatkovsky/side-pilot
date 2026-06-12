@@ -328,6 +328,20 @@ body {
   flex: 1;
 }
 
+.themes-settings__swatches {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.themes-settings__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  outline: 1px solid var(--border-soft);
+}
+
 .general-settings {
   display: flex;
   flex-direction: column;
@@ -421,6 +435,7 @@ body {
   height: 16px;
   display: block;
   object-fit: cover;
+  filter: var(--icon-filter);
 }
 
 .settings-toggle {
@@ -478,11 +493,17 @@ body {
 .settings-btn {
   margin-left: var(--space-3);
   padding: var(--space-1) var(--space-3);
-  border-color: var(--border-soft);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
   background: var(--surface-raised);
   cursor: pointer;
   align-self: flex-start;
   color: var(--color-text);
+  font-size: var(--font-sm);
+}
+
+.settings-btn:hover:not(:disabled) {
+  background: var(--overlay-hover);
 }
 
 .settings-btn:disabled {
@@ -539,11 +560,16 @@ body {
   font-size: var(--font-sm);
 }
 
+.lang-select__current:hover {
+  background: var(--overlay-hover);
+}
+
 .lang-select__menu {
   position: absolute;
   top: 100%;
   left: 0;
   margin-top: 2px;
+  padding: var(--space-1);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
@@ -559,13 +585,14 @@ body {
   padding: var(--space-1) var(--space-2);
   text-align: left;
   border: none;
+  border-radius: var(--radius-sm);
   background: none;
   color: inherit;
   cursor: pointer;
 }
 
 .lang-select__option:hover {
-  background: var(--tint-honey);
+  background: var(--overlay-hover);
 }
 
 .lang-select__option--active {

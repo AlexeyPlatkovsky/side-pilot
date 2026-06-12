@@ -230,16 +230,27 @@ test.describe("GeneralSettings loading and error states", () => {
 });
 
 test.describe("ThemesSettings pane (SP-041/SP-043)", () => {
-  test("shows three theme radio options in the Themes pane", async ({ page }) => {
+  test("shows every theme radio option in the Themes pane", async ({ page }) => {
     await page.goto("/e2e/seeded.html");
     await expect(page.getByTestId("panel")).toBeVisible();
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.getByRole("tab", { name: "Themes" }).click();
 
     const pane = page.getByRole("tabpanel", { name: "Themes" });
-    await expect(pane.getByRole("radio", { name: "Default" })).toBeVisible();
-    await expect(pane.getByRole("radio", { name: "Cyberpunk" })).toBeVisible();
-    await expect(pane.getByRole("radio", { name: "Minimalist" })).toBeVisible();
+    const labels = [
+      "Default",
+      "Cyberpunk",
+      "Minimalist",
+      "Sepia",
+      "Forest",
+      "Midnight",
+      "Retro Terminal",
+      "High Contrast",
+    ];
+    await expect(pane.getByRole("radio")).toHaveCount(labels.length);
+    for (const label of labels) {
+      await expect(pane.getByRole("radio", { name: label })).toBeVisible();
+    }
 
     await page.screenshot({
       path: "e2e/.artifacts/themes-pane-default.png",
@@ -247,22 +258,35 @@ test.describe("ThemesSettings pane (SP-041/SP-043)", () => {
     });
   });
 
-  test("selecting Cyberpunk applies data-theme to <html>", async ({ page }) => {
+  test("selecting each non-default theme applies data-theme to <html>", async ({
+    page,
+  }) => {
     await page.goto("/e2e/seeded.html");
     await expect(page.getByTestId("panel")).toBeVisible();
     await page.getByRole("button", { name: "Open settings" }).click();
     await page.getByRole("tab", { name: "Themes" }).click();
 
     const pane = page.getByRole("tabpanel", { name: "Themes" });
-    await pane.getByRole("radio", { name: "Cyberpunk" }).click();
+    const themes = [
+      ["Cyberpunk", "cyberpunk"],
+      ["Minimalist", "minimalist"],
+      ["Sepia", "sepia"],
+      ["Forest", "forest"],
+      ["Midnight", "midnight"],
+      ["Retro Terminal", "retro"],
+      ["High Contrast", "high-contrast"],
+    ] as const;
 
-    const dataTheme = await page.evaluate(() =>
-      document.documentElement.getAttribute("data-theme"),
-    );
-    expect(dataTheme).toBe("cyberpunk");
+    for (const [label, id] of themes) {
+      await pane.getByRole("radio", { name: label }).click();
+      const dataTheme = await page.evaluate(() =>
+        document.documentElement.getAttribute("data-theme"),
+      );
+      expect(dataTheme).toBe(id);
+    }
 
     await page.screenshot({
-      path: "e2e/.artifacts/themes-pane-cyberpunk.png",
+      path: "e2e/.artifacts/themes-pane-high-contrast.png",
       fullPage: false,
     });
   });

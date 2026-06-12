@@ -180,8 +180,8 @@ const themeNames: string[] = [
 
 const themeSelectors: [string, string][] = themeNames.map((name) =>
   name === "default"
-    ? ["default", ":root"] as const
-    : [name, `[data-theme="${name}"]`] as const,
+    ? (["default", ":root"] as const)
+    : ([name, `[data-theme="${name}"]`] as const),
 );
 
 const themes: ThemeTokens[] = themeSelectors.map(([name, sel]) => {
@@ -247,6 +247,12 @@ const ALL_SPECS: ContrastSpec[] = [
     fg: "--color-danger",
     bgLayers: ["white", "--surface-panel", "--surface-raised"],
     label: "danger text on raised",
+    threshold: 4.5,
+  },
+  {
+    fg: "--color-link",
+    bgLayers: ["white", "--surface-panel", "--surface-raised"],
+    label: "link text on raised",
     threshold: 4.5,
   },
 
@@ -350,5 +356,27 @@ describe.each(themes)("Contrast — $name theme", (theme) => {
         `     → rgb(${bg.r.toFixed(0)},${bg.g.toFixed(0)},${bg.b.toFixed(0)})\n` +
         `  ratio = ${ratio.toFixed(2)}:1  (threshold ${spec.threshold}:1)`,
     ).toBeGreaterThanOrEqual(spec.threshold);
+  });
+});
+
+describe("High Contrast theme boundaries", () => {
+  const theme = themes.find(({ name }) => name === "high-contrast");
+
+  it.each([
+    {
+      token: "--border-soft",
+      bgLayers: ["white", "--surface-panel"],
+      label: "default control border",
+    },
+    {
+      token: "--border-accent",
+      bgLayers: ["white", "--surface-panel", "--surface-raised"],
+      label: "accent control border",
+    },
+  ])("$label reaches 3:1 against its surface", ({ token, bgLayers }) => {
+    expect(theme).toBeDefined();
+    const bg = effectiveBackground(theme!, bgLayers);
+    const ratio = contrastRatio(composite(c(theme!, token), bg), bg);
+    expect(ratio, `${token} contrast = ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
   });
 });

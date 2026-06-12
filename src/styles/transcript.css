@@ -104,6 +104,10 @@
   background: transparent;
 }
 
+.message__markdown a {
+  color: var(--color-link);
+}
+
 /* Blocking "thinking" turn shown while a CLI call is in flight. */
 .message__thinking {
   color: var(--color-text-muted);
@@ -224,6 +228,10 @@
   opacity: 0.76;
 }
 
+.composer__send:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
 .composer__no-providers {
   padding: var(--space-2) var(--space-3);
   color: var(--color-text-muted);
@@ -254,6 +262,10 @@
 .ai-switcher__toggle:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+.ai-switcher__toggle:hover:not(:disabled) {
+  background: var(--overlay-hover);
 }
 
 .ai-switcher__toggle:focus-visible {

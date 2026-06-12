@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { ThemesSettings } from "./ThemesSettings";
 import type { ChatApi } from "../chat/api";
 import type { GeneralPreferences } from "../chat/generated/GeneralPreferences";
+import { THEMES, THEME_LABELS } from "../theme";
 
 function defaultGeneral(theme = "default"): GeneralPreferences {
   return {
@@ -47,13 +48,16 @@ beforeEach(() => {
 });
 
 describe("ThemesSettings", () => {
-  it("shows all three theme options", async () => {
+  it("shows every registered theme option", async () => {
     render(<ThemesSettings api={buildApi()} />);
-    await waitFor(() => {
-      expect(screen.getByRole("radio", { name: /default/i })).toBeInTheDocument();
-      expect(screen.getByRole("radio", { name: /cyberpunk/i })).toBeInTheDocument();
-      expect(screen.getByRole("radio", { name: /minimalist/i })).toBeInTheDocument();
-    });
+    await screen.findByRole("radio", { name: /default/i });
+
+    expect(screen.getAllByRole("radio")).toHaveLength(THEMES.length);
+    for (const theme of THEMES) {
+      expect(
+        screen.getByRole("radio", { name: THEME_LABELS[theme] }),
+      ).toBeInTheDocument();
+    }
   });
 
   it("marks the loaded theme as selected", async () => {

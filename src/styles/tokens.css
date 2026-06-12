@@ -32,6 +32,8 @@
   --color-danger: var(--clay);
   /* Unread-answer indicator dot in the chat list (notable orange). */
   --color-unread: var(--orange);
+  /* Assistant Markdown links; independently tuned for readable contrast. */
+  --color-link: var(--teal);
 
   /* Surfaces */
   --surface-panel: rgba(255, 248, 238, 0.95);
@@ -58,6 +60,10 @@
   --focus-ring: var(--teal);
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
+
+  /* Icon filter: black PNG icons are invisible on dark themes; dark themes set
+     this to invert(1) so the icons appear white instead. */
+  --icon-filter: none;
 
   /* --- Spacing scale (4px base) ------------------------------------------- */
   --space-1: 4px;

@@ -35,6 +35,12 @@ Non-trivial by default (no judgment required): any numbered list of issues to fi
 
 When unsure, treat as non-trivial.
 
+**Obviousness is not an exemption.** If the fix or implementation is already visible from the user's description, the required sequence is still: classify → route → implement. Skipping routing because the solution is obvious is a protocol violation equivalent to skipping it for any other reason. If implementation has already begun without routing, stop, load `task-routing/SKILL.md`, and route before continuing.
+
+**Resumed sessions.** A session that begins from a compacted conversation summary does not carry forward classification approval from prior exchanges. The first new user request in a resumed session triggers this gate as if starting fresh — prior context does not constitute a routing decision.
+
+**Ad-hoc bypass recovery.** If source files have been modified before the correct pipeline was entered (routing was skipped), the model must stop and offer the user exactly three dispositions: (a) **accept as informal** — the user explicitly states the change is trivial under §Task Classification; note that bug fixes that change observable behavior do not qualify as trivial by default and require an explicit user override; option (a) applies only to changes that would meet the §Task Classification trivial criteria if they had been routed there from the start; (b) **retroactively validate** — treat the existing change as the implementation step, write the failing test now, and continue from the validation step forward; reversion of source files is required unless the user explicitly states it is not feasible, with a brief reason; the AGENTS.md classification gate and `Manager: manager - output below` artifact are still required before continuing any further implementation steps; (c) **revert and restart** — undo all ad-hoc changes and run the full pipeline from the beginning. Do not continue until the user selects a disposition; record the selected disposition as a labeled artifact before proceeding.
+
 Any user request to create, modify, or delete a file is an implicit "proceed" signal — classify it before acting, regardless of phrasing. A direct imperative ("modify ci.yml", "fix the test", "update the docs") carries the same obligation as "go ahead" or "implement it."
 
 After a `Skill: task-complete` closure, every subsequent action request in the same session re-triggers the classification gate. A prior closure does not authorize skipping classification for the next request.

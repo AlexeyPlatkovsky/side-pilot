@@ -29,6 +29,7 @@
   --color-on-accent-muted: rgba(0, 9, 20, 0.78);
   --color-danger: #ff4d9a;
   --color-unread: #ff9a00;
+  --color-link: #00e8ff;
 
   /* Surfaces — lifted deep-space bases with saturated purple/indigo shifts */
   --surface-panel: rgba(12, 12, 32, 0.96);
@@ -52,6 +53,7 @@
 
   /* Focus ring — matches --teal to stay in sync if teal changes */
   --focus-ring: var(--teal);
+  --icon-filter: invert(1);
 }
 
 [data-theme="minimalist"] {
@@ -74,6 +76,7 @@
   --color-on-accent-muted: rgba(250, 250, 250, 0.78);
   --color-danger: #805050;
   --color-unread: #b04c00;
+  --color-link: #3a6060;
 
   /* Surfaces */
   --surface-panel: rgba(250, 250, 250, 0.97);
@@ -112,16 +115,17 @@
   --sage: #7a8a5a;
   --clay: #9a6a5a;
   --cream: #f5e6c8;
-  --teal: #2a6a5a;
+  --teal: #7a3f28;
   --orange: #c07030;
 
   --color-text: #3d2b1f;
   --color-text-muted: #6a5540;
-  --color-accent: #2a6a5a;
+  --color-accent: #7a3f28;
   --color-on-accent: #f5e6c8;
   --color-on-accent-muted: rgba(245, 230, 200, 0.82);
   --color-danger: #8a3a2a;
   --color-unread: #a05020;
+  --color-link: #6f3428;
 
   --surface-panel: rgba(245, 230, 200, 0.95);
   --surface-panel-soft: rgba(245, 230, 200, 0.82);
@@ -144,36 +148,37 @@
 }
 
 /* =============================================================================
-   Forest / Verdant — deep green panel, sage surfaces, amber and
+   Forest / Verdant — saturated green panel, sage surfaces, amber and
    mushroom accents. Calm, grounded, earthy.
    ========================================================================== */
 
 [data-theme="forest"] {
-  --ink: #1a2e1a;
-  --muted: #4a6a4a;
+  --ink: #17351f;
+  --muted: #365c40;
   --honey: #c4a040;
   --coral: #b05a40;
-  --sage: #4a7a6a;
-  --clay: #6a5a4a;
-  --cream: #e5f0e0;
-  --teal: #2a6a5a;
+  --sage: #4f805d;
+  --clay: #657153;
+  --cream: #d6ead2;
+  --teal: #236247;
   --orange: #b08030;
 
-  --color-text: #1a2e1a;
-  --color-text-muted: #4a6a4a;
-  --color-accent: #2a6a5a;
-  --color-on-accent: #e5f0e0;
-  --color-on-accent-muted: rgba(229, 240, 224, 0.82);
+  --color-text: #17351f;
+  --color-text-muted: #365c40;
+  --color-accent: #236247;
+  --color-on-accent: #d6ead2;
+  --color-on-accent-muted: rgba(214, 234, 210, 0.82);
   --color-danger: #8e3a2a;
   --color-unread: #906820;
+  --color-link: #205b3d;
 
-  --surface-panel: rgba(229, 240, 224, 0.95);
-  --surface-panel-soft: rgba(225, 236, 218, 0.82);
-  --surface-warm: rgba(215, 232, 206, 0.96);
+  --surface-panel: rgba(214, 234, 210, 0.96);
+  --surface-panel-soft: rgba(202, 226, 198, 0.86);
+  --surface-warm: rgba(190, 220, 184, 0.96);
   --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
-  --surface-raised: rgba(242, 248, 238, 0.82);
-  --surface-body-top: rgba(235, 244, 230, 0.75);
-  --surface-body-bottom: rgba(225, 238, 218, 0.55);
+  --surface-raised: rgba(235, 245, 230, 0.88);
+  --surface-body-top: rgba(218, 236, 212, 0.82);
+  --surface-body-bottom: rgba(195, 224, 190, 0.64);
   --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
 
   --border-soft: color-mix(in srgb, var(--clay) 16%, transparent);
@@ -210,6 +215,7 @@
   --color-on-accent-muted: rgba(26, 30, 40, 0.78);
   --color-danger: #ff6060;
   --color-unread: #e09040;
+  --color-link: #8fc5ff;
 
   --surface-panel: rgba(26, 30, 42, 0.96);
   --surface-panel-soft: rgba(36, 40, 54, 0.88);
@@ -229,6 +235,7 @@
   --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.58);
 
   --focus-ring: var(--teal);
+  --icon-filter: invert(1);
 }
 
 /* =============================================================================
@@ -254,6 +261,7 @@
   --color-on-accent-muted: rgba(10, 18, 10, 0.78);
   --color-danger: #d06850;
   --color-unread: #d0b040;
+  --color-link: #90d090;
 
   --surface-panel: rgba(10, 18, 12, 0.97);
   --surface-panel-soft: rgba(16, 26, 18, 0.88);
@@ -273,6 +281,7 @@
   --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.68);
 
   --focus-ring: var(--teal);
+  --icon-filter: invert(1);
 }
 
 /* =============================================================================
@@ -289,16 +298,17 @@
   --sage: #2a6a5a;
   --clay: #993366;
   --cream: #ffffff;
-  --teal: #2266cc;
+  --teal: #0047b3;
   --orange: #b05a00;
 
   --color-text: #000000;
   --color-text-muted: #444444;
-  --color-accent: #2266cc;
+  --color-accent: #0047b3;
   --color-on-accent: #ffffff;
   --color-on-accent-muted: rgba(255, 255, 255, 0.82);
   --color-danger: #cc3333;
   --color-unread: #b05a00;
+  --color-link: #0047b3;
 
   --surface-panel: rgba(255, 255, 255, 0.97);
   --surface-panel-soft: rgba(248, 248, 248, 0.88);
@@ -309,13 +319,13 @@
   --surface-body-bottom: rgba(240, 240, 240, 0.58);
   --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
 
-  --border-soft: rgba(0, 0, 0, 0.15);
-  --border-accent: rgba(34, 102, 204, 0.2);
-  --overlay-hover: rgba(34, 102, 204, 0.1);
-  --tint-honey: rgba(184, 134, 11, 0.2);
+  --border-soft: #000000;
+  --border-accent: #0047b3;
+  --overlay-hover: rgba(0, 71, 179, 0.18);
+  --tint-honey: rgba(184, 134, 11, 0.28);
 
-  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.14);
-  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.2);
+  --shadow-popup: 0 0 0 2px rgba(0, 0, 0, 0.82);
+  --shadow-dialog: 0 0 0 3px rgba(0, 0, 0, 0.88);
 
   --focus-ring: var(--teal);
 }

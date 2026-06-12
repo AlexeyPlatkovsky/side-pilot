@@ -1,6 +1,13 @@
 import { useState, useEffect } from "react";
 import type { ChatApi } from "../chat/api";
-import { THEMES, THEME_LABELS, applyTheme, isValidTheme, type ThemeId } from "../theme";
+import {
+  THEMES,
+  THEME_LABELS,
+  THEME_SWATCHES,
+  applyTheme,
+  isValidTheme,
+  type ThemeId,
+} from "../theme";
 import type { GeneralPreferences } from "../chat/generated/GeneralPreferences";
 
 export interface ThemesSettingsProps {
@@ -77,6 +84,15 @@ export function ThemesSettings({ api }: ThemesSettingsProps) {
                 className="themes-settings__radio"
               />
               <span className="themes-settings__label">{THEME_LABELS[theme]}</span>
+              <span className="themes-settings__swatches" aria-hidden="true">
+                {THEME_SWATCHES[theme].map((color) => (
+                  <span
+                    key={color}
+                    className="themes-settings__swatch"
+                    style={{ backgroundColor: color }}
+                  />
+                ))}
+              </span>
             </label>
           ))}
         </div>

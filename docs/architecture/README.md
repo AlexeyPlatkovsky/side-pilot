@@ -29,7 +29,7 @@ side-pilot/
 │   ├── components/
 │   │   ├── Bubble.tsx            # Floating bubble shell: collapsed dot → expanded panel
 │   │   ├── Settings.tsx          # Settings view: section rail + panes (SP-031)
-│   │   ├── ThemesSettings.tsx    # Theme selector pane: radio group for Default/Cyberpunk/Minimalist (SP-041/SP-043)
+│   │   ├── ThemesSettings.tsx    # Theme selector pane: all registered themes with palette swatches (SP-041/SP-043)
 │   │   ├── ChatPanel.tsx         # Chat transcript, toolbar, composer, AI switcher, route submission
 │   │   ├── AiSwitcher.tsx        # Provider switcher button + vertical picker (All + GPT/Claude/Gemini)
 │   │   ├── ProviderIcon.tsx      # Provider logo images + the All grid glyph

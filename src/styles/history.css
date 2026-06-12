@@ -278,6 +278,7 @@
 
 .chat-row__menu:hover {
   color: var(--color-text);
+  background: var(--overlay-hover);
 }
 
 /* Per-row options popup. */
