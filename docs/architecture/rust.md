@@ -78,8 +78,8 @@ Gemini receives its configured model and never receives reasoning.
 `get_provider_preferences` and `update_provider_preferences` are the provider
 settings seam; `get_general_preferences` and `update_general_preferences` are the
 general settings seam (SP-037). General preferences store always-on-top, window
-position mode (`pin` / `trackLast`), pinned position, last-known position, and
-language (`en` / `ru`). Both provider and general preferences share the same
+position mode (`pin` / `trackLast`), pinned position, last-known position,
+language (`en` / `ru`), and theme (`"default"` / `"cyberpunk"` / `"minimalist"`, SP-041). Both provider and general preferences share the same
 atomic file-backed store and are persisted together. Updates validate models,
 atomically replace the app-data file, and refresh the in-memory snapshot
 immediately. Manual file edits require an app restart.

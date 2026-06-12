@@ -22,6 +22,12 @@ Before this pipeline begins, all of the following must be present in the convers
 
 If any precondition is missing, stop and report which item is absent. Do not proceed to Step 1.
 
+**Mid-task recovery.** If source files that would normally be written in Step 2 — Green (TypeScript, Rust, CSS, or other non-test project source files) have been modified before this pipeline was entered, apply `AGENTS.md` §Task Classification → "Ad-hoc bypass recovery": stop, present the three dispositions (a) accept as informal, (b) retroactively validate, (c) revert and restart, and require the user to select one. Test files are intentionally excluded from this trigger — writing a test before pipeline entry is the correct TDD behavior and does not require recovery. Record the selected disposition as:
+
+`Pipeline: fix-bug recovery - disposition: [a / b / c]`
+
+Do not continue past this point until that labeled artifact is present in the conversation.
+
 ## Steps
 
 ### Step 1 — Red: Write Failing Test

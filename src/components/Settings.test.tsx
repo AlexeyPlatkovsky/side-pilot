@@ -32,6 +32,7 @@ function mockChatApi(overrides: Partial<ChatApi> = {}): ChatApi {
       pinnedPosition: null,
       lastKnownPosition: null,
       language: "en",
+      theme: "default",
     }),
     updateGeneralPreferences: vi.fn().mockImplementation((v) => Promise.resolve(v)),
     getProviderPreferences: vi.fn(),

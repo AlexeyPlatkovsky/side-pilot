@@ -228,3 +228,110 @@ test.describe("GeneralSettings loading and error states", () => {
     ).toBeVisible();
   });
 });
+
+test.describe("ThemesSettings pane (SP-041/SP-043)", () => {
+  test("shows every theme radio option in the Themes pane", async ({ page }) => {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "Themes" }).click();
+
+    const pane = page.getByRole("tabpanel", { name: "Themes" });
+    const labels = [
+      "Default",
+      "Cyberpunk",
+      "Minimalist",
+      "Sepia",
+      "Forest",
+      "Midnight",
+      "Retro Terminal",
+      "High Contrast",
+    ];
+    await expect(pane.getByRole("radio")).toHaveCount(labels.length);
+    for (const label of labels) {
+      await expect(pane.getByRole("radio", { name: label })).toBeVisible();
+    }
+
+    await page.screenshot({
+      path: "e2e/.artifacts/themes-pane-default.png",
+      fullPage: false,
+    });
+  });
+
+  test("selecting each non-default theme applies data-theme to <html>", async ({
+    page,
+  }) => {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "Themes" }).click();
+
+    const pane = page.getByRole("tabpanel", { name: "Themes" });
+    const themes = [
+      ["Cyberpunk", "cyberpunk"],
+      ["Minimalist", "minimalist"],
+      ["Sepia", "sepia"],
+      ["Forest", "forest"],
+      ["Midnight", "midnight"],
+      ["Retro Terminal", "retro"],
+      ["High Contrast", "high-contrast"],
+    ] as const;
+
+    for (const [label, id] of themes) {
+      await pane.getByRole("radio", { name: label }).click();
+      const dataTheme = await page.evaluate(() =>
+        document.documentElement.getAttribute("data-theme"),
+      );
+      expect(dataTheme).toBe(id);
+    }
+
+    await page.screenshot({
+      path: "e2e/.artifacts/themes-pane-high-contrast.png",
+      fullPage: false,
+    });
+  });
+
+  test("selecting Default removes data-theme from <html>", async ({ page }) => {
+    await page.goto("/e2e/seeded.html");
+    await expect(page.getByTestId("panel")).toBeVisible();
+    await page.getByRole("button", { name: "Open settings" }).click();
+    await page.getByRole("tab", { name: "Themes" }).click();
+
+    const pane = page.getByRole("tabpanel", { name: "Themes" });
+    await pane.getByRole("radio", { name: "Cyberpunk" }).click();
+    await pane.getByRole("radio", { name: "Default" }).click();
+
+    const dataTheme = await page.evaluate(() =>
+      document.documentElement.getAttribute("data-theme"),
+    );
+    expect(dataTheme).toBeNull();
+  });
+});
+
+test("Cyberpunk secondary settings buttons remain readable", async ({ page }) => {
+  await page.goto("/e2e/seeded.html");
+  await expect(page.getByTestId("panel")).toBeVisible();
+  await page.getByRole("button", { name: "Open settings" }).click();
+
+  await page.getByRole("tab", { name: "Themes" }).click();
+  await page
+    .getByRole("tabpanel", { name: "Themes" })
+    .getByRole("radio", { name: "Cyberpunk" })
+    .click();
+
+  await page.getByRole("tab", { name: "CLI Integrations" }).click();
+  const add = page.getByRole("button", { name: "Add" });
+  await expect(add).toHaveCSS("color", "rgb(238, 244, 255)");
+  await expect(add).toHaveCSS("background-color", "rgba(36, 24, 86, 0.9)");
+  await add.click();
+
+  const dialog = page.getByRole("dialog", { name: "Add a custom CLI" });
+  const cancel = dialog.getByRole("button", { name: "Cancel" });
+  await expect(cancel).toHaveCSS("color", "rgb(238, 244, 255)");
+  await expect(cancel).toHaveCSS("background-color", "rgba(36, 24, 86, 0.9)");
+
+  await page.screenshot({
+    path: "e2e/.artifacts/cyberpunk-add-cli-dialog.png",
+    fullPage: false,
+  });
+});

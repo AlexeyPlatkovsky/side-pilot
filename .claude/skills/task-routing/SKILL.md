@@ -38,6 +38,8 @@ Classification must be stated before any file is created, edited, or deleted.
 
 For each non-trivial task, decide whether the Beads planning gate applies before selecting the execution route.
 
+Tasks classified as trivial under `AGENTS.md` §Task Classification, including its narrow visual exception, never reach the manager or Beads gate.
+
 Exempt categories (Beads gate does not apply):
 - documentation-only work
 - AI staff work, including instruction artifacts, skills, pipelines, agents, manager routing, root contracts, and AI-tool governance

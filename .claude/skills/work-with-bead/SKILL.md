@@ -13,7 +13,7 @@ Use Beads as the local issue tracker for applicable non-trivial side-pilot work.
 
 Use this skill when the manager routes the Beads planning gate, or when planning, decomposing, creating, updating, or closing Beads items for side-pilot work.
 
-Do not create or update Beads items for trivial work: single-step, low-risk work with no behavioral, structural, command, contract, or domain-fact change.
+Do not create or update Beads items for work classified as trivial under `AGENTS.md` §Task Classification, including its narrow visual exception.
 
 Beads exemption follows the non-trivial exempt categories defined in AGENTS.md § Beads Planning Gate. Do not restate the list here; refer to the root contract as the single source of truth.
 

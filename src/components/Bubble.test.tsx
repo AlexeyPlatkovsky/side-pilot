@@ -344,6 +344,7 @@ describe("[smoke] Bubble", () => {
       pinnedPosition: null,
       lastKnownPosition: null,
       language: "en",
+      theme: "default",
     });
 
     const api = pendingChatApi();
@@ -353,6 +354,7 @@ describe("[smoke] Bubble", () => {
       pinnedPosition: null,
       lastKnownPosition: null,
       language: "en",
+      theme: "default",
     });
     api.updateGeneralPreferences = updateGeneralPrefs;
 

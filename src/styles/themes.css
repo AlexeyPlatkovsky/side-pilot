@@ -1,0 +1,331 @@
+/* =============================================================================
+   §1b  THEME VARIANTS
+   Override only the color/surface tokens; spacing, radius, type, and icon
+   tokens are theme-independent and remain untouched.
+
+   Applied by setting data-theme="<id>" on <html>; Default is the base :root
+   so no attribute is set for it.
+
+   Add new themes as additional [data-theme="..."] blocks below.
+   ========================================================================== */
+
+[data-theme="cyberpunk"] {
+  /* Color primitives */
+  --ink: #eef4ff;
+  --muted: #7ab0ff;
+  --honey: #ffe047;
+  --coral: #ff4d9a;
+  --sage: #00e8ff;
+  --clay: #ff4d9a;
+  --cream: #030310;
+  --teal: #00e8ff;
+  --orange: #ff9a00;
+
+  /* Semantic color tokens */
+  --color-text: #eef4ff;
+  --color-text-muted: #7ab0ff;
+  --color-accent: #00e8ff;
+  --color-on-accent: #000914;
+  --color-on-accent-muted: rgba(0, 9, 20, 0.78);
+  --color-danger: #ff4d9a;
+  --color-unread: #ff9a00;
+  --color-link: #00e8ff;
+
+  /* Surfaces — lifted deep-space bases with saturated purple/indigo shifts */
+  --surface-panel: rgba(12, 12, 32, 0.96);
+  --surface-panel-soft: rgba(20, 18, 50, 0.88);
+  --surface-warm: rgba(30, 18, 70, 0.96);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(36, 24, 86, 0.9);
+  --surface-body-top: rgba(14, 14, 38, 0.82);
+  --surface-body-bottom: rgba(18, 12, 54, 0.68);
+  --surface-scrim: rgba(0, 0, 0, 0.48);
+
+  /* Borders & overlays — brighter neon glow */
+  --border-soft: rgba(100, 160, 255, 0.35);
+  --border-accent: rgba(0, 232, 255, 0.45);
+  --overlay-hover: rgba(100, 160, 255, 0.22);
+  --tint-honey: rgba(255, 224, 71, 0.28);
+
+  /* Elevation — cyan glow halo on popups and dialogs */
+  --shadow-popup: 0 6px 24px rgba(0, 0, 0, 0.52), 0 0 12px rgba(0, 232, 255, 0.1);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.68), 0 0 24px rgba(0, 232, 255, 0.08);
+
+  /* Focus ring — matches --teal to stay in sync if teal changes */
+  --focus-ring: var(--teal);
+  --icon-filter: invert(1);
+}
+
+[data-theme="minimalist"] {
+  /* Color primitives */
+  --ink: #1a1a1a;
+  --muted: #6e6e6e; /* #787878 gives 4.23:1 on #fafafa, below AA; #6e6e6e clears 4.5:1 on all surfaces incl. header */
+  --honey: #d4c8b0;
+  --coral: #c04040;
+  --sage: #4a7070;
+  --clay: #805050;
+  --cream: #fafafa;
+  --teal: #3a6060;
+  --orange: #b04c00;
+
+  /* Semantic color tokens */
+  --color-text: #1a1a1a;
+  --color-text-muted: #6e6e6e;
+  --color-accent: #3a6060;
+  --color-on-accent: #fafafa;
+  --color-on-accent-muted: rgba(250, 250, 250, 0.78);
+  --color-danger: #805050;
+  --color-unread: #b04c00;
+  --color-link: #3a6060;
+
+  /* Surfaces */
+  --surface-panel: rgba(250, 250, 250, 0.97);
+  --surface-panel-soft: rgba(250, 250, 250, 0.9);
+  --surface-warm: rgba(244, 244, 244, 0.97);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(255, 255, 255, 0.92);
+  --surface-body-top: rgba(250, 250, 250, 0.8);
+  --surface-body-bottom: rgba(244, 244, 244, 0.62);
+  --surface-scrim: rgba(0, 0, 0, 0.18);
+
+  /* Borders & overlays */
+  --border-soft: rgba(0, 0, 0, 0.1);
+  --border-accent: rgba(58, 96, 96, 0.16);
+  --overlay-hover: rgba(0, 0, 0, 0.05);
+  --tint-honey: rgba(180, 168, 144, 0.22);
+
+  /* Elevation */
+  --shadow-popup: 0 4px 14px rgba(0, 0, 0, 0.1);
+  --shadow-dialog: 0 8px 24px rgba(0, 0, 0, 0.16);
+
+  /* Focus ring — matches --teal to stay in sync if teal changes */
+  --focus-ring: var(--teal);
+}
+
+/* =============================================================================
+   Sepia / Paper — warm yellowed-paper background, dark brown ink,
+   muted tea-stain accents. Evokes writing in a journal.
+   ========================================================================== */
+
+[data-theme="sepia"] {
+  --ink: #3d2b1f;
+  --muted: #6a5540;
+  --honey: #d4a04a;
+  --coral: #b85c4a;
+  --sage: #7a8a5a;
+  --clay: #9a6a5a;
+  --cream: #f5e6c8;
+  --teal: #7a3f28;
+  --orange: #c07030;
+
+  --color-text: #3d2b1f;
+  --color-text-muted: #6a5540;
+  --color-accent: #7a3f28;
+  --color-on-accent: #f5e6c8;
+  --color-on-accent-muted: rgba(245, 230, 200, 0.82);
+  --color-danger: #8a3a2a;
+  --color-unread: #a05020;
+  --color-link: #6f3428;
+
+  --surface-panel: rgba(245, 230, 200, 0.95);
+  --surface-panel-soft: rgba(245, 230, 200, 0.82);
+  --surface-warm: rgba(240, 224, 185, 0.96);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(252, 242, 218, 0.82);
+  --surface-body-top: rgba(250, 240, 215, 0.75);
+  --surface-body-bottom: rgba(245, 230, 200, 0.55);
+  --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
+
+  --border-soft: color-mix(in srgb, var(--clay) 16%, transparent);
+  --border-accent: color-mix(in srgb, var(--teal) 20%, transparent);
+  --overlay-hover: color-mix(in srgb, var(--coral) 12%, transparent);
+  --tint-honey: color-mix(in srgb, var(--honey) 34%, transparent);
+
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.16);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.22);
+
+  --focus-ring: var(--teal);
+}
+
+/* =============================================================================
+   Forest / Verdant — saturated green panel, sage surfaces, amber and
+   mushroom accents. Calm, grounded, earthy.
+   ========================================================================== */
+
+[data-theme="forest"] {
+  --ink: #17351f;
+  --muted: #365c40;
+  --honey: #c4a040;
+  --coral: #b05a40;
+  --sage: #4f805d;
+  --clay: #657153;
+  --cream: #d6ead2;
+  --teal: #236247;
+  --orange: #b08030;
+
+  --color-text: #17351f;
+  --color-text-muted: #365c40;
+  --color-accent: #236247;
+  --color-on-accent: #d6ead2;
+  --color-on-accent-muted: rgba(214, 234, 210, 0.82);
+  --color-danger: #8e3a2a;
+  --color-unread: #906820;
+  --color-link: #205b3d;
+
+  --surface-panel: rgba(214, 234, 210, 0.96);
+  --surface-panel-soft: rgba(202, 226, 198, 0.86);
+  --surface-warm: rgba(190, 220, 184, 0.96);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(235, 245, 230, 0.88);
+  --surface-body-top: rgba(218, 236, 212, 0.82);
+  --surface-body-bottom: rgba(195, 224, 190, 0.64);
+  --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
+
+  --border-soft: color-mix(in srgb, var(--clay) 16%, transparent);
+  --border-accent: color-mix(in srgb, var(--teal) 20%, transparent);
+  --overlay-hover: color-mix(in srgb, var(--coral) 12%, transparent);
+  --tint-honey: color-mix(in srgb, var(--honey) 34%, transparent);
+
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.16);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.22);
+
+  --focus-ring: var(--teal);
+}
+
+/* =============================================================================
+   Midnight / Slate — dark blue-gray panel, cool silver-grey text,
+   steel-blue accent. Professional dark mode — less flashy than Cyberpunk.
+   ========================================================================== */
+
+[data-theme="midnight"] {
+  --ink: #e0e4e8;
+  --muted: #8896a8;
+  --honey: #c8b060;
+  --coral: #d06060;
+  --sage: #6a9a8a;
+  --clay: #8a7a8a;
+  --cream: #1a1e28;
+  --teal: #6a9ad0;
+  --orange: #c08040;
+
+  --color-text: #e0e4e8;
+  --color-text-muted: #8896a8;
+  --color-accent: #6a9ad0;
+  --color-on-accent: #1a1e28;
+  --color-on-accent-muted: rgba(26, 30, 40, 0.78);
+  --color-danger: #ff6060;
+  --color-unread: #e09040;
+  --color-link: #8fc5ff;
+
+  --surface-panel: rgba(26, 30, 42, 0.96);
+  --surface-panel-soft: rgba(36, 40, 54, 0.88);
+  --surface-warm: rgba(32, 36, 50, 0.96);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(42, 46, 60, 0.88);
+  --surface-body-top: rgba(30, 34, 46, 0.8);
+  --surface-body-bottom: rgba(24, 28, 40, 0.6);
+  --surface-scrim: rgba(0, 0, 0, 0.42);
+
+  --border-soft: rgba(128, 144, 168, 0.2);
+  --border-accent: rgba(106, 154, 208, 0.28);
+  --overlay-hover: rgba(128, 144, 168, 0.14);
+  --tint-honey: rgba(200, 176, 96, 0.22);
+
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.42);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.58);
+
+  --focus-ring: var(--teal);
+  --icon-filter: invert(1);
+}
+
+/* =============================================================================
+   Retro Terminal — black panel, green monochrome text, amber
+   highlights. Matrix / Fallout terminal vibe.
+   ========================================================================== */
+
+[data-theme="retro"] {
+  --ink: #90c090;
+  --muted: #508050;
+  --honey: #d0b040;
+  --coral: #c06050;
+  --sage: #50a050;
+  --clay: #706050;
+  --cream: #0a120a;
+  --teal: #50b080;
+  --orange: #c09040;
+
+  --color-text: #90c090;
+  --color-text-muted: #62a062;
+  --color-accent: #50b080;
+  --color-on-accent: #0a120a;
+  --color-on-accent-muted: rgba(10, 18, 10, 0.78);
+  --color-danger: #d06850;
+  --color-unread: #d0b040;
+  --color-link: #90d090;
+
+  --surface-panel: rgba(10, 18, 12, 0.97);
+  --surface-panel-soft: rgba(16, 26, 18, 0.88);
+  --surface-warm: rgba(14, 22, 16, 0.97);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(22, 34, 26, 0.88);
+  --surface-body-top: rgba(14, 22, 16, 0.82);
+  --surface-body-bottom: rgba(10, 16, 12, 0.6);
+  --surface-scrim: rgba(0, 0, 0, 0.52);
+
+  --border-soft: rgba(80, 128, 80, 0.22);
+  --border-accent: rgba(80, 176, 128, 0.28);
+  --overlay-hover: rgba(80, 176, 128, 0.14);
+  --tint-honey: rgba(208, 176, 64, 0.22);
+
+  --shadow-popup: 0 6px 18px rgba(0, 0, 0, 0.52);
+  --shadow-dialog: 0 12px 32px rgba(0, 0, 0, 0.68);
+
+  --focus-ring: var(--teal);
+  --icon-filter: invert(1);
+}
+
+/* =============================================================================
+   High Contrast / A11y — pure white panel, pure black text, distinctly
+   coloured semantic tokens. Engineered to meet WCAG AAA on critical pairs
+   and AA on all pairs.
+   ========================================================================== */
+
+[data-theme="high-contrast"] {
+  --ink: #000000;
+  --muted: #444444;
+  --honey: #b8860b;
+  --coral: #cc3333;
+  --sage: #2a6a5a;
+  --clay: #993366;
+  --cream: #ffffff;
+  --teal: #0047b3;
+  --orange: #b05a00;
+
+  --color-text: #000000;
+  --color-text-muted: #444444;
+  --color-accent: #0047b3;
+  --color-on-accent: #ffffff;
+  --color-on-accent-muted: rgba(255, 255, 255, 0.82);
+  --color-danger: #cc3333;
+  --color-unread: #b05a00;
+  --color-link: #0047b3;
+
+  --surface-panel: rgba(255, 255, 255, 0.97);
+  --surface-panel-soft: rgba(248, 248, 248, 0.88);
+  --surface-warm: rgba(240, 240, 240, 0.97);
+  --surface-danger: color-mix(in srgb, var(--coral) 12%, transparent);
+  --surface-raised: rgba(255, 255, 255, 0.85);
+  --surface-body-top: rgba(248, 248, 248, 0.78);
+  --surface-body-bottom: rgba(240, 240, 240, 0.58);
+  --surface-scrim: color-mix(in srgb, var(--ink) 28%, transparent);
+
+  --border-soft: #000000;
+  --border-accent: #0047b3;
+  --overlay-hover: rgba(0, 71, 179, 0.18);
+  --tint-honey: rgba(184, 134, 11, 0.28);
+
+  --shadow-popup: 0 0 0 2px rgba(0, 0, 0, 0.82);
+  --shadow-dialog: 0 0 0 3px rgba(0, 0, 0, 0.88);
+
+  --focus-ring: var(--teal);
+}

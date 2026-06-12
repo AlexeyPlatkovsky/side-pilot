@@ -2,4 +2,4 @@
 import type { Position } from "./Position";
 import type { PositionMode } from "./PositionMode";
 
-export type GeneralPreferences = { alwaysOnTop: boolean, positionMode: PositionMode, pinnedPosition: Position | null, lastKnownPosition: Position | null, language: string, };
+export type GeneralPreferences = { alwaysOnTop: boolean, positionMode: PositionMode, pinnedPosition: Position | null, lastKnownPosition: Position | null, language: string, theme: string, };
